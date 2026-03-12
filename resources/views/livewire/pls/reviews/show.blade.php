@@ -1,15 +1,26 @@
-<div class="flex h-full w-full flex-1 flex-col gap-6">
+<div
+    x-data="{
+        deleteConfirmation: { type: '', id: null, title: '', noun: '' },
+        setDeleteConfirmation(type, id, title, noun) {
+            this.deleteConfirmation = { type, id, title, noun };
+        },
+        resetDeleteConfirmation() {
+            this.deleteConfirmation = { type: '', id: null, title: '', noun: '' };
+        }
+    }"
+    class="flex h-full w-full flex-1 flex-col gap-6"
+>
     @php
         $reviewAssignmentLabel = $review->committee?->name
             ?? $review->legislature?->name
             ?? $review->jurisdiction?->name
             ?? __('Unassigned');
 
-        $reviewLocationParts = array_values(array_filter([
-            $review->committee ? $review->legislature?->name : null,
-            $review->jurisdiction?->name,
-            $review->country?->name,
-        ]));
+            $reviewLocationParts = array_values(array_filter([
+                $review->committee ? $review->legislature?->name : null,
+                $review->jurisdiction?->name,
+                $review->country?->name,
+            ]));
     @endphp
 
     @if (session('status'))
@@ -350,9 +361,17 @@
                                                 </flux:button>
                                             </flux:modal.trigger>
 
-                                            <flux:button variant="ghost" size="sm" icon="trash" wire:click="deleteDocument({{ $document->id }})">
-                                                {{ __('Delete') }}
-                                            </flux:button>
+                                            <flux:modal.trigger name="confirm-workspace-delete">
+                                                <flux:button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    icon="trash"
+                                                    :loading="false"
+                                                    x-on:click="setDeleteConfirmation('document', {{ $document->id }}, @js($document->title), @js(__('document')))"
+                                                >
+                                                    {{ __('Delete') }}
+                                                </flux:button>
+                                            </flux:modal.trigger>
                                         </div>
                                     </flux:table.cell>
                                 </flux:table.row>
@@ -962,9 +981,17 @@
                                             </flux:button>
                                         </flux:modal.trigger>
 
-                                        <flux:button variant="ghost" size="sm" icon="trash" wire:click="deleteFinding({{ $finding->id }})">
-                                            {{ __('Delete') }}
-                                        </flux:button>
+                                        <flux:modal.trigger name="confirm-workspace-delete">
+                                            <flux:button
+                                                variant="ghost"
+                                                size="sm"
+                                                icon="trash"
+                                                :loading="false"
+                                                x-on:click="setDeleteConfirmation('finding', {{ $finding->id }}, @js($finding->title), @js(__('finding')))"
+                                            >
+                                                {{ __('Delete') }}
+                                            </flux:button>
+                                        </flux:modal.trigger>
                                     </div>
                                 </div>
 
@@ -991,9 +1018,17 @@
                                                             {{ __('Edit') }}
                                                         </flux:button>
                                                     </flux:modal.trigger>
-                                                    <flux:button variant="ghost" size="sm" icon="trash" wire:click="deleteRecommendation({{ $recommendation->id }})">
-                                                        {{ __('Delete') }}
-                                                    </flux:button>
+                                                    <flux:modal.trigger name="confirm-workspace-delete">
+                                                        <flux:button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            icon="trash"
+                                                            :loading="false"
+                                                            x-on:click="setDeleteConfirmation('recommendation', {{ $recommendation->id }}, @js($recommendation->title), @js(__('recommendation')))"
+                                                        >
+                                                            {{ __('Delete') }}
+                                                        </flux:button>
+                                                    </flux:modal.trigger>
                                                 </div>
                                             </div>
                                         @endforeach
@@ -1221,9 +1256,17 @@
                                                     </flux:button>
                                                 </flux:modal.trigger>
 
-                                                <flux:button variant="ghost" size="sm" icon="trash" wire:click="deleteReport({{ $report->id }})">
-                                                    {{ __('Delete') }}
-                                                </flux:button>
+                                                <flux:modal.trigger name="confirm-workspace-delete">
+                                                    <flux:button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        icon="trash"
+                                                        :loading="false"
+                                                        x-on:click="setDeleteConfirmation('report', {{ $report->id }}, @js($report->title), @js(__('report')))"
+                                                    >
+                                                        {{ __('Delete') }}
+                                                    </flux:button>
+                                                </flux:modal.trigger>
                                             </div>
                                         </div>
 
@@ -1435,4 +1478,42 @@
             </flux:modal>
         </flux:tab.panel>
     </flux:tab.group>
+
+    <flux:modal name="confirm-workspace-delete" x-on:close="resetDeleteConfirmation()" x-on:cancel="resetDeleteConfirmation()" class="max-w-lg">
+        <div class="space-y-6">
+            <div class="space-y-2">
+                <flux:heading size="lg" x-text="`${@js(__('Delete this'))} ${deleteConfirmation.noun || @js(__('record'))}?`"></flux:heading>
+                <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                    <span
+                        x-show="deleteConfirmation.title"
+                        x-text="`${@js(__('This will permanently remove'))} “${deleteConfirmation.title}” ${@js(__('from the review workspace.'))}`"
+                    ></span>
+                    <span x-show="! deleteConfirmation.title">{{ __('This will permanently remove the selected item from the review workspace.') }}</span>
+                </flux:text>
+                <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                    {{ __('This action cannot be undone.') }}
+                </flux:text>
+            </div>
+
+            <div class="flex justify-end gap-2">
+                <flux:modal.close>
+                    <flux:button variant="filled" type="button" x-on:click="resetDeleteConfirmation()">
+                        {{ __('Cancel') }}
+                    </flux:button>
+                </flux:modal.close>
+
+                <flux:modal.close>
+                    <flux:button
+                        variant="danger"
+                        type="button"
+                        :loading="false"
+                        x-on:click="$wire.confirmDeletion(deleteConfirmation.type, deleteConfirmation.id); resetDeleteConfirmation()"
+                        x-bind:disabled="! deleteConfirmation.type || ! deleteConfirmation.id"
+                    >
+                        <span x-text="`${@js(__('Delete'))} ${deleteConfirmation.noun || @js(__('record'))}`"></span>
+                    </flux:button>
+                </flux:modal.close>
+            </div>
+        </div>
+    </flux:modal>
 </div>

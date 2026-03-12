@@ -15,18 +15,18 @@ use App\Domain\Consultations\Enums\ConsultationType;
 use App\Domain\Documents\Actions\StoreReviewDocumentMetadata;
 use App\Domain\Documents\Actions\UpdateReviewDocument;
 use App\Domain\Documents\Enums\DocumentType;
-use App\Domain\Reporting\GovernmentResponse;
 use App\Domain\Legislation\Actions\AttachLegislationToReview;
 use App\Domain\Legislation\Actions\CreateLegislationForReview;
 use App\Domain\Legislation\Enums\LegislationType;
 use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
 use App\Domain\Legislation\Legislation;
-use App\Domain\Reporting\Actions\StoreReport;
 use App\Domain\Reporting\Actions\StoreGovernmentResponse;
+use App\Domain\Reporting\Actions\StoreReport;
 use App\Domain\Reporting\Actions\UpdateReport;
 use App\Domain\Reporting\Enums\GovernmentResponseStatus;
 use App\Domain\Reporting\Enums\ReportStatus;
 use App\Domain\Reporting\Enums\ReportType;
+use App\Domain\Reporting\GovernmentResponse;
 use App\Domain\Reporting\Report;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Reviews\PlsReviewStep;
@@ -83,7 +83,7 @@ class Show extends Component
 
     public string $documentSummary = '';
 
-    public TemporaryUploadedFile|null $documentUpload = null;
+    public ?TemporaryUploadedFile $documentUpload = null;
 
     public string $consultationEditingId = '';
 
@@ -373,32 +373,6 @@ class Show extends Component
         session()->flash('status', __('Document updated.'));
     }
 
-    public function deleteDocument(int $documentId): void
-    {
-        $this->authorizeReviewMutation();
-
-        $document = $this->review->documents()
-            ->whereKey($documentId)
-            ->first();
-
-        if ($document === null) {
-            return;
-        }
-
-        if ($document->storage_path !== '') {
-            Storage::disk(config('filesystems.default'))->delete($document->storage_path);
-        }
-
-        $document->delete();
-        $this->review = $this->loadReview();
-
-        if ($this->documentEditingId === (string) $documentId) {
-            $this->resetDocumentForm();
-        }
-
-        session()->flash('status', __('Document removed from the review.'));
-    }
-
     public function storeConsultation(StoreConsultation $action): void
     {
         $this->authorizeReviewMutation();
@@ -658,28 +632,6 @@ class Show extends Component
         session()->flash('status', __('Finding updated.'));
     }
 
-    public function deleteFinding(int $findingId): void
-    {
-        $this->authorizeReviewMutation();
-
-        $finding = $this->review->findings()
-            ->whereKey($findingId)
-            ->first();
-
-        if ($finding === null) {
-            return;
-        }
-
-        $finding->delete();
-        $this->review = $this->loadReview();
-
-        if ($this->findingEditingId === (string) $findingId) {
-            $this->resetFindingForm();
-        }
-
-        session()->flash('status', __('Finding removed from the review.'));
-    }
-
     public function storeRecommendation(StoreRecommendation $action): void
     {
         $this->authorizeReviewMutation();
@@ -763,28 +715,6 @@ class Show extends Component
         $this->resetRecommendationForm();
 
         session()->flash('status', __('Recommendation updated.'));
-    }
-
-    public function deleteRecommendation(int $recommendationId): void
-    {
-        $this->authorizeReviewMutation();
-
-        $recommendation = $this->review->recommendations()
-            ->whereKey($recommendationId)
-            ->first();
-
-        if ($recommendation === null) {
-            return;
-        }
-
-        $recommendation->delete();
-        $this->review = $this->loadReview();
-
-        if ($this->recommendationEditingId === (string) $recommendationId) {
-            $this->resetRecommendationForm();
-        }
-
-        session()->flash('status', __('Recommendation removed from the review.'));
     }
 
     public function storeReport(StoreReport $action): void
@@ -878,26 +808,17 @@ class Show extends Component
         session()->flash('status', __('Report updated.'));
     }
 
-    public function deleteReport(int $reportId): void
+    public function confirmDeletion(string $type, int $id): void
     {
         $this->authorizeReviewMutation();
 
-        $report = $this->review->reports()
-            ->whereKey($reportId)
-            ->first();
-
-        if ($report === null) {
-            return;
-        }
-
-        $report->delete();
-        $this->review = $this->loadReview();
-
-        if ($this->reportEditingId === (string) $reportId) {
-            $this->resetReportForm();
-        }
-
-        session()->flash('status', __('Report removed from the review.'));
+        match ($type) {
+            'document' => $this->performDocumentDeletion($id),
+            'finding' => $this->performFindingDeletion($id),
+            'recommendation' => $this->performRecommendationDeletion($id),
+            'report' => $this->performReportDeletion($id),
+            default => null,
+        };
     }
 
     public function storeGovernmentResponse(StoreGovernmentResponse $action): void
@@ -1181,6 +1102,90 @@ class Show extends Component
             'governmentResponses.report',
             'governmentResponses.document',
         ]);
+    }
+
+    private function performDocumentDeletion(int $documentId): void
+    {
+        $document = $this->review->documents()
+            ->whereKey($documentId)
+            ->first();
+
+        if ($document === null) {
+            return;
+        }
+
+        if ($document->storage_path !== '') {
+            Storage::disk(config('filesystems.default'))->delete($document->storage_path);
+        }
+
+        $document->delete();
+        $this->review = $this->loadReview();
+
+        if ($this->documentEditingId === (string) $documentId) {
+            $this->resetDocumentForm();
+        }
+
+        session()->flash('status', __('Document removed from the review.'));
+    }
+
+    private function performFindingDeletion(int $findingId): void
+    {
+        $finding = $this->review->findings()
+            ->whereKey($findingId)
+            ->first();
+
+        if ($finding === null) {
+            return;
+        }
+
+        $finding->delete();
+        $this->review = $this->loadReview();
+
+        if ($this->findingEditingId === (string) $findingId) {
+            $this->resetFindingForm();
+        }
+
+        session()->flash('status', __('Finding removed from the review.'));
+    }
+
+    private function performRecommendationDeletion(int $recommendationId): void
+    {
+        $recommendation = $this->review->recommendations()
+            ->whereKey($recommendationId)
+            ->first();
+
+        if ($recommendation === null) {
+            return;
+        }
+
+        $recommendation->delete();
+        $this->review = $this->loadReview();
+
+        if ($this->recommendationEditingId === (string) $recommendationId) {
+            $this->resetRecommendationForm();
+        }
+
+        session()->flash('status', __('Recommendation removed from the review.'));
+    }
+
+    private function performReportDeletion(int $reportId): void
+    {
+        $report = $this->review->reports()
+            ->whereKey($reportId)
+            ->first();
+
+        if ($report === null) {
+            return;
+        }
+
+        $report->delete();
+        $this->review = $this->loadReview();
+
+        if ($this->reportEditingId === (string) $reportId) {
+            $this->resetReportForm();
+        }
+
+        session()->flash('status', __('Report removed from the review.'));
     }
 
     /**

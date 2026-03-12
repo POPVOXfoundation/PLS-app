@@ -5,10 +5,10 @@ use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Legislation\Enums\LegislationType;
 use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
 use App\Domain\Legislation\Legislation;
-use App\Domain\Reporting\Report;
 use App\Domain\Reporting\Enums\GovernmentResponseStatus;
 use App\Domain\Reporting\Enums\ReportStatus;
 use App\Domain\Reporting\Enums\ReportType;
+use App\Domain\Reporting\Report;
 use App\Livewire\Pls\Reviews\Show as ShowReviewPage;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
@@ -142,8 +142,12 @@ test('review documents can be uploaded, edited, and deleted from the review work
     Storage::disk(config('filesystems.default'))->assertMissing($document->storage_path);
     Storage::disk(config('filesystems.default'))->assertExists($updatedDocument->storage_path);
 
+    $this->assertDatabaseHas('documents', [
+        'id' => $updatedDocument->id,
+    ]);
+
     $component
-        ->call('deleteDocument', $updatedDocument->id)
+        ->call('confirmDeletion', 'document', $updatedDocument->id)
         ->assertHasNoErrors()
         ->assertDontSee('Implementation brief v2');
 
@@ -219,12 +223,12 @@ test('findings and recommendations can be edited and deleted from the review wor
         ->assertSee('Adopt a common quarterly reporting template');
 
     $component
-        ->call('deleteRecommendation', $recommendation->id)
+        ->call('confirmDeletion', 'recommendation', $recommendation->id)
         ->assertHasNoErrors()
         ->assertDontSee('Adopt a common quarterly reporting template');
 
     $component
-        ->call('deleteFinding', $finding->id)
+        ->call('confirmDeletion', 'finding', $finding->id)
         ->assertHasNoErrors()
         ->assertDontSee('Agency reporting standards remain inconsistent');
 
@@ -307,7 +311,7 @@ test('reports can be edited and deleted from the review workspace', function () 
         ->and($updatedReport->document_id)->toBe($document->id);
 
     $component
-        ->call('deleteReport', $report->id)
+        ->call('confirmDeletion', 'report', $report->id)
         ->assertHasNoErrors()
         ->assertDontSee('Final dissemination report record');
 
