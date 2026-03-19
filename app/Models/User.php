@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Reviews\PlsReviewMembership;
 use App\Models\Enums\UserRole;
@@ -71,9 +72,12 @@ class User extends Authenticatable
         return in_array($this->role, UserRole::cases(), true);
     }
 
-    public function ownedPlsReviews(): HasMany
+    public function ownedPlsReviews(): BelongsToMany
     {
-        return $this->hasMany(PlsReview::class, 'created_by');
+        return $this->belongsToMany(PlsReview::class, 'pls_review_memberships')
+            ->withPivot(['role', 'invited_by'])
+            ->wherePivot('role', PlsReviewMembershipRole::Owner->value)
+            ->withTimestamps();
     }
 
     public function plsReviewMemberships(): HasMany

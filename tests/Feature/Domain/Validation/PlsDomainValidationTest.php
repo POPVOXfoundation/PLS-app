@@ -121,7 +121,7 @@ function makeValidationReview(): PlsReview
         'country_id' => $country->id,
         'jurisdiction_id' => $jurisdiction->id,
         'legislature_id' => $legislature->id,
-        'name' => 'Governance and Oversight Committee',
+        'name' => 'Governance and Oversight Office',
         'type' => ReviewGroupType::Committee,
     ]);
     $owner = User::factory()->reviewer()->create();

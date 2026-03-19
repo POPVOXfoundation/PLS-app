@@ -6,6 +6,7 @@ use App\Domain\Institutions\Country;
 use App\Domain\Institutions\Jurisdiction;
 use App\Domain\Institutions\Legislature;
 use App\Domain\Institutions\ReviewGroup;
+use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Domain\Reviews\Enums\PlsReviewStatus;
 use App\Domain\Reviews\PlsReview;
 use App\Models\User;
@@ -18,6 +19,21 @@ use Illuminate\Support\Str;
 class PlsReviewFactory extends Factory
 {
     protected $model = PlsReview::class;
+
+    public function configure(): static
+    {
+        return $this->afterCreating(function (PlsReview $review): void {
+            if ($review->created_by === null || $review->memberships()->where('user_id', $review->created_by)->exists()) {
+                return;
+            }
+
+            $review->memberships()->create([
+                'user_id' => $review->created_by,
+                'role' => PlsReviewMembershipRole::Owner,
+                'invited_by' => null,
+            ]);
+        });
+    }
 
     /**
      * Define the model's default state.

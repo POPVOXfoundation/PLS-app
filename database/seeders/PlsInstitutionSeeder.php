@@ -114,12 +114,12 @@ class PlsInstitutionSeeder extends Seeder
             ],
         );
 
-        $this->seedReviewGroup($belizeAssembly, 'Governance and Public Service Committee');
-        $this->seedReviewGroup($belizeAssembly, 'Public Finance and Budget Committee');
-        $this->seedReviewGroup($ugandaParliament, 'Committee on Legal and Parliamentary Affairs');
-        $this->seedReviewGroup($ugandaParliament, 'Committee on National Economy');
-        $this->seedReviewGroup($usCongress, 'House Committee on Oversight and Accountability');
-        $this->seedReviewGroup($tennesseeAssembly, 'Senate State and Local Government Committee');
+        $this->seedReviewGroup($belizeAssembly, 'Governance and Public Service Unit');
+        $this->seedReviewGroup($belizeAssembly, 'Public Finance and Budget Office');
+        $this->seedReviewGroup($ugandaParliament, 'Legal and Parliamentary Affairs Office');
+        $this->seedReviewGroup($ugandaParliament, 'National Economy Task Force');
+        $this->seedReviewGroup($usCongress, 'Oversight and Accountability Office');
+        $this->seedReviewGroup($tennesseeAssembly, 'State and Local Government Office');
     }
 
     private function seedReviewGroup(Legislature $legislature, string $name): void

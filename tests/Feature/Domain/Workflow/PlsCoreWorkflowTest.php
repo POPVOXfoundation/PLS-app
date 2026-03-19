@@ -31,7 +31,7 @@ it('creates a review with seeded steps in the official order and initializes cur
             'legislature_type' => \App\Domain\Institutions\Enums\LegislatureType::Parliament,
         ],
         'review_group' => [
-            'name' => 'Committee on Legal and Parliamentary Affairs',
+            'name' => 'Legal and Parliamentary Affairs Office',
         ],
     ]);
 
@@ -66,7 +66,7 @@ it('assigns the review to its review group, legislature, jurisdiction, country, 
             'legislature_type' => \App\Domain\Institutions\Enums\LegislatureType::Parliament,
         ],
         'review_group' => [
-            'name' => 'Committee on Legal and Parliamentary Affairs',
+            'name' => 'Legal and Parliamentary Affairs Office',
         ],
     ]);
 
@@ -93,7 +93,7 @@ it('can link legislation and documents to a review', function () {
             'legislature_type' => \App\Domain\Institutions\Enums\LegislatureType::Parliament,
         ],
         'review_group' => [
-            'name' => 'Committee on Legal and Parliamentary Affairs',
+            'name' => 'Legal and Parliamentary Affairs Office',
         ],
     ]);
     $review = $context['review'];
@@ -145,7 +145,7 @@ it('can associate findings to a review and recommendations to findings', functio
             'legislature_type' => \App\Domain\Institutions\Enums\LegislatureType::Parliament,
         ],
         'review_group' => [
-            'name' => 'Committee on Legal and Parliamentary Affairs',
+            'name' => 'Legal and Parliamentary Affairs Office',
         ],
     ]);
     $review = $context['review'];
@@ -197,7 +197,7 @@ it('can associate reports to a review', function () {
             'legislature_type' => \App\Domain\Institutions\Enums\LegislatureType::Parliament,
         ],
         'review_group' => [
-            'name' => 'Committee on Legal and Parliamentary Affairs',
+            'name' => 'Legal and Parliamentary Affairs Office',
         ],
     ]);
     $review = $context['review'];

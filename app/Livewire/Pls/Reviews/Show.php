@@ -210,7 +210,7 @@ class Show extends Component
             'implementingAgencyTypes' => ImplementingAgencyType::cases(),
             'findingTypes' => FindingType::cases(),
             'recommendationTypes' => RecommendationType::cases(),
-            'collaboratorRoleOptions' => PlsReviewMembershipRole::cases(),
+            'collaboratorRoleOptions' => [PlsReviewMembershipRole::Editor],
             'availableCollaborators' => $this->availableCollaborators($review),
             'canManageCollaborators' => auth()->user()?->can('manageCollaborators', $review) ?? false,
             'reportTypes' => ReportType::cases(),
@@ -282,12 +282,13 @@ class Show extends Component
                 ],
                 'inviteCollaboratorRole' => [
                     'required',
-                    Rule::enum(PlsReviewMembershipRole::class),
+                    Rule::in([PlsReviewMembershipRole::Editor->value]),
                 ],
             ],
             [
                 'inviteCollaboratorUserId.required' => __('Select a user to invite.'),
                 'inviteCollaboratorUserId.unique' => __('That user is already a collaborator on this review.'),
+                'inviteCollaboratorRole.in' => __('Only editor access can be granted here.'),
             ],
         )->validate();
 
@@ -314,7 +315,7 @@ class Show extends Component
             ->whereKey($membershipId)
             ->first();
 
-        if ($membership === null || $membership->user_id === $this->review->created_by) {
+        if ($membership === null || $membership->role === PlsReviewMembershipRole::Owner) {
             return;
         }
 
@@ -323,7 +324,10 @@ class Show extends Component
                 'role' => $this->collaboratorRoles[$membershipId] ?? null,
             ],
             [
-                'role' => ['required', Rule::enum(PlsReviewMembershipRole::class)],
+                'role' => ['required', Rule::in([PlsReviewMembershipRole::Editor->value])],
+            ],
+            [
+                'role.in' => __('Review ownership cannot be reassigned from this screen.'),
             ],
         )->validate();
 
@@ -345,7 +349,7 @@ class Show extends Component
             ->whereKey($membershipId)
             ->first();
 
-        if ($membership === null || $membership->user_id === $this->review->created_by) {
+        if ($membership === null || $membership->role === PlsReviewMembershipRole::Owner) {
             return;
         }
 

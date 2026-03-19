@@ -58,7 +58,7 @@ class PlsReviewDemoSeeder extends Seeder
     {
         $reviewGroup = ReviewGroup::query()
             ->where('type', ReviewGroupType::Committee)
-            ->where('name', 'Governance and Public Service Committee')
+            ->where('name', 'Governance and Public Service Unit')
             ->firstOrFail();
 
         $review = $this->findOrCreateReview(
@@ -233,7 +233,7 @@ class PlsReviewDemoSeeder extends Seeder
     {
         $reviewGroup = ReviewGroup::query()
             ->where('type', ReviewGroupType::Committee)
-            ->where('name', 'Committee on Legal and Parliamentary Affairs')
+            ->where('name', 'Legal and Parliamentary Affairs Office')
             ->firstOrFail();
 
         $review = $this->findOrCreateReview(
@@ -388,7 +388,7 @@ class PlsReviewDemoSeeder extends Seeder
     {
         $reviewGroup = ReviewGroup::query()
             ->where('type', ReviewGroupType::Committee)
-            ->where('name', 'Senate State and Local Government Committee')
+            ->where('name', 'State and Local Government Office')
             ->firstOrFail();
 
         $review = $this->findOrCreateReview(

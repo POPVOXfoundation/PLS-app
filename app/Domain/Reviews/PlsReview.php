@@ -29,6 +29,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Support\Str;
 
 class PlsReview extends Model
@@ -74,9 +76,22 @@ class PlsReview extends Model
         return $this->belongsTo(Country::class);
     }
 
-    public function owner(): BelongsTo
+    public function ownerMembership(): HasOne
     {
-        return $this->belongsTo(User::class, 'created_by');
+        return $this->hasOne(PlsReviewMembership::class)
+            ->where('role', PlsReviewMembershipRole::Owner->value);
+    }
+
+    public function owner(): HasOneThrough
+    {
+        return $this->hasOneThrough(
+            User::class,
+            PlsReviewMembership::class,
+            'pls_review_id',
+            'id',
+            'id',
+            'user_id',
+        )->where('pls_review_memberships.role', PlsReviewMembershipRole::Owner->value);
     }
 
     public function memberships(): HasMany
@@ -274,7 +289,7 @@ class PlsReview extends Model
 
     public function canBeViewedBy(User $user): bool
     {
-        return $this->created_by === $user->id || $this->membershipFor($user) !== null;
+        return $this->membershipFor($user) !== null;
     }
 
     public function canBeUpdatedBy(User $user): bool
@@ -284,10 +299,6 @@ class PlsReview extends Model
 
     public function canManageCollaborators(User $user): bool
     {
-        if ($this->created_by === $user->id) {
-            return true;
-        }
-
         return $this->membershipFor($user)?->role === PlsReviewMembershipRole::Owner;
     }
 
@@ -307,12 +318,8 @@ class PlsReview extends Model
 
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
-        return $query->where(function (Builder $builder) use ($user): void {
-            $builder
-                ->where('created_by', $user->id)
-                ->orWhereHas('memberships', function (Builder $membershipQuery) use ($user): void {
-                    $membershipQuery->where('user_id', $user->id);
-                });
+        return $query->whereHas('memberships', function (Builder $membershipQuery) use ($user): void {
+            $membershipQuery->where('user_id', $user->id);
         });
     }
 

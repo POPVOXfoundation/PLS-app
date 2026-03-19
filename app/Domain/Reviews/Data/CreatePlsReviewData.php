@@ -10,9 +10,9 @@ final readonly class CreatePlsReviewData
         public int $legislatureId,
         public ?int $reviewGroupId,
         public string $title,
+        public int $createdBy,
         public ?string $description = null,
         public ?CarbonImmutable $startDate = null,
-        public ?int $createdBy = null,
     ) {}
 
     /**
@@ -22,7 +22,7 @@ final readonly class CreatePlsReviewData
      *     title: string,
      *     description?: string|null,
      *     start_date?: \DateTimeInterface|string|null,
-     *     created_by?: int|string|null
+     *     created_by: int|string
      * }  $input
      */
     public static function from(array $input): self
@@ -33,7 +33,7 @@ final readonly class CreatePlsReviewData
             title: trim($input['title']),
             description: self::normalizeNullableString($input['description'] ?? null),
             startDate: self::normalizeStartDate($input['start_date'] ?? null),
-            createdBy: self::normalizeNullableInt($input['created_by'] ?? null),
+            createdBy: self::normalizeRequiredInt($input['created_by']),
         );
     }
 
@@ -44,7 +44,7 @@ final readonly class CreatePlsReviewData
      *     title: string,
      *     description: string|null,
      *     start_date: string|null,
-     *     created_by: int|null
+     *     created_by: int
      * }
      */
     public function toArray(): array
@@ -98,5 +98,14 @@ final readonly class CreatePlsReviewData
         $trimmedValue = trim($value);
 
         return $trimmedValue === '' ? null : (int) $trimmedValue;
+    }
+
+    private static function normalizeRequiredInt(int|string $value): int
+    {
+        if (is_int($value)) {
+            return $value;
+        }
+
+        return (int) trim($value);
     }
 }

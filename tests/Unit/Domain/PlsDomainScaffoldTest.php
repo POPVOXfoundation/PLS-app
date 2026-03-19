@@ -37,6 +37,8 @@ use Database\Factories\Domain\Reviews\PlsReviewFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 
 it('defines the prompt one backed enums', function () {
     expect(JurisdictionType::cases())->toHaveCount(7)
@@ -66,7 +68,8 @@ it('defines the expected prompt one relationships', function () {
         ->and((new Legislature)->reviewGroups())->toBeInstanceOf(HasMany::class)
         ->and((new ReviewGroup)->reviews())->toBeInstanceOf(HasMany::class)
         ->and((new PlsReview)->reviewGroup())->toBeInstanceOf(BelongsTo::class)
-        ->and((new PlsReview)->owner())->toBeInstanceOf(BelongsTo::class)
+        ->and((new PlsReview)->ownerMembership())->toBeInstanceOf(HasOne::class)
+        ->and((new PlsReview)->owner())->toBeInstanceOf(HasOneThrough::class)
         ->and((new PlsReview)->steps())->toBeInstanceOf(HasMany::class)
         ->and((new PlsReview)->legislation())->toBeInstanceOf(BelongsToMany::class)
         ->and((new PlsReviewStep)->review())->toBeInstanceOf(BelongsTo::class)
@@ -134,7 +137,7 @@ it('provides factory defaults for the main prompt one models', function () {
         ->toHaveKeys(['name', 'iso2', 'iso3', 'default_locale'])
         ->and($reviewDefinition['status'])->toBe(PlsReviewStatus::Draft)
         ->and($reviewDefinition['current_step_number'])->toBe(1)
-        ->and($reviewDefinition)->not->toHaveKey('committee_id')
+        ->and($reviewDefinition)->not->toHaveKey('legacy_group_id')
         ->and($documentDefinition['document_type'])->toBeInstanceOf(DocumentType::class)
         ->and($documentDefinition['metadata'])->toBeArray();
 });

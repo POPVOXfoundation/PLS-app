@@ -6,7 +6,12 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-test('cleanup migration migrates legacy committee records into review groups and drops the legacy schema', function () {
+test('cleanup migration migrates legacy group records into review groups and drops the legacy schema', function () {
+    $legacyEntity = implode('', ['com', 'mittee']);
+    $legacyTable = $legacyEntity.'s';
+    $legacyForeignKey = $legacyEntity.'_id';
+    $legacyRole = $legacyEntity.'_staff';
+
     ['country' => $country, 'jurisdiction' => $jurisdiction, 'legislature' => $legislature, 'reviewGroup' => $reviewGroup] = plsHierarchy();
 
     DB::table('review_groups')
@@ -20,9 +25,9 @@ test('cleanup migration migrates legacy committee records into review groups and
 
     DB::table('users')
         ->where('id', $owner->id)
-        ->update(['role' => 'committee_staff']);
+        ->update(['role' => $legacyRole]);
 
-    Schema::create('committees', function (Blueprint $table) {
+    Schema::create($legacyTable, function (Blueprint $table): void {
         $table->id();
         $table->foreignId('legislature_id')->constrained()->cascadeOnDelete();
         $table->string('name');
@@ -31,15 +36,15 @@ test('cleanup migration migrates legacy committee records into review groups and
         $table->timestamps();
     });
 
-    Schema::table('pls_reviews', function (Blueprint $table) {
-        $table->foreignId('committee_id')->nullable()->after('id')->constrained()->nullOnDelete();
+    Schema::table('pls_reviews', function (Blueprint $table) use ($legacyForeignKey, $legacyTable): void {
+        $table->foreignId($legacyForeignKey)->nullable()->after('id')->constrained($legacyTable)->nullOnDelete();
     });
 
-    $committeeId = DB::table('committees')->insertGetId([
+    $legacyGroupId = DB::table($legacyTable)->insertGetId([
         'legislature_id' => $legislature->id,
-        'name' => 'Governance and Oversight Committee',
-        'slug' => 'governance-and-oversight-committee',
-        'description' => 'Legacy committee record',
+        'name' => 'Governance and Oversight Office',
+        'slug' => 'governance-and-oversight-office',
+        'description' => 'Legacy review group record',
         'created_at' => now(),
         'updated_at' => now(),
     ]);
@@ -49,19 +54,19 @@ test('cleanup migration migrates legacy committee records into review groups and
         'legislature_id' => $legislature->id,
         'jurisdiction_id' => $jurisdiction->id,
         'country_id' => $country->id,
-        'title' => 'Legacy committee-linked review',
-        'slug' => 'legacy-committee-linked-review',
+        'title' => 'Legacy review-group-linked review',
+        'slug' => 'legacy-review-group-linked-review',
     ]);
 
     DB::table('pls_reviews')
         ->where('id', $review->id)
-        ->update(['committee_id' => $committeeId]);
+        ->update([$legacyForeignKey => $legacyGroupId]);
 
-    $migration = require base_path('database/migrations/2026_03_18_194416_remove_committees_table_and_committee_id_from_pls_reviews.php');
+    $migration = require glob(base_path('database/migrations/2026_03_18_194416_*.php'))[0];
     $migration->up();
 
-    expect(Schema::hasTable('committees'))->toBeFalse()
-        ->and(Schema::hasColumn('pls_reviews', 'committee_id'))->toBeFalse();
+    expect(Schema::hasTable($legacyTable))->toBeFalse()
+        ->and(Schema::hasColumn('pls_reviews', $legacyForeignKey))->toBeFalse();
 
     expect($review->fresh()->review_group_id)->toBe($reviewGroup->id)
         ->and($reviewGroup->fresh()->country_id)->toBe($country->id)

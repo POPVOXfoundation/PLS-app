@@ -305,7 +305,7 @@
                         <div class="space-y-1">
                             <flux:heading size="lg">{{ __('Current collaborators') }}</flux:heading>
                             <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                                {{ __('Everyone listed here can access this review. The creator is the primary owner, and any additional access must be granted explicitly.') }}
+                                {{ __('Everyone listed here can access this review. Ownership comes from the membership record, and any additional access must be granted explicitly.') }}
                             </flux:text>
                         </div>
                         <flux:badge>{{ $review->memberships->count() }}</flux:badge>
@@ -334,7 +334,7 @@
                                         <div class="min-w-0">
                                             <div class="flex flex-wrap items-center gap-2">
                                                 <div class="truncate">{{ $membership->user->name }}</div>
-                                                @if ($membership->user_id === $review->created_by)
+                                                @if ($membership->role->value === 'owner')
                                                     <flux:badge size="sm">{{ __('Primary owner') }}</flux:badge>
                                                 @endif
                                             </div>
@@ -342,7 +342,7 @@
                                         </div>
                                     </flux:table.cell>
                                     <flux:table.cell>
-                                        @if ($canManageCollaborators && $membership->user_id !== $review->created_by)
+                                        @if ($canManageCollaborators && $membership->role->value !== 'owner')
                                             <div class="flex items-center gap-2" wire:key="membership-role-{{ $membership->id }}">
                                                 <flux:select wire:model="collaboratorRoles.{{ $membership->id }}" size="sm">
                                                     @foreach ($collaboratorRoleOptions as $roleOption)
@@ -363,7 +363,7 @@
                                         @endif
                                     </flux:table.cell>
                                     <flux:table.cell>
-                                        @if ($membership->user_id === $review->created_by)
+                                        @if ($membership->role->value === 'owner')
                                             <div class="space-y-0.5">
                                                 <div>{{ __('Created the review') }}</div>
                                                 <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Added automatically as owner') }}</flux:text>
@@ -381,7 +381,7 @@
                                         @endif
                                     </flux:table.cell>
                                     <flux:table.cell>
-                                        @if ($canManageCollaborators && $membership->user_id !== $review->created_by)
+                                        @if ($canManageCollaborators && $membership->role->value !== 'owner')
                                             <div class="flex justify-end">
                                                 <flux:button
                                                     variant="danger"

@@ -32,7 +32,7 @@ test('dashboard shows portfolio metrics, review activity, and attention reviews'
         'title' => 'Review of procurement implementation',
     ], [
         'review_group' => [
-            'name' => 'Public Accounts Committee',
+            'name' => 'Public Accounts Office',
         ],
     ]);
 
@@ -50,7 +50,7 @@ test('dashboard shows portfolio metrics, review activity, and attention reviews'
         'title' => 'Review of access to information implementation',
     ], [
         'review_group' => [
-            'name' => 'Governance and Legal Affairs Committee',
+            'name' => 'Governance and Legal Affairs Office',
         ],
     ]);
 
@@ -77,6 +77,6 @@ test('dashboard shows portfolio metrics, review activity, and attention reviews'
         ->assertSee('Assignment workload')
         ->assertSee('Review of procurement implementation')
         ->assertSee('Review of delegated procurement regulations')
-        ->assertSee('Public Accounts Committee')
-        ->assertSee('Governance and Legal Affairs Committee');
+        ->assertSee('Public Accounts Office')
+        ->assertSee('Governance and Legal Affairs Office');
 });

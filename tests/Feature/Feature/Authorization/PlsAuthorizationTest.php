@@ -6,6 +6,7 @@ use App\Domain\Reviews\PlsReviewMembership;
 use App\Livewire\Pls\Reviews\Create as CreateReviewPage;
 use App\Livewire\Pls\Reviews\Show as ShowReviewPage;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 
 test('creator can access and edit their review workspace', function () {
@@ -26,6 +27,26 @@ test('creator can access and edit their review workspace', function () {
         ->call('storeDocument')
         ->assertHasNoErrors()
         ->assertSee('Owner working paper');
+});
+
+test('created_by alone does not grant access without a membership record', function () {
+    $owner = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    DB::table('pls_review_memberships')
+        ->where('pls_review_id', $review->id)
+        ->delete();
+
+    $this->actingAs($owner)
+        ->get(route('pls.reviews.index'))
+        ->assertSuccessful()
+        ->assertDontSee($review->title);
+
+    $this->actingAs($owner)
+        ->get(route('pls.reviews.show', $review))
+        ->assertForbidden();
 });
 
 test('non-member cannot access a review', function () {
@@ -131,32 +152,24 @@ test('invited editor cannot manage collaborators', function () {
         ->assertForbidden();
 });
 
-test('invited owner can manage collaborators when explicitly allowed', function () {
+test('collaborators cannot be promoted to owner from the review workspace', function () {
     $creator = User::factory()->reviewer()->create();
-    $delegatedOwner = User::factory()->reviewer()->create();
     $invitee = User::factory()->reviewer()->create();
     $review = plsReview([
         'created_by' => $creator->id,
     ]);
 
-    $review->memberships()->create([
-        'user_id' => $delegatedOwner->id,
-        'role' => PlsReviewMembershipRole::Owner,
-        'invited_by' => $creator->id,
-    ]);
-
-    Livewire::actingAs($delegatedOwner)
+    Livewire::actingAs($creator)
         ->test(ShowReviewPage::class, ['review' => $review])
         ->set('inviteCollaboratorUserId', (string) $invitee->id)
-        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Editor->value)
+        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Owner->value)
         ->call('inviteCollaborator')
-        ->assertHasNoErrors();
+        ->assertHasErrors(['inviteCollaboratorRole']);
 
-    $this->assertDatabaseHas('pls_review_memberships', [
+    $this->assertDatabaseMissing('pls_review_memberships', [
         'pls_review_id' => $review->id,
         'user_id' => $invitee->id,
-        'role' => PlsReviewMembershipRole::Editor->value,
-        'invited_by' => $delegatedOwner->id,
+        'role' => PlsReviewMembershipRole::Owner->value,
     ]);
 });
 

@@ -64,13 +64,11 @@ class CreatePlsReview
                 'completed_at' => null,
             ]);
 
-            if ($data->createdBy !== null) {
-                $review->memberships()->create([
-                    'user_id' => $data->createdBy,
-                    'role' => PlsReviewMembershipRole::Owner,
-                    'invited_by' => null,
-                ]);
-            }
+            $review->memberships()->create([
+                'user_id' => $data->createdBy,
+                'role' => PlsReviewMembershipRole::Owner,
+                'invited_by' => null,
+            ]);
 
             $review->steps()->createMany(
                 array_map(
@@ -114,7 +112,7 @@ class CreatePlsReview
         }
     }
 
-    private function generateUniqueSlug(?int $createdBy, string $title): string
+    private function generateUniqueSlug(int $createdBy, string $title): string
     {
         $baseSlug = Str::slug($title);
         $slugBase = $baseSlug !== '' ? $baseSlug : 'pls-review';
@@ -129,14 +127,10 @@ class CreatePlsReview
         return $slug;
     }
 
-    private function slugExistsForOwner(?int $createdBy, string $slug): bool
+    private function slugExistsForOwner(int $createdBy, string $slug): bool
     {
         return PlsReview::query()
-            ->when(
-                $createdBy === null,
-                static fn ($query) => $query->whereNull('created_by'),
-                static fn ($query) => $query->where('created_by', $createdBy),
-            )
+            ->where('created_by', $createdBy)
             ->where('slug', $slug)
             ->exists();
     }

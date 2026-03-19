@@ -97,7 +97,7 @@ function plsHierarchy(array $overrides = []): array
         'country_id' => $country->id,
         'jurisdiction_id' => $jurisdiction->id,
         'legislature_id' => $legislature->id,
-        'name' => 'Governance and Oversight Committee',
+        'name' => 'Governance and Oversight Office',
         'type' => ReviewGroupType::Committee,
     ], $overrides['review_group'] ?? []));
 

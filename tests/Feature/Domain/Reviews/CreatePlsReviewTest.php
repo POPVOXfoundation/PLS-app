@@ -6,6 +6,7 @@ use App\Domain\Reviews\Actions\CreatePlsReview;
 use App\Domain\Reviews\Data\CreatePlsReviewData;
 use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Domain\Reviews\Enums\PlsReviewStatus;
+use App\Domain\Reviews\PlsReviewMembership;
 use App\Domain\Reviews\Support\PlsReviewWorkflow;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -74,7 +75,7 @@ it('creates a draft review with a review group and the derived institutional hie
         'country_id' => $country->id,
         'jurisdiction_id' => $jurisdiction->id,
         'legislature_id' => $legislature->id,
-        'name' => 'Governance and Oversight Committee',
+        'name' => 'Governance and Oversight Office',
         'type' => ReviewGroupType::Committee,
     ]);
 
@@ -139,6 +140,40 @@ it('creates unique slugs for reviews with the same title for the same owner', fu
 
     expect($firstReview->slug)->toBe('implementation-review')
         ->and($secondReview->slug)->toBe('implementation-review-2');
+});
+
+it('prevents a second owner membership from being added to a review', function () {
+    $review = plsReview();
+    $anotherReviewer = User::factory()->reviewer()->create();
+
+    expect(fn () => $review->memberships()->create([
+        'user_id' => $anotherReviewer->id,
+        'role' => PlsReviewMembershipRole::Owner,
+        'invited_by' => $review->created_by,
+    ]))->toThrow(ValidationException::class);
+
+    expect($review->fresh()->owner?->id)->toBe($review->created_by)
+        ->and(
+            PlsReviewMembership::query()
+                ->where('pls_review_id', $review->id)
+                ->where('role', PlsReviewMembershipRole::Owner->value)
+                ->count(),
+        )->toBe(1);
+});
+
+it('prevents the owner membership from being removed or demoted', function () {
+    $review = plsReview();
+    $ownerMembership = $review->memberships()->where('role', PlsReviewMembershipRole::Owner->value)->sole();
+
+    expect(function () use ($ownerMembership): void {
+        $ownerMembership->update([
+            'role' => PlsReviewMembershipRole::Editor,
+        ]);
+    })->toThrow(ValidationException::class);
+
+    expect(fn () => $ownerMembership->delete())->toThrow(ValidationException::class);
+
+    expect($review->fresh()->owner?->id)->toBe($review->created_by);
 });
 
 it('validates review creation input before persisting', function () {
