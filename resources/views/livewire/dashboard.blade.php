@@ -1,6 +1,6 @@
 @php
-    $totalReviews = array_sum(array_column($committeeSummaries, 'reviews_count'));
-    $topCommitteeSummaries = array_slice($committeeSummaries, 0, 4);
+    $totalReviews = array_sum(array_column($assignmentSummaries, 'reviews_count'));
+    $topAssignmentSummaries = array_slice($assignmentSummaries, 0, 4);
 @endphp
 
 <div class="flex h-full w-full flex-1 flex-col gap-6">
@@ -38,7 +38,7 @@
             <div class="space-y-1">
                 <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">{{ __('Total reviews') }}</flux:text>
                 <p class="text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $totalReviews }}</p>
-                <flux:text class="text-xs text-zinc-400 dark:text-zinc-500">{{ __('Across all committees') }}</flux:text>
+                <flux:text class="text-xs text-zinc-400 dark:text-zinc-500">{{ __('Across the full review portfolio') }}</flux:text>
             </div>
         </flux:card>
         <flux:card class="flex items-start gap-4">
@@ -136,7 +136,7 @@
                                 </flux:badge>
                             </div>
                             <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                                {{ $item['committee_name'] }} · {{ $item['phase'] }} · {{ $item['current_step'] }}
+                                {{ $item['assignment_name'] }} · {{ $item['phase'] }} · {{ $item['current_step'] }}
                             </flux:text>
                         </div>
                         <span class="shrink-0 text-sm tabular-nums text-zinc-400 dark:text-zinc-500">{{ $item['progress'] }}%</span>
@@ -190,21 +190,21 @@
             @endif
         </flux:card>
 
-        {{-- Committee workload --}}
+        {{-- Assignment workload --}}
         <flux:card class="space-y-4">
-            <flux:heading size="lg" level="2">{{ __('Committee workload') }}</flux:heading>
+            <flux:heading size="lg" level="2">{{ __('Assignment workload') }}</flux:heading>
 
-            @if ($topCommitteeSummaries === [])
+            @if ($topAssignmentSummaries === [])
                 <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                    {{ __('No committee activity yet.') }}
+                    {{ __('No assignment activity yet.') }}
                 </flux:text>
             @else
                 <div class="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-                    @foreach ($topCommitteeSummaries as $summary)
+                    @foreach ($topAssignmentSummaries as $summary)
                         <div class="space-y-2 py-3 first:pt-0 last:pb-0">
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0">
-                                    <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $summary['committee_name'] }}</p>
+                                    <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $summary['assignment_name'] }}</p>
                                     <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">{{ $summary['legislature_name'] }}</flux:text>
                                 </div>
                                 <p class="shrink-0 text-sm font-semibold tabular-nums text-zinc-900 dark:text-white">

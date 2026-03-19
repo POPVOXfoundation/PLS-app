@@ -46,6 +46,40 @@ test('stakeholders can be added and filtered from the review workspace', functio
     ]);
 });
 
+test('stakeholders can be edited and submissions can be prepared from the stakeholder workspace', function () {
+    $review = plsReview([
+        'title' => 'Review of stakeholder coordination',
+    ]);
+
+    $stakeholder = Stakeholder::factory()->create([
+        'pls_review_id' => $review->id,
+        'name' => 'National Audit Office',
+        'stakeholder_type' => StakeholderType::GovernmentAgency,
+        'contact_details' => null,
+    ]);
+
+    Livewire::test(ShowReviewPage::class, ['review' => $review])
+        ->assertSee('Stakeholder directory')
+        ->assertSee('Missing contact detail')
+        ->call('startEditingStakeholder', $stakeholder->id)
+        ->set('stakeholderName', 'National Audit Office and Inspectorate')
+        ->set('stakeholderType', StakeholderType::Expert->value)
+        ->set('stakeholderOrganization', 'National Audit Office')
+        ->set('stakeholderEmail', 'audit@laravel.com')
+        ->call('updateStakeholder')
+        ->assertHasNoErrors()
+        ->assertSee('National Audit Office and Inspectorate')
+        ->call('prepareSubmissionCreate', $stakeholder->id)
+        ->assertSet('submissionStakeholderId', (string) $stakeholder->id)
+        ->assertSee('Awaiting written evidence');
+
+    $this->assertDatabaseHas('stakeholders', [
+        'id' => $stakeholder->id,
+        'name' => 'National Audit Office and Inspectorate',
+        'stakeholder_type' => StakeholderType::Expert->value,
+    ]);
+});
+
 test('stakeholder records show linked submissions in the review workspace', function () {
     $review = plsReview([
         'title' => 'Review of stakeholder evidence records',
@@ -71,6 +105,7 @@ test('stakeholder records show linked submissions in the review workspace', func
     ]);
 
     Livewire::test(ShowReviewPage::class, ['review' => $review])
+        ->assertSee('Latest submission')
         ->assertSee('National Access to Information Forum')
         ->assertSee('Requested stronger publication deadlines and reporting transparency.')
         ->assertSee('Forum written submission');

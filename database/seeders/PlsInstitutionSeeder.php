@@ -2,12 +2,13 @@
 
 namespace Database\Seeders;
 
-use App\Domain\Institutions\Committee;
 use App\Domain\Institutions\Country;
 use App\Domain\Institutions\Enums\JurisdictionType;
 use App\Domain\Institutions\Enums\LegislatureType;
+use App\Domain\Institutions\Enums\ReviewGroupType;
 use App\Domain\Institutions\Jurisdiction;
 use App\Domain\Institutions\Legislature;
+use App\Domain\Institutions\ReviewGroup;
 use Illuminate\Database\Seeder;
 
 class PlsInstitutionSeeder extends Seeder
@@ -113,51 +114,27 @@ class PlsInstitutionSeeder extends Seeder
             ],
         );
 
-        Committee::query()->updateOrCreate(
-            ['legislature_id' => $belizeAssembly->id, 'slug' => 'governance-and-public-service-committee'],
-            [
-                'name' => 'Governance and Public Service Committee',
-                'description' => 'Committee overseeing governance, transparency, and public administration matters.',
-            ],
-        );
+        $this->seedReviewGroup($belizeAssembly, 'Governance and Public Service Committee');
+        $this->seedReviewGroup($belizeAssembly, 'Public Finance and Budget Committee');
+        $this->seedReviewGroup($ugandaParliament, 'Committee on Legal and Parliamentary Affairs');
+        $this->seedReviewGroup($ugandaParliament, 'Committee on National Economy');
+        $this->seedReviewGroup($usCongress, 'House Committee on Oversight and Accountability');
+        $this->seedReviewGroup($tennesseeAssembly, 'Senate State and Local Government Committee');
+    }
 
-        Committee::query()->updateOrCreate(
-            ['legislature_id' => $belizeAssembly->id, 'slug' => 'public-finance-and-budget-committee'],
-            [
-                'name' => 'Public Finance and Budget Committee',
-                'description' => 'Committee responsible for budget scrutiny and expenditure oversight.',
-            ],
-        );
+    private function seedReviewGroup(Legislature $legislature, string $name): void
+    {
+        $legislature->loadMissing('jurisdiction.country');
 
-        Committee::query()->updateOrCreate(
-            ['legislature_id' => $ugandaParliament->id, 'slug' => 'committee-on-legal-and-parliamentary-affairs'],
+        ReviewGroup::query()->updateOrCreate(
             [
-                'name' => 'Committee on Legal and Parliamentary Affairs',
-                'description' => 'Committee responsible for legal reform and parliamentary administration matters.',
+                'legislature_id' => $legislature->id,
+                'name' => $name,
+                'type' => ReviewGroupType::Committee->value,
             ],
-        );
-
-        Committee::query()->updateOrCreate(
-            ['legislature_id' => $ugandaParliament->id, 'slug' => 'committee-on-national-economy'],
             [
-                'name' => 'Committee on National Economy',
-                'description' => 'Committee reviewing economic policy and implementation performance.',
-            ],
-        );
-
-        Committee::query()->updateOrCreate(
-            ['legislature_id' => $usCongress->id, 'slug' => 'house-committee-on-oversight-and-accountability'],
-            [
-                'name' => 'House Committee on Oversight and Accountability',
-                'description' => 'Committee overseeing federal implementation and public administration performance.',
-            ],
-        );
-
-        Committee::query()->updateOrCreate(
-            ['legislature_id' => $tennesseeAssembly->id, 'slug' => 'senate-state-and-local-government-committee'],
-            [
-                'name' => 'Senate State and Local Government Committee',
-                'description' => 'Committee reviewing state and local government administration and enabling laws.',
+                'country_id' => $legislature->jurisdiction->country_id,
+                'jurisdiction_id' => $legislature->jurisdiction_id,
             ],
         );
     }

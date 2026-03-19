@@ -1,14 +1,16 @@
 <?php
 
-use App\Domain\Institutions\Committee;
 use App\Domain\Institutions\Country;
 use App\Domain\Institutions\Enums\JurisdictionType;
 use App\Domain\Institutions\Enums\LegislatureType;
+use App\Domain\Institutions\Enums\ReviewGroupType;
 use App\Domain\Institutions\Jurisdiction;
 use App\Domain\Institutions\Legislature;
+use App\Domain\Institutions\ReviewGroup;
 use App\Domain\Reviews\Actions\CreatePlsReview;
 use App\Domain\Reviews\Data\CreatePlsReviewData;
 use App\Domain\Reviews\PlsReview;
+use App\Models\User;
 
 /*
 |--------------------------------------------------------------------------
@@ -59,13 +61,13 @@ expect()->extend('toBeOne', function () {
  *     country?: array<string, mixed>,
  *     jurisdiction?: array<string, mixed>,
  *     legislature?: array<string, mixed>,
- *     committee?: array<string, mixed>
+ *     review_group?: array<string, mixed>
  * }  $overrides
  * @return array{
  *     country: Country,
  *     jurisdiction: Jurisdiction,
  *     legislature: Legislature,
- *     committee: Committee
+ *     reviewGroup: ReviewGroup
  * }
  */
 function plsHierarchy(array $overrides = []): array
@@ -91,22 +93,27 @@ function plsHierarchy(array $overrides = []): array
         'legislature_type' => LegislatureType::Assembly,
     ], $overrides['legislature'] ?? []));
 
-    $committee = Committee::factory()->create(array_merge([
+    $reviewGroup = ReviewGroup::factory()->create(array_merge([
+        'country_id' => $country->id,
+        'jurisdiction_id' => $jurisdiction->id,
         'legislature_id' => $legislature->id,
         'name' => 'Governance and Oversight Committee',
-        'slug' => 'governance-and-oversight-committee-'.fake()->unique()->word(),
-    ], $overrides['committee'] ?? []));
+        'type' => ReviewGroupType::Committee,
+    ], $overrides['review_group'] ?? []));
 
     return [
         'country' => $country,
         'jurisdiction' => $jurisdiction,
         'legislature' => $legislature,
-        'committee' => $committee,
+        'reviewGroup' => $reviewGroup,
     ];
 }
 
 /**
  * @param  array{
+ *     legislature_id?: int|string,
+ *     review_group_id?: int|string|null,
+ *     created_by?: int|string|null,
  *     title?: string,
  *     description?: string|null,
  *     start_date?: string|null
@@ -115,22 +122,30 @@ function plsHierarchy(array $overrides = []): array
  *     country?: array<string, mixed>,
  *     jurisdiction?: array<string, mixed>,
  *     legislature?: array<string, mixed>,
- *     committee?: array<string, mixed>
+ *     review_group?: array<string, mixed>
  * }  $hierarchyOverrides
  * @return array{
  *     country: Country,
  *     jurisdiction: Jurisdiction,
  *     legislature: Legislature,
- *     committee: Committee,
+ *     reviewGroup: ReviewGroup,
+ *     owner: User,
  *     review: PlsReview
  * }
  */
 function plsReviewContext(array $reviewAttributes = [], array $hierarchyOverrides = []): array
 {
     $hierarchy = plsHierarchy($hierarchyOverrides);
+    $owner = isset($reviewAttributes['created_by']) && $reviewAttributes['created_by'] !== null
+        ? User::query()->findOrFail((int) $reviewAttributes['created_by'])
+        : (auth()->user() instanceof User
+            ? auth()->user()
+            : User::factory()->reviewer()->create());
 
     $review = app(CreatePlsReview::class)->create(CreatePlsReviewData::from(array_merge([
-        'committee_id' => $hierarchy['committee']->id,
+        'legislature_id' => $hierarchy['legislature']->id,
+        'review_group_id' => $hierarchy['reviewGroup']->id,
+        'created_by' => $owner->id,
         'title' => 'Default PLS Review Title',
         'description' => 'Default review description',
         'start_date' => '2026-03-10',
@@ -138,12 +153,16 @@ function plsReviewContext(array $reviewAttributes = [], array $hierarchyOverride
 
     return [
         ...$hierarchy,
+        'owner' => $owner,
         'review' => $review,
     ];
 }
 
 /**
  * @param  array{
+ *     legislature_id?: int|string,
+ *     review_group_id?: int|string|null,
+ *     created_by?: int|string|null,
  *     title?: string,
  *     description?: string|null,
  *     start_date?: string|null
@@ -152,7 +171,7 @@ function plsReviewContext(array $reviewAttributes = [], array $hierarchyOverride
  *     country?: array<string, mixed>,
  *     jurisdiction?: array<string, mixed>,
  *     legislature?: array<string, mixed>,
- *     committee?: array<string, mixed>
+ *     review_group?: array<string, mixed>
  * }  $hierarchyOverrides
  */
 function plsReview(array $reviewAttributes = [], array $hierarchyOverrides = []): PlsReview

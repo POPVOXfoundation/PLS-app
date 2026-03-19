@@ -9,9 +9,7 @@ use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class StoreReviewDocumentMetadata
 {
-    public function __construct(private StoreDocumentMetadataValidator $validator)
-    {
-    }
+    public function __construct(private StoreDocumentMetadataValidator $validator) {}
 
     /**
      * @param  array<string, mixed>  $input

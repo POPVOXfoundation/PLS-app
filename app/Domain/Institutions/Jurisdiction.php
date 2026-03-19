@@ -6,9 +6,9 @@ use App\Domain\Institutions\Enums\JurisdictionType;
 use App\Domain\Legislation\Legislation;
 use App\Domain\Reviews\PlsReview;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Model;
 
 class Jurisdiction extends Model
 {
@@ -54,6 +54,11 @@ class Jurisdiction extends Model
     public function reviews(): HasMany
     {
         return $this->hasMany(PlsReview::class);
+    }
+
+    public function reviewGroups(): HasMany
+    {
+        return $this->hasMany(ReviewGroup::class);
     }
 
     /**

@@ -6,12 +6,13 @@ use App\Domain\Consultations\Submission;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\DocumentChunk;
 use App\Domain\Documents\Enums\DocumentType;
-use App\Domain\Institutions\Committee;
 use App\Domain\Institutions\Country;
 use App\Domain\Institutions\Enums\JurisdictionType;
 use App\Domain\Institutions\Enums\LegislatureType;
+use App\Domain\Institutions\Enums\ReviewGroupType;
 use App\Domain\Institutions\Jurisdiction;
 use App\Domain\Institutions\Legislature;
+use App\Domain\Institutions\ReviewGroup;
 use App\Domain\Legislation\Enums\LegislationType;
 use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
 use App\Domain\Legislation\Legislation;
@@ -42,6 +43,7 @@ it('defines the prompt one backed enums', function () {
         ->and(LegislatureType::cases())->toHaveCount(4)
         ->and(PlsReviewStatus::Draft->value)->toBe('draft')
         ->and(PlsStepStatus::InProgress->value)->toBe('in_progress')
+        ->and(ReviewGroupType::Committee->value)->toBe('committee')
         ->and(DocumentType::FinalReport->value)->toBe('final_report')
         ->and(LegislationType::Regulation->value)->toBe('regulation')
         ->and(ReviewLegislationRelationshipType::Delegated->value)->toBe('delegated')
@@ -54,64 +56,70 @@ it('defines the prompt one backed enums', function () {
 });
 
 it('defines the expected prompt one relationships', function () {
-    expect((new Country())->jurisdictions())->toBeInstanceOf(HasMany::class)
-        ->and((new Country())->reviews())->toBeInstanceOf(HasMany::class)
-        ->and((new Jurisdiction())->country())->toBeInstanceOf(BelongsTo::class)
-        ->and((new Jurisdiction())->children())->toBeInstanceOf(HasMany::class)
-        ->and((new Legislature())->jurisdiction())->toBeInstanceOf(BelongsTo::class)
-        ->and((new Committee())->reviews())->toBeInstanceOf(HasMany::class)
-        ->and((new PlsReview())->committee())->toBeInstanceOf(BelongsTo::class)
-        ->and((new PlsReview())->steps())->toBeInstanceOf(HasMany::class)
-        ->and((new PlsReview())->legislation())->toBeInstanceOf(BelongsToMany::class)
-        ->and((new PlsReviewStep())->review())->toBeInstanceOf(BelongsTo::class)
-        ->and((new Legislation())->reviews())->toBeInstanceOf(BelongsToMany::class)
-        ->and((new PlsReviewLegislation())->review())->toBeInstanceOf(BelongsTo::class)
-        ->and((new LegislationObjective())->review())->toBeInstanceOf(BelongsTo::class)
-        ->and((new Document())->chunks())->toBeInstanceOf(HasMany::class)
-        ->and((new Document())->legislation())->toBeInstanceOf(BelongsToMany::class)
-        ->and((new DocumentChunk())->document())->toBeInstanceOf(BelongsTo::class)
-        ->and((new Stakeholder())->submissions())->toBeInstanceOf(HasMany::class)
-        ->and((new ImplementingAgency())->review())->toBeInstanceOf(BelongsTo::class)
-        ->and((new Consultation())->document())->toBeInstanceOf(BelongsTo::class)
-        ->and((new Submission())->stakeholder())->toBeInstanceOf(BelongsTo::class)
-        ->and((new Report())->governmentResponses())->toBeInstanceOf(HasMany::class)
-        ->and((new GovernmentResponse())->report())->toBeInstanceOf(BelongsTo::class)
-        ->and((new PlsReviewLegislation())->getTable())->toBe('pls_review_legislation');
+    expect((new Country)->jurisdictions())->toBeInstanceOf(HasMany::class)
+        ->and((new Country)->reviews())->toBeInstanceOf(HasMany::class)
+        ->and((new Country)->reviewGroups())->toBeInstanceOf(HasMany::class)
+        ->and((new Jurisdiction)->country())->toBeInstanceOf(BelongsTo::class)
+        ->and((new Jurisdiction)->children())->toBeInstanceOf(HasMany::class)
+        ->and((new Jurisdiction)->reviewGroups())->toBeInstanceOf(HasMany::class)
+        ->and((new Legislature)->jurisdiction())->toBeInstanceOf(BelongsTo::class)
+        ->and((new Legislature)->reviewGroups())->toBeInstanceOf(HasMany::class)
+        ->and((new ReviewGroup)->reviews())->toBeInstanceOf(HasMany::class)
+        ->and((new PlsReview)->reviewGroup())->toBeInstanceOf(BelongsTo::class)
+        ->and((new PlsReview)->owner())->toBeInstanceOf(BelongsTo::class)
+        ->and((new PlsReview)->steps())->toBeInstanceOf(HasMany::class)
+        ->and((new PlsReview)->legislation())->toBeInstanceOf(BelongsToMany::class)
+        ->and((new PlsReviewStep)->review())->toBeInstanceOf(BelongsTo::class)
+        ->and((new Legislation)->reviews())->toBeInstanceOf(BelongsToMany::class)
+        ->and((new PlsReviewLegislation)->review())->toBeInstanceOf(BelongsTo::class)
+        ->and((new LegislationObjective)->review())->toBeInstanceOf(BelongsTo::class)
+        ->and((new Document)->chunks())->toBeInstanceOf(HasMany::class)
+        ->and((new Document)->legislation())->toBeInstanceOf(BelongsToMany::class)
+        ->and((new DocumentChunk)->document())->toBeInstanceOf(BelongsTo::class)
+        ->and((new Stakeholder)->submissions())->toBeInstanceOf(HasMany::class)
+        ->and((new ImplementingAgency)->review())->toBeInstanceOf(BelongsTo::class)
+        ->and((new Consultation)->document())->toBeInstanceOf(BelongsTo::class)
+        ->and((new Submission)->stakeholder())->toBeInstanceOf(BelongsTo::class)
+        ->and((new Report)->governmentResponses())->toBeInstanceOf(HasMany::class)
+        ->and((new GovernmentResponse)->report())->toBeInstanceOf(BelongsTo::class)
+        ->and((new PlsReviewLegislation)->getTable())->toBe('pls_review_legislation');
 });
 
 it('registers enum, date, and json casts on the scaffolded models', function () {
-    expect((new Jurisdiction())->getCasts())->toMatchArray([
+    expect((new Jurisdiction)->getCasts())->toMatchArray([
         'jurisdiction_type' => JurisdictionType::class,
-    ])->and((new PlsReview())->getCasts())->toMatchArray([
+    ])->and((new ReviewGroup)->getCasts())->toMatchArray([
+        'type' => ReviewGroupType::class,
+    ])->and((new PlsReview)->getCasts())->toMatchArray([
         'status' => PlsReviewStatus::class,
         'start_date' => 'date',
         'completed_at' => 'datetime',
-    ])->and((new PlsReviewStep())->getCasts())->toMatchArray([
+    ])->and((new PlsReviewStep)->getCasts())->toMatchArray([
         'status' => PlsStepStatus::class,
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
-    ])->and((new Legislation())->getCasts())->toMatchArray([
+    ])->and((new Legislation)->getCasts())->toMatchArray([
         'legislation_type' => LegislationType::class,
         'date_enacted' => 'date',
-    ])->and((new Document())->getCasts())->toMatchArray([
+    ])->and((new Document)->getCasts())->toMatchArray([
         'document_type' => DocumentType::class,
         'metadata' => 'array',
-    ])->and((new DocumentChunk())->getCasts())->toMatchArray([
+    ])->and((new DocumentChunk)->getCasts())->toMatchArray([
         'embedding' => 'array',
         'metadata' => 'array',
-    ])->and((new Stakeholder())->getCasts())->toMatchArray([
+    ])->and((new Stakeholder)->getCasts())->toMatchArray([
         'stakeholder_type' => StakeholderType::class,
         'contact_details' => 'array',
-    ])->and((new ImplementingAgency())->getCasts())->toMatchArray([
+    ])->and((new ImplementingAgency)->getCasts())->toMatchArray([
         'agency_type' => ImplementingAgencyType::class,
-    ])->and((new Consultation())->getCasts())->toMatchArray([
+    ])->and((new Consultation)->getCasts())->toMatchArray([
         'consultation_type' => ConsultationType::class,
         'held_at' => 'datetime',
-    ])->and((new Report())->getCasts())->toMatchArray([
+    ])->and((new Report)->getCasts())->toMatchArray([
         'report_type' => ReportType::class,
         'status' => ReportStatus::class,
         'published_at' => 'datetime',
-    ])->and((new GovernmentResponse())->getCasts())->toMatchArray([
+    ])->and((new GovernmentResponse)->getCasts())->toMatchArray([
         'response_status' => GovernmentResponseStatus::class,
         'received_at' => 'datetime',
     ]);
@@ -126,6 +134,7 @@ it('provides factory defaults for the main prompt one models', function () {
         ->toHaveKeys(['name', 'iso2', 'iso3', 'default_locale'])
         ->and($reviewDefinition['status'])->toBe(PlsReviewStatus::Draft)
         ->and($reviewDefinition['current_step_number'])->toBe(1)
+        ->and($reviewDefinition)->not->toHaveKey('committee_id')
         ->and($documentDefinition['document_type'])->toBeInstanceOf(DocumentType::class)
         ->and($documentDefinition['metadata'])->toBeArray();
 });

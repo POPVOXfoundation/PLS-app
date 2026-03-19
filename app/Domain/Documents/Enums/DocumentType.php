@@ -5,7 +5,7 @@ namespace App\Domain\Documents\Enums;
 enum DocumentType: string
 {
     case LegislationText = 'legislation_text';
-    case CommitteeReport = 'committee_report';
+    case GroupReport = 'group_report';
     case ImplementationReport = 'implementation_report';
     case ConsultationSubmission = 'consultation_submission';
     case HearingTranscript = 'hearing_transcript';

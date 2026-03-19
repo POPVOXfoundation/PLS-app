@@ -2,12 +2,13 @@
 
 namespace Database\Factories\Domain\Reviews;
 
-use App\Domain\Institutions\Committee;
 use App\Domain\Institutions\Country;
 use App\Domain\Institutions\Jurisdiction;
 use App\Domain\Institutions\Legislature;
+use App\Domain\Institutions\ReviewGroup;
 use App\Domain\Reviews\Enums\PlsReviewStatus;
 use App\Domain\Reviews\PlsReview;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -26,12 +27,20 @@ class PlsReviewFactory extends Factory
     public function definition(): array
     {
         $title = fake()->unique()->sentence(5);
+        $country = Country::factory();
+        $jurisdiction = Jurisdiction::factory()->for($country);
+        $legislature = Legislature::factory()->for($jurisdiction);
+        $reviewGroup = ReviewGroup::factory()
+            ->for($country)
+            ->for($jurisdiction)
+            ->for($legislature);
 
         return [
-            'committee_id' => Committee::factory(),
-            'legislature_id' => Legislature::factory(),
-            'jurisdiction_id' => Jurisdiction::factory(),
-            'country_id' => Country::factory(),
+            'review_group_id' => $reviewGroup,
+            'legislature_id' => $legislature,
+            'jurisdiction_id' => $jurisdiction,
+            'country_id' => $country,
+            'created_by' => User::factory(),
             'title' => $title,
             'slug' => Str::slug($title),
             'description' => fake()->paragraph(),
@@ -40,5 +49,12 @@ class PlsReviewFactory extends Factory
             'start_date' => fake()->dateTimeBetween('-6 months', 'now'),
             'completed_at' => null,
         ];
+    }
+
+    public function withoutReviewGroup(): static
+    {
+        return $this->state(fn (): array => [
+            'review_group_id' => null,
+        ]);
     }
 }

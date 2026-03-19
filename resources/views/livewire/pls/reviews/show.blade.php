@@ -11,16 +11,8 @@
     class="flex h-full w-full flex-1 flex-col gap-6"
 >
     @php
-        $reviewAssignmentLabel = $review->committee?->name
-            ?? $review->legislature?->name
-            ?? $review->jurisdiction?->name
-            ?? __('Unassigned');
-
-            $reviewLocationParts = array_values(array_filter([
-                $review->committee ? $review->legislature?->name : null,
-                $review->jurisdiction?->name,
-                $review->country?->name,
-            ]));
+        $reviewAssignmentLabel = $review->assignmentLabel();
+        $reviewLocationParts = $review->assignmentLocationParts();
     @endphp
 
     @if (session('status'))
@@ -99,6 +91,7 @@
     <flux:tab.group class="[&_[data-flux-tab-panel]]:pt-4">
         <flux:tabs>
             <flux:tab name="workflow" icon="list-bullet">{{ __('Workflow') }}</flux:tab>
+            <flux:tab name="collaborators" icon="user-plus">{{ __('Collaborators') }}</flux:tab>
             <flux:tab name="legislation" icon="scale">{{ __('Legislation') }}</flux:tab>
             <flux:tab name="documents" icon="document-text">{{ __('Documents') }}</flux:tab>
             <flux:tab name="stakeholders" icon="users">{{ __('Stakeholders') }}</flux:tab>
@@ -192,6 +185,220 @@
                         </flux:table>
                     </flux:card>
                 @endif
+            </div>
+        </flux:tab.panel>
+
+        <flux:tab.panel name="collaborators">
+            <div class="grid gap-6 xl:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.4fr)]">
+                <flux:card class="space-y-4">
+                    <div class="space-y-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <flux:badge size="sm">{{ __('Review access') }}</flux:badge>
+                            <flux:badge size="sm" color="zinc">{{ __('Invitation-based') }}</flux:badge>
+                        </div>
+
+                        <flux:heading size="lg">{{ __('Access and collaborators') }}</flux:heading>
+                        <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                            {{ __('Only people listed here can open and work in this review. Legislature, jurisdiction, and review group describe institutional context only.') }}
+                        </flux:text>
+                    </div>
+
+                    <div class="grid gap-3">
+                        <div class="rounded-xl border border-amber-200/80 bg-amber-50/80 px-4 py-3 dark:border-amber-900/60 dark:bg-amber-950/20">
+                            <div class="flex items-start gap-3">
+                                <div class="rounded-lg bg-amber-100 p-2 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                                    <flux:icon.shield-check class="size-4" />
+                                </div>
+                                <div class="space-y-1">
+                                    <p class="text-sm font-medium text-amber-900 dark:text-amber-100">{{ __('Review group does not control access') }}</p>
+                                    <p class="text-sm text-amber-800/90 dark:text-amber-200/90">
+                                        {{ __('Adding a review group gives the review institutional context. It does not automatically add people or grant access.') }}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid gap-3 md:grid-cols-2">
+                            <div class="rounded-xl border border-zinc-200 bg-zinc-50/80 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/70">
+                                <div class="flex items-center gap-2">
+                                    <flux:badge size="sm">{{ __('Owner') }}</flux:badge>
+                                    <span class="text-sm font-medium text-zinc-900 dark:text-white">{{ __('Can edit and manage access') }}</span>
+                                </div>
+                                <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                    {{ __('Owners can work in the review, invite collaborators, change collaborator roles, and remove access.') }}
+                                </p>
+                            </div>
+
+                            <div class="rounded-xl border border-zinc-200 bg-zinc-50/80 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/70">
+                                <div class="flex items-center gap-2">
+                                    <flux:badge size="sm" color="zinc">{{ __('Editor') }}</flux:badge>
+                                    <span class="text-sm font-medium text-zinc-900 dark:text-white">{{ __('Can edit the workspace') }}</span>
+                                </div>
+                                <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                    {{ __('Editors can work across the review workspace but cannot invite people, change roles, or remove access.') }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if ($canManageCollaborators)
+                        <div class="space-y-3 rounded-xl border border-zinc-200/80 bg-white/80 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
+                            <div class="space-y-1">
+                                <flux:heading size="base">{{ __('Invite a collaborator') }}</flux:heading>
+                                <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                                    {{ __('Invite an existing user to this review. Access starts only after you add them here.') }}
+                                </flux:text>
+                            </div>
+
+                            @if ($availableCollaborators->isEmpty())
+                                <flux:callout icon="check-circle">
+                                    <flux:callout.text>
+                                        {{ __('No additional users are available to invite right now. Everyone who can be added is already on this review.') }}
+                                    </flux:callout.text>
+                                </flux:callout>
+                            @else
+                                <form wire:submit="inviteCollaborator" class="space-y-4">
+                                    <flux:select
+                                        wire:model.live="inviteCollaboratorUserId"
+                                        :invalid="$errors->has('inviteCollaboratorUserId')"
+                                        :label="__('User')"
+                                        :description="__('Choose an existing account. This does not create a new user account.')"
+                                        :placeholder="__('Select a user')"
+                                    >
+                                        @foreach ($availableCollaborators as $availableCollaborator)
+                                            <flux:select.option :value="$availableCollaborator->id">
+                                                {{ $availableCollaborator->name }} · {{ $availableCollaborator->email }}
+                                            </flux:select.option>
+                                        @endforeach
+                                    </flux:select>
+
+                                    <flux:select
+                                        wire:model="inviteCollaboratorRole"
+                                        :invalid="$errors->has('inviteCollaboratorRole')"
+                                        :label="__('Access level')"
+                                        :description="__('Use Owner only when this person should also manage collaborators. Use Editor for regular review work.')"
+                                    >
+                                        @foreach ($collaboratorRoleOptions as $roleOption)
+                                            <flux:select.option :value="$roleOption->value">{{ $roleOption->label() }}</flux:select.option>
+                                        @endforeach
+                                    </flux:select>
+
+                                    <div class="flex justify-end">
+                                        <flux:button type="submit" variant="primary" icon="user-plus">
+                                            {{ __('Invite collaborator') }}
+                                        </flux:button>
+                                    </div>
+                                </form>
+                            @endif
+                        </div>
+                    @else
+                        <flux:callout icon="lock-closed">
+                            <flux:callout.text>
+                                {{ __('You can work in this review, but only an owner can change who has access. Ask an owner if collaborators need to be invited, removed, or promoted.') }}
+                            </flux:callout.text>
+                        </flux:callout>
+                    @endif
+                </flux:card>
+
+                <flux:card class="space-y-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="space-y-1">
+                            <flux:heading size="lg">{{ __('Current collaborators') }}</flux:heading>
+                            <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                                {{ __('Everyone listed here can access this review. The creator is the primary owner, and any additional access must be granted explicitly.') }}
+                            </flux:text>
+                        </div>
+                        <flux:badge>{{ $review->memberships->count() }}</flux:badge>
+                    </div>
+
+                    @if ($review->memberships->count() === 1)
+                        <flux:callout icon="user-circle">
+                            <flux:callout.text>
+                                {{ __('Only the review owner has access right now. Invite editors when the workspace is ready for collaboration.') }}
+                            </flux:callout.text>
+                        </flux:callout>
+                    @endif
+
+                    <flux:table>
+                        <flux:table.columns>
+                            <flux:table.column>{{ __('User') }}</flux:table.column>
+                            <flux:table.column>{{ __('Role') }}</flux:table.column>
+                            <flux:table.column>{{ __('Access source') }}</flux:table.column>
+                            <flux:table.column></flux:table.column>
+                        </flux:table.columns>
+
+                        <flux:table.rows>
+                            @foreach ($review->memberships->sortBy(fn ($membership) => sprintf('%d-%s', $membership->role->value === 'owner' ? 0 : 1, $membership->user->name)) as $membership)
+                                <flux:table.row :key="$membership->id">
+                                    <flux:table.cell variant="strong">
+                                        <div class="min-w-0">
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <div class="truncate">{{ $membership->user->name }}</div>
+                                                @if ($membership->user_id === $review->created_by)
+                                                    <flux:badge size="sm">{{ __('Primary owner') }}</flux:badge>
+                                                @endif
+                                            </div>
+                                            <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ $membership->user->email }}</flux:text>
+                                        </div>
+                                    </flux:table.cell>
+                                    <flux:table.cell>
+                                        @if ($canManageCollaborators && $membership->user_id !== $review->created_by)
+                                            <div class="flex items-center gap-2" wire:key="membership-role-{{ $membership->id }}">
+                                                <flux:select wire:model="collaboratorRoles.{{ $membership->id }}" size="sm">
+                                                    @foreach ($collaboratorRoleOptions as $roleOption)
+                                                        <flux:select.option :value="$roleOption->value">{{ $roleOption->label() }}</flux:select.option>
+                                                    @endforeach
+                                                </flux:select>
+
+                                                <flux:button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    wire:click="updateCollaboratorRole({{ $membership->id }})"
+                                                >
+                                                    {{ __('Save') }}
+                                                </flux:button>
+                                            </div>
+                                        @else
+                                            <flux:badge size="sm">{{ $membership->role->label() }}</flux:badge>
+                                        @endif
+                                    </flux:table.cell>
+                                    <flux:table.cell>
+                                        @if ($membership->user_id === $review->created_by)
+                                            <div class="space-y-0.5">
+                                                <div>{{ __('Created the review') }}</div>
+                                                <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Added automatically as owner') }}</flux:text>
+                                            </div>
+                                        @elseif ($membership->invitedBy)
+                                            <div class="space-y-0.5">
+                                                <div>{{ __('Invited by :name', ['name' => $membership->invitedBy->name]) }}</div>
+                                                <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Explicit access') }}</flux:text>
+                                            </div>
+                                        @else
+                                            <div class="space-y-0.5">
+                                                <div>{{ __('Access source not recorded') }}</div>
+                                                <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('The collaborator still has explicit access.') }}</flux:text>
+                                            </div>
+                                        @endif
+                                    </flux:table.cell>
+                                    <flux:table.cell>
+                                        @if ($canManageCollaborators && $membership->user_id !== $review->created_by)
+                                            <div class="flex justify-end">
+                                                <flux:button
+                                                    variant="danger"
+                                                    size="sm"
+                                                    icon="user-minus"
+                                                    wire:click="removeCollaborator({{ $membership->id }})"
+                                                >
+                                                    {{ __('Remove') }}
+                                                </flux:button>
+                                            </div>
+                                        @endif
+                                    </flux:table.cell>
+                                </flux:table.row>
+                            @endforeach
+                        </flux:table.rows>
+                    </flux:table>
+                </flux:card>
             </div>
         </flux:tab.panel>
 
@@ -349,7 +556,7 @@
                                         @endif
                                     </flux:table.cell>
                                     <flux:table.cell>
-                                        <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($document->document_type->value) }}</flux:badge>
+                                        <flux:badge size="sm">{{ $this->documentTypeLabel($document->document_type) }}</flux:badge>
                                     </flux:table.cell>
                                     <flux:table.cell>{{ $document->mime_type }}</flux:table.cell>
                                     <flux:table.cell>{{ $document->fileSizeLabel() }}</flux:table.cell>
@@ -407,7 +614,7 @@
                     <div class="grid gap-4 sm:grid-cols-2">
                         <flux:select wire:model="documentType" :invalid="$errors->has('documentType')" :label="__('Type')">
                             @foreach ($documentTypes as $type)
-                                <flux:select.option :value="$type->value">{{ \Illuminate\Support\Str::headline($type->value) }}</flux:select.option>
+                                <flux:select.option :value="$type->value">{{ $this->documentTypeLabel($type) }}</flux:select.option>
                             @endforeach
                         </flux:select>
                         <flux:input wire:model="documentStoragePath" :invalid="$errors->has('documentStoragePath')" :label="__('Storage path')" placeholder="pls/reviews/12/documents/file.pdf" />
@@ -451,7 +658,7 @@
                     <div class="grid gap-4 sm:grid-cols-2">
                         <flux:select wire:model="documentType" :invalid="$errors->has('documentType')" :label="__('Type')">
                             @foreach ($documentTypes as $type)
-                                <flux:select.option :value="$type->value">{{ \Illuminate\Support\Str::headline($type->value) }}</flux:select.option>
+                                <flux:select.option :value="$type->value">{{ $this->documentTypeLabel($type) }}</flux:select.option>
                             @endforeach
                         </flux:select>
                         <flux:input wire:model="documentStoragePath" :invalid="$errors->has('documentStoragePath')" :label="__('Storage path')" />
@@ -475,18 +682,41 @@
              TAB: Stakeholders
         ════════════════════════════════════════════════ --}}
         <flux:tab.panel name="stakeholders">
-            <div class="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.9fr)]">
-                <flux:card class="space-y-4">
+            @php
+                $stakeholdersWithSubmissions = $review->stakeholders
+                    ->filter(fn ($stakeholder) => $stakeholder->submissions->isNotEmpty())
+                    ->values();
+                $stakeholdersAwaitingEvidence = $review->stakeholders
+                    ->filter(fn ($stakeholder) => $stakeholder->submissions->isEmpty())
+                    ->values();
+                $stakeholdersMissingContacts = $review->stakeholders
+                    ->filter(function ($stakeholder) {
+                        $contactDetails = $stakeholder->contact_details ?? [];
+
+                        return ! filled($contactDetails['organization'] ?? null)
+                            && ! filled($contactDetails['email'] ?? null)
+                            && ! filled($contactDetails['phone'] ?? null);
+                    })
+                    ->values();
+            @endphp
+
+            <div class="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.9fr)]">
+                <flux:card class="space-y-5">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div class="space-y-1">
-                            <flux:heading size="lg">{{ __('Stakeholders') }}</flux:heading>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <flux:badge size="sm">{{ __('Stakeholder planning') }}</flux:badge>
+                                <flux:badge size="sm" color="zinc">{{ __('Review workspace') }}</flux:badge>
+                            </div>
+
+                            <flux:heading size="lg">{{ __('Stakeholder directory') }}</flux:heading>
                             <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                                {{ __('Track who should be consulted and see which stakeholders have already submitted evidence.') }}
+                                {{ __('Keep the people and organizations involved in the review current, searchable, and ready for evidence intake.') }}
                             </flux:text>
                         </div>
 
-                        <div class="flex items-center gap-2">
-                            <flux:select wire:model.live="stakeholderTypeFilter" size="sm" class="min-w-40">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <flux:select wire:model.live="stakeholderTypeFilter" size="sm" class="min-w-44">
                                 <flux:select.option value="all">{{ __('All types') }}</flux:select.option>
                                 @foreach ($stakeholderTypes as $stakeholderTypeOption)
                                     <flux:select.option :value="$stakeholderTypeOption->value">{{ \Illuminate\Support\Str::headline($stakeholderTypeOption->value) }}</flux:select.option>
@@ -494,117 +724,269 @@
                             </flux:select>
 
                             <flux:modal.trigger name="add-stakeholder">
-                                <flux:button variant="primary" size="sm" icon="plus">{{ __('Add stakeholder') }}</flux:button>
+                                <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareStakeholderCreate">{{ __('Add stakeholder') }}</flux:button>
                             </flux:modal.trigger>
                         </div>
                     </div>
 
+                    <div class="grid gap-3 sm:grid-cols-3">
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+                            <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Stakeholders mapped') }}</flux:text>
+                            <p class="mt-1 text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $review->stakeholders->count() }}</p>
+                        </div>
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+                            <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('With submissions') }}</flux:text>
+                            <p class="mt-1 text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $stakeholdersWithSubmissions->count() }}</p>
+                        </div>
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+                            <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Missing contact detail') }}</flux:text>
+                            <p class="mt-1 text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $stakeholdersMissingContacts->count() }}</p>
+                        </div>
+                    </div>
+
                     @if ($review->stakeholders->isEmpty())
-                        <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                            {{ __('No stakeholders recorded yet.') }}
-                        </flux:text>
+                        <div class="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/70 p-6 dark:border-zinc-700 dark:bg-zinc-900/40">
+                            <flux:heading size="base">{{ __('No stakeholders recorded yet') }}</flux:heading>
+                            <flux:text class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                {{ __('Start the directory with the ministries, implementing institutions, experts, and civil society actors the review team expects to engage.') }}
+                            </flux:text>
+                            <div class="mt-4">
+                                <flux:modal.trigger name="add-stakeholder">
+                                    <flux:button variant="primary" icon="plus" wire:click="prepareStakeholderCreate">{{ __('Add the first stakeholder') }}</flux:button>
+                                </flux:modal.trigger>
+                            </div>
+                        </div>
                     @elseif ($filteredStakeholders->isEmpty())
-                        <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                            {{ __('No stakeholders match the current filter.') }}
-                        </flux:text>
+                        <div class="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/70 p-6 dark:border-zinc-700 dark:bg-zinc-900/40">
+                            <flux:heading size="base">{{ __('No stakeholders match this filter') }}</flux:heading>
+                            <flux:text class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                {{ __('Try a different stakeholder type or clear the filter to return to the full directory.') }}
+                            </flux:text>
+                            <div class="mt-4">
+                                <flux:button variant="ghost" icon="x-mark" wire:click="clearStakeholderFilter">{{ __('Clear filter') }}</flux:button>
+                            </div>
+                        </div>
                     @else
-                        <div class="space-y-3">
-                            @foreach ($filteredStakeholders as $stakeholder)
-                                <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-                                    <div class="flex items-start justify-between gap-3">
-                                        <div class="min-w-0 space-y-1">
+                        <div class="space-y-4">
+                            @foreach ($filteredStakeholders->sortBy('name') as $stakeholder)
+                                @php
+                                    $contactDetails = $stakeholder->contact_details ?? [];
+                                    $hasContactDetails = filled($contactDetails['organization'] ?? null)
+                                        || filled($contactDetails['email'] ?? null)
+                                        || filled($contactDetails['phone'] ?? null);
+                                    $latestSubmission = $stakeholder->submissions
+                                        ->sortByDesc(fn ($submission) => $submission->submitted_at?->timestamp ?? $submission->created_at?->timestamp ?? 0)
+                                        ->first();
+                                @endphp
+
+                                <div class="rounded-2xl border border-zinc-200 p-5 dark:border-zinc-800">
+                                    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                        <div class="min-w-0 space-y-3">
                                             <div class="flex flex-wrap items-center gap-2">
-                                                <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $stakeholder->name }}</p>
+                                                <flux:heading size="base">{{ $stakeholder->name }}</flux:heading>
                                                 <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($stakeholder->stakeholder_type->value) }}</flux:badge>
+                                                @if ($stakeholder->submissions->isNotEmpty())
+                                                    <flux:badge size="sm" color="emerald">{{ __('Evidence received') }}</flux:badge>
+                                                @else
+                                                    <flux:badge size="sm" color="zinc">{{ __('Awaiting evidence') }}</flux:badge>
+                                                @endif
                                             </div>
 
-                                            @if (($stakeholder->contact_details['organization'] ?? null) || ($stakeholder->contact_details['email'] ?? null) || ($stakeholder->contact_details['phone'] ?? null))
-                                                <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                                    @if ($stakeholder->contact_details['organization'] ?? null)
-                                                        <span>{{ $stakeholder->contact_details['organization'] }}</span>
+                                            @if ($hasContactDetails)
+                                                <div class="flex flex-wrap gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                                                    @if ($contactDetails['organization'] ?? null)
+                                                        <span class="rounded-full bg-zinc-100 px-2.5 py-1 dark:bg-zinc-800">{{ $contactDetails['organization'] }}</span>
                                                     @endif
-                                                    @if ($stakeholder->contact_details['email'] ?? null)
-                                                        <span>{{ $stakeholder->contact_details['email'] }}</span>
+                                                    @if ($contactDetails['email'] ?? null)
+                                                        <span class="rounded-full bg-zinc-100 px-2.5 py-1 dark:bg-zinc-800">{{ $contactDetails['email'] }}</span>
                                                     @endif
-                                                    @if ($stakeholder->contact_details['phone'] ?? null)
-                                                        <span>{{ $stakeholder->contact_details['phone'] }}</span>
+                                                    @if ($contactDetails['phone'] ?? null)
+                                                        <span class="rounded-full bg-zinc-100 px-2.5 py-1 dark:bg-zinc-800">{{ $contactDetails['phone'] }}</span>
                                                     @endif
                                                 </div>
+                                            @else
+                                                <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                                                    {{ __('No contact detail captured yet.') }}
+                                                </flux:text>
                                             @endif
                                         </div>
 
-                                        <span class="shrink-0 text-xs tabular-nums text-zinc-400 dark:text-zinc-500">
-                                            {{ trans_choice('{0} 0 submissions|{1} 1 submission|[2,*] :count submissions', $stakeholder->submissions->count(), ['count' => $stakeholder->submissions->count()]) }}
-                                        </span>
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="text-xs tabular-nums text-zinc-400 dark:text-zinc-500">
+                                                {{ trans_choice('{0} 0 submissions|{1} 1 submission|[2,*] :count submissions', $stakeholder->submissions->count(), ['count' => $stakeholder->submissions->count()]) }}
+                                            </span>
+
+                                            <flux:modal.trigger name="edit-stakeholder">
+                                                <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingStakeholder({{ $stakeholder->id }})">
+                                                    {{ __('Edit') }}
+                                                </flux:button>
+                                            </flux:modal.trigger>
+
+                                            <flux:modal.trigger name="add-submission">
+                                                <flux:button variant="primary" size="sm" icon="document-plus" wire:click="prepareSubmissionCreate({{ $stakeholder->id }})">
+                                                    {{ __('Add submission') }}
+                                                </flux:button>
+                                            </flux:modal.trigger>
+                                        </div>
                                     </div>
 
-                                    @if ($stakeholder->submissions->isNotEmpty())
-                                        <div class="mt-4 space-y-2 border-t border-zinc-100 pt-3 dark:border-zinc-800/60">
+                                    <div class="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+                                        <div class="rounded-xl bg-zinc-50/80 p-4 dark:bg-zinc-900/70">
                                             <flux:text class="text-xs font-medium uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
-                                                {{ __('Linked submissions') }}
+                                                {{ $latestSubmission ? __('Latest submission') : __('Evidence status') }}
                                             </flux:text>
 
-                                            @foreach ($stakeholder->submissions as $submission)
-                                                <div class="rounded-lg bg-zinc-50 px-3 py-2 dark:bg-zinc-900/60">
-                                                    <div class="flex items-start justify-between gap-3">
-                                                        <div class="min-w-0">
-                                                            <flux:text class="text-sm text-zinc-700 dark:text-zinc-300">
-                                                                {{ $submission->summary }}
-                                                            </flux:text>
-                                                            <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-400 dark:text-zinc-500">
-                                                                <span>{{ $submission->submitted_at?->toFormattedDateString() ?? __('Undated') }}</span>
-                                                                @if ($submission->document)
-                                                                    <span>{{ $submission->document->title }}</span>
-                                                                @endif
-                                                            </div>
-                                                        </div>
+                                            @if ($latestSubmission)
+                                                <flux:text class="mt-2 text-sm text-zinc-700 dark:text-zinc-300">{{ $latestSubmission->summary }}</flux:text>
+                                                <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-400 dark:text-zinc-500">
+                                                    <span>{{ $latestSubmission->submitted_at?->toFormattedDateString() ?? __('Undated') }}</span>
+                                                    @if ($latestSubmission->document)
+                                                        <span>{{ $latestSubmission->document->title }}</span>
+                                                    @endif
+                                                </div>
+                                            @else
+                                                <flux:text class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                                    {{ __('No written evidence has been logged for this stakeholder yet.') }}
+                                                </flux:text>
+                                            @endif
+                                        </div>
+
+                                        <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                                            <flux:text class="text-xs font-medium uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
+                                                {{ __('Review-team cue') }}
+                                            </flux:text>
+                                            <flux:text class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                                {{ $hasContactDetails
+                                                    ? __('Contact detail is on file, so this record is ready for outreach and follow-up.')
+                                                    : __('Capture an email, phone number, or organization so the team can follow up consistently.') }}
+                                            </flux:text>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </flux:card>
+
+                <div class="space-y-6">
+                    <flux:card class="space-y-4">
+                        <div class="space-y-1">
+                            <flux:heading size="lg">{{ __('Review-team cues') }}</flux:heading>
+                            <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                                {{ __('Use these lists to see where the workspace still needs outreach, evidence, or basic stakeholder detail.') }}
+                            </flux:text>
+                        </div>
+
+                        @if ($review->stakeholders->isEmpty())
+                            <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                                {{ __('Stakeholder cues will appear once the directory is started.') }}
+                            </flux:text>
+                        @else
+                            <div class="space-y-4">
+                                <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <flux:heading size="base">{{ __('Awaiting written evidence') }}</flux:heading>
+                                        <span class="text-sm font-medium tabular-nums text-zinc-500 dark:text-zinc-400">{{ $stakeholdersAwaitingEvidence->count() }}</span>
+                                    </div>
+
+                                    @if ($stakeholdersAwaitingEvidence->isEmpty())
+                                        <flux:text class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                            {{ __('Every stakeholder currently has at least one linked submission.') }}
+                                        </flux:text>
+                                    @else
+                                        <div class="mt-3 space-y-2">
+                                            @foreach ($stakeholdersAwaitingEvidence->take(5) as $stakeholder)
+                                                <div class="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 dark:bg-zinc-950/60">
+                                                    <div class="min-w-0">
+                                                        <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $stakeholder->name }}</p>
+                                                        <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
+                                                            {{ \Illuminate\Support\Str::headline($stakeholder->stakeholder_type->value) }}
+                                                        </flux:text>
                                                     </div>
+
+                                                    <flux:modal.trigger name="add-submission">
+                                                        <flux:button variant="ghost" size="sm" icon="document-plus" wire:click="prepareSubmissionCreate({{ $stakeholder->id }})">
+                                                            {{ __('Log evidence') }}
+                                                        </flux:button>
+                                                    </flux:modal.trigger>
                                                 </div>
                                             @endforeach
                                         </div>
                                     @endif
                                 </div>
-                            @endforeach
-                        </div>
-                    @endif
-                </flux:card>
 
-                <flux:card class="space-y-4">
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="space-y-1">
-                            <flux:heading size="lg">{{ __('Implementing agencies') }}</flux:heading>
-                            <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                                {{ __('Keep the implementation-review step grounded in the institutions responsible for delivery and oversight.') }}
-                            </flux:text>
-                        </div>
-
-                        <flux:modal.trigger name="add-implementing-agency">
-                            <flux:button variant="primary" size="sm" icon="plus">{{ __('Add agency') }}</flux:button>
-                        </flux:modal.trigger>
-                    </div>
-
-                    @if ($review->implementingAgencies->isEmpty())
-                        <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                            {{ __('No implementing agencies recorded yet.') }}
-                        </flux:text>
-                    @else
-                        <div class="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-                            @foreach ($review->implementingAgencies as $agency)
-                                <div class="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-                                    <div class="min-w-0">
-                                        <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $agency->name }}</p>
-                                        <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                                            {{ \Illuminate\Support\Str::headline($agency->agency_type->value) }}
-                                        </flux:text>
+                                <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <flux:heading size="base">{{ __('Missing contact detail') }}</flux:heading>
+                                        <span class="text-sm font-medium tabular-nums text-zinc-500 dark:text-zinc-400">{{ $stakeholdersMissingContacts->count() }}</span>
                                     </div>
+
+                                    @if ($stakeholdersMissingContacts->isEmpty())
+                                        <flux:text class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                            {{ __('Each stakeholder has at least one piece of contact or organization detail recorded.') }}
+                                        </flux:text>
+                                    @else
+                                        <div class="mt-3 space-y-2">
+                                            @foreach ($stakeholdersMissingContacts->take(5) as $stakeholder)
+                                                <div class="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 dark:bg-zinc-950/60">
+                                                    <div class="min-w-0">
+                                                        <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $stakeholder->name }}</p>
+                                                        <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
+                                                            {{ __('Add email, phone, or organization detail.') }}
+                                                        </flux:text>
+                                                    </div>
+
+                                                    <flux:modal.trigger name="edit-stakeholder">
+                                                        <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingStakeholder({{ $stakeholder->id }})">
+                                                            {{ __('Update') }}
+                                                        </flux:button>
+                                                    </flux:modal.trigger>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    @endif
                                 </div>
-                            @endforeach
+                            </div>
+                        @endif
+                    </flux:card>
+
+                    <flux:card class="space-y-4">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="space-y-1">
+                                <flux:heading size="lg">{{ __('Implementing agencies') }}</flux:heading>
+                                <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                                    {{ __('Keep the implementation-review step grounded in the institutions responsible for delivery and oversight.') }}
+                                </flux:text>
+                            </div>
+
+                            <flux:modal.trigger name="add-implementing-agency">
+                                <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareImplementingAgencyCreate">{{ __('Add agency') }}</flux:button>
+                            </flux:modal.trigger>
                         </div>
-                    @endif
-                </flux:card>
+
+                        @if ($review->implementingAgencies->isEmpty())
+                            <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                                {{ __('No implementing agencies recorded yet.') }}
+                            </flux:text>
+                        @else
+                            <div class="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+                                @foreach ($review->implementingAgencies as $agency)
+                                    <div class="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                                        <div class="min-w-0">
+                                            <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $agency->name }}</p>
+                                            <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                                                {{ \Illuminate\Support\Str::headline($agency->agency_type->value) }}
+                                            </flux:text>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+                    </flux:card>
+                </div>
             </div>
 
-            <flux:modal name="add-stakeholder" class="md:w-[34rem]">
+            <flux:modal name="add-stakeholder" class="md:w-[36rem]">
                 <form wire:submit="storeStakeholder" class="space-y-6">
                     <div>
                         <flux:heading size="lg">{{ __('Add stakeholder') }}</flux:heading>
@@ -630,6 +1012,36 @@
 
                     <div class="flex justify-end">
                         <flux:button variant="primary" type="submit">{{ __('Add stakeholder') }}</flux:button>
+                    </div>
+                </form>
+            </flux:modal>
+
+            <flux:modal name="edit-stakeholder" class="md:w-[36rem]">
+                <form wire:submit="updateStakeholder" class="space-y-6">
+                    <div>
+                        <flux:heading size="lg">{{ __('Edit stakeholder') }}</flux:heading>
+                        <flux:text class="mt-1">{{ __('Keep the stakeholder record current so outreach and evidence tracking stay reliable.') }}</flux:text>
+                    </div>
+
+                    <flux:input wire:model="stakeholderName" :invalid="$errors->has('stakeholderName')" :label="__('Name')" />
+
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <flux:select wire:model="stakeholderType" :invalid="$errors->has('stakeholderType')" :label="__('Type')">
+                            @foreach ($stakeholderTypes as $stakeholderTypeOption)
+                                <flux:select.option :value="$stakeholderTypeOption->value">{{ \Illuminate\Support\Str::headline($stakeholderTypeOption->value) }}</flux:select.option>
+                            @endforeach
+                        </flux:select>
+
+                        <flux:input wire:model="stakeholderOrganization" :invalid="$errors->has('stakeholderOrganization')" :label="__('Organization')" />
+                    </div>
+
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <flux:input wire:model="stakeholderEmail" :invalid="$errors->has('stakeholderEmail')" :label="__('Email')" type="email" />
+                        <flux:input wire:model="stakeholderPhone" :invalid="$errors->has('stakeholderPhone')" :label="__('Phone')" />
+                    </div>
+
+                    <div class="flex justify-end">
+                        <flux:button variant="primary" type="submit">{{ __('Save changes') }}</flux:button>
                     </div>
                 </form>
             </flux:modal>
@@ -667,23 +1079,67 @@
                 $plannedConsultations = $review->consultations
                     ->filter(fn ($consultation) => $consultation->held_at === null)
                     ->sortBy('title');
+                $stakeholdersWithSubmissions = $review->stakeholders
+                    ->filter(fn ($stakeholder) => $stakeholder->submissions->isNotEmpty())
+                    ->values();
+                $stakeholdersAwaitingEvidence = $review->stakeholders
+                    ->filter(fn ($stakeholder) => $stakeholder->submissions->isEmpty())
+                    ->values();
+                $consultationStep = $review->steps->firstWhere('step_key', 'consultations');
+                $selectedSubmissionStakeholder = $review->stakeholders->firstWhere('id', (int) $submissionStakeholderId);
             @endphp
 
             <div class="space-y-6">
-                <div class="grid gap-3 sm:grid-cols-3">
-                    <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-                        <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Consultations held') }}</flux:text>
-                        <p class="mt-1 text-xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $completedConsultations->count() }}</p>
+                <flux:card class="space-y-5">
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div class="space-y-2">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <flux:badge size="sm">{{ __('Workflow-linked engagement') }}</flux:badge>
+                                @if ($consultationStep)
+                                    <flux:badge size="sm" color="{{ $review->current_step_number === $consultationStep->step_number ? 'emerald' : 'zinc' }}">
+                                        {{ __('Step :number', ['number' => $consultationStep->step_number]) }}
+                                    </flux:badge>
+                                @endif
+                            </div>
+
+                            <div class="space-y-1">
+                                <flux:heading size="lg">{{ __('Consultation and evidence intake') }}</flux:heading>
+                                <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                                    {{ __('Keep planned engagement, completed activity, and written evidence in one workspace so the review team can trace participation back to the workflow.') }}
+                                </flux:text>
+                            </div>
+                        </div>
+
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/80 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-300 lg:max-w-sm">
+                            <span class="block text-xs font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500">{{ __('Current workflow') }}</span>
+                            <span class="mt-2 block font-medium text-zinc-900 dark:text-white">
+                                {{ __('Step :number · :title', ['number' => $review->current_step_number, 'title' => $review->currentStepTitle()]) }}
+                            </span>
+                            <span class="mt-2 block">
+                                {{ $workspaceGuidance['action'] ?? __('Keep engagement records current and tied to the evidence base.') }}
+                            </span>
+                        </div>
                     </div>
-                    <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-                        <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Planned consultations') }}</flux:text>
-                        <p class="mt-1 text-xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $plannedConsultations->count() }}</p>
+
+                    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+                            <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Consultations held') }}</flux:text>
+                            <p class="mt-1 text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $completedConsultations->count() }}</p>
+                        </div>
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+                            <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Planned consultations') }}</flux:text>
+                            <p class="mt-1 text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $plannedConsultations->count() }}</p>
+                        </div>
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+                            <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Submissions received') }}</flux:text>
+                            <p class="mt-1 text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $review->submissions->count() }}</p>
+                        </div>
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+                            <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Stakeholders with evidence') }}</flux:text>
+                            <p class="mt-1 text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $stakeholdersWithSubmissions->count() }}</p>
+                        </div>
                     </div>
-                    <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-                        <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Submissions received') }}</flux:text>
-                        <p class="mt-1 text-xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $review->submissions->count() }}</p>
-                    </div>
-                </div>
+                </flux:card>
 
                 <div class="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.95fr)]">
                     <flux:card class="space-y-5">
@@ -696,11 +1152,25 @@
                             </div>
 
                             <flux:modal.trigger name="add-consultation">
-                                <flux:button variant="primary" size="sm" icon="plus">{{ __('Add consultation') }}</flux:button>
+                                <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareConsultationCreate">{{ __('Add consultation') }}</flux:button>
                             </flux:modal.trigger>
                         </div>
 
                         <div class="space-y-5">
+                            @if ($review->consultations->isEmpty())
+                                <div class="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/70 p-6 dark:border-zinc-700 dark:bg-zinc-900/40">
+                                    <flux:heading size="base">{{ __('No consultation activity recorded yet') }}</flux:heading>
+                                    <flux:text class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                        {{ __('Use this area for both planned outreach and completed hearings, interviews, roundtables, or public consultations.') }}
+                                    </flux:text>
+                                    <div class="mt-4">
+                                        <flux:modal.trigger name="add-consultation">
+                                            <flux:button variant="primary" icon="plus" wire:click="prepareConsultationCreate">{{ __('Add the first consultation') }}</flux:button>
+                                        </flux:modal.trigger>
+                                    </div>
+                                </div>
+                            @endif
+
                             <div class="space-y-3">
                                 <div class="flex items-center justify-between">
                                     <flux:text class="text-xs font-medium uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
@@ -718,10 +1188,11 @@
                                         @foreach ($completedConsultations as $consultation)
                                             <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
                                                 <div class="flex items-start justify-between gap-3">
-                                                    <div class="min-w-0 space-y-1">
+                                                    <div class="min-w-0 space-y-2">
                                                         <div class="flex flex-wrap items-center gap-2">
                                                             <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $consultation->title }}</p>
                                                             <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($consultation->consultation_type->value) }}</flux:badge>
+                                                            <flux:badge size="sm" color="emerald">{{ __('Completed') }}</flux:badge>
                                                         </div>
                                                         <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-400 dark:text-zinc-500">
                                                             <span>{{ $consultation->held_at?->toFormattedDateString() }}</span>
@@ -762,10 +1233,11 @@
                                         @foreach ($plannedConsultations as $consultation)
                                             <div class="rounded-xl border border-dashed border-zinc-200 p-4 dark:border-zinc-800">
                                                 <div class="flex items-start justify-between gap-3">
-                                                    <div class="min-w-0 space-y-1">
+                                                    <div class="min-w-0 space-y-2">
                                                         <div class="flex flex-wrap items-center gap-2">
                                                             <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $consultation->title }}</p>
                                                             <flux:badge size="sm" color="zinc">{{ \Illuminate\Support\Str::headline($consultation->consultation_type->value) }}</flux:badge>
+                                                            <flux:badge size="sm" color="amber">{{ __('Planned') }}</flux:badge>
                                                         </div>
                                                         <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
                                                             {{ __('Planned engagement activity') }}
@@ -788,43 +1260,108 @@
                         </div>
                     </flux:card>
 
-                    <flux:card class="space-y-4">
+                    <flux:card class="space-y-5">
                         <div class="flex items-start justify-between gap-3">
                             <div class="space-y-1">
-                                <flux:heading size="lg">{{ __('Submissions') }}</flux:heading>
+                                <flux:heading size="lg">{{ __('Submissions and evidence') }}</flux:heading>
                                 <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                                    {{ __('Log written evidence and connect each submission to a stakeholder and supporting document.') }}
+                                    {{ __('Log written evidence, connect it to stakeholder records, and keep the supporting document trail visible to the review team.') }}
                                 </flux:text>
                             </div>
 
                             <flux:modal.trigger name="add-submission">
-                                <flux:button variant="primary" size="sm" icon="plus">{{ __('Add submission') }}</flux:button>
+                                <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareSubmissionCreate" :disabled="$review->stakeholders->isEmpty()">{{ __('Add submission') }}</flux:button>
                             </flux:modal.trigger>
                         </div>
 
-                        @if ($review->submissions->isEmpty())
-                            <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                                {{ __('No submissions logged yet.') }}
-                            </flux:text>
+                        @if ($review->stakeholders->isEmpty())
+                            <div class="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/70 p-6 dark:border-zinc-700 dark:bg-zinc-900/40">
+                                <flux:heading size="base">{{ __('Add stakeholders before logging submissions') }}</flux:heading>
+                                <flux:text class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                    {{ __('Written evidence is attached to stakeholder records. Build the stakeholder directory first, then log submissions from this panel or directly from a stakeholder card.') }}
+                                </flux:text>
+                            </div>
                         @else
-                            <div class="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-                                @foreach ($review->submissions->sortByDesc('submitted_at') as $submission)
-                                    <div class="space-y-2 py-3 first:pt-0 last:pb-0">
-                                        <div class="flex items-start justify-between gap-3">
-                                            <div class="min-w-0">
-                                                <p class="text-sm font-medium text-zinc-900 dark:text-white">{{ $submission->stakeholder?->name ?? __('Unknown stakeholder') }}</p>
-                                                <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-400 dark:text-zinc-500">
-                                                    <span>{{ $submission->submitted_at?->toFormattedDateString() ?? __('Undated') }}</span>
-                                                    @if ($submission->document)
-                                                        <span>{{ $submission->document->title }}</span>
-                                                    @endif
+                            <div class="space-y-5">
+                                <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <flux:heading size="base">{{ __('Awaiting written evidence') }}</flux:heading>
+                                        <span class="text-sm font-medium tabular-nums text-zinc-500 dark:text-zinc-400">{{ $stakeholdersAwaitingEvidence->count() }}</span>
+                                    </div>
+
+                                    @if ($stakeholdersAwaitingEvidence->isEmpty())
+                                        <flux:text class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                            {{ __('Every stakeholder already has at least one linked submission.') }}
+                                        </flux:text>
+                                    @else
+                                        <div class="mt-3 space-y-2">
+                                            @foreach ($stakeholdersAwaitingEvidence->take(5) as $stakeholder)
+                                                <div class="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 dark:bg-zinc-950/60">
+                                                    <div class="min-w-0">
+                                                        <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $stakeholder->name }}</p>
+                                                        <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
+                                                            {{ __('No submission linked yet.') }}
+                                                        </flux:text>
+                                                    </div>
+
+                                                    <flux:modal.trigger name="add-submission">
+                                                        <flux:button variant="ghost" size="sm" icon="document-plus" wire:click="prepareSubmissionCreate({{ $stakeholder->id }})">
+                                                            {{ __('Add') }}
+                                                        </flux:button>
+                                                    </flux:modal.trigger>
                                                 </div>
+                                            @endforeach
+                                        </div>
+                                    @endif
+                                </div>
+
+                                <div class="space-y-3">
+                                    <div class="flex items-center justify-between">
+                                        <flux:text class="text-xs font-medium uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
+                                            {{ __('Received submissions') }}
+                                        </flux:text>
+                                        <span class="text-xs tabular-nums text-zinc-400 dark:text-zinc-500">{{ $review->submissions->count() }}</span>
+                                    </div>
+
+                                    @if ($review->submissions->isEmpty())
+                                        <div class="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/70 p-6 dark:border-zinc-700 dark:bg-zinc-900/40">
+                                            <flux:heading size="base">{{ __('No submissions logged yet') }}</flux:heading>
+                                            <flux:text class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                                {{ __('Once written evidence starts arriving, log it here and keep it tied to the stakeholder record that supplied it.') }}
+                                            </flux:text>
+                                            <div class="mt-4">
+                                                <flux:modal.trigger name="add-submission">
+                                                    <flux:button variant="primary" icon="plus" wire:click="prepareSubmissionCreate">{{ __('Add the first submission') }}</flux:button>
+                                                </flux:modal.trigger>
                                             </div>
                                         </div>
+                                    @else
+                                        <div class="space-y-3">
+                                            @foreach ($review->submissions->sortByDesc(fn ($submission) => $submission->submitted_at?->timestamp ?? $submission->created_at?->timestamp ?? 0) as $submission)
+                                                <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                                                    <div class="flex items-start justify-between gap-3">
+                                                        <div class="min-w-0 space-y-2">
+                                                            <div class="flex flex-wrap items-center gap-2">
+                                                                <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $submission->stakeholder?->name ?? __('Unknown stakeholder') }}</p>
+                                                                @if ($submission->stakeholder)
+                                                                    <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($submission->stakeholder->stakeholder_type->value) }}</flux:badge>
+                                                                @endif
+                                                            </div>
+                                                            <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-400 dark:text-zinc-500">
+                                                                <span>{{ $submission->submitted_at?->toFormattedDateString() ?? __('Undated') }}</span>
+                                                                @if ($submission->document)
+                                                                    <span>{{ $submission->document->title }}</span>
+                                                                @endif
+                                                            </div>
+                                                        </div>
+                                                    </div>
 
-                                        <flux:text class="text-sm text-zinc-600 dark:text-zinc-400">{{ $submission->summary }}</flux:text>
-                                    </div>
-                                @endforeach
+                                                    <flux:text class="mt-3 text-sm text-zinc-600 dark:text-zinc-400">{{ $submission->summary }}</flux:text>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    @endif
+                                </div>
                             </div>
                         @endif
                     </flux:card>
@@ -835,7 +1372,7 @@
                 <form wire:submit="storeConsultation" class="space-y-6">
                     <div>
                         <flux:heading size="lg">{{ __('Add consultation') }}</flux:heading>
-                        <flux:text class="mt-1">{{ __('Record a planned or completed consultation activity for this review.') }}</flux:text>
+                        <flux:text class="mt-1">{{ __('Record a planned or completed consultation activity for this review. Leave the date blank to keep it in the planned queue.') }}</flux:text>
                     </div>
 
                     <flux:input wire:model="consultationTitle" :invalid="$errors->has('consultationTitle')" :label="__('Title')" />
@@ -868,7 +1405,7 @@
                 <form wire:submit="updateConsultation" class="space-y-6">
                     <div>
                         <flux:heading size="lg">{{ __('Edit consultation') }}</flux:heading>
-                        <flux:text class="mt-1">{{ __('Update the schedule, outcome summary, or linked materials for this consultation.') }}</flux:text>
+                        <flux:text class="mt-1">{{ __('Update the schedule, outcome summary, or linked materials for this consultation. Clearing the date returns it to planned activity.') }}</flux:text>
                     </div>
 
                     <flux:input wire:model="consultationTitle" :invalid="$errors->has('consultationTitle')" :label="__('Title')" />
@@ -903,6 +1440,18 @@
                         <flux:heading size="lg">{{ __('Add submission') }}</flux:heading>
                         <flux:text class="mt-1">{{ __('Log written evidence and connect it to the stakeholder record that submitted it.') }}</flux:text>
                     </div>
+
+                    @if ($selectedSubmissionStakeholder)
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/70">
+                            <flux:text class="text-xs font-medium uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
+                                {{ __('Selected stakeholder') }}
+                            </flux:text>
+                            <div class="mt-2 flex flex-wrap items-center gap-2">
+                                <span class="text-sm font-medium text-zinc-900 dark:text-white">{{ $selectedSubmissionStakeholder->name }}</span>
+                                <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($selectedSubmissionStakeholder->stakeholder_type->value) }}</flux:badge>
+                            </div>
+                        </div>
+                    @endif
 
                     <flux:select wire:model="submissionStakeholderId" :invalid="$errors->has('submissionStakeholderId')" :label="__('Stakeholder')" :placeholder="__('Select stakeholder')">
                         @foreach ($review->stakeholders as $stakeholderOption)
@@ -1159,6 +1708,46 @@
                     fn ($report) => $report->report_type === \App\Domain\Reporting\Enums\ReportType::FinalReport
                         && $report->status === \App\Domain\Reporting\Enums\ReportStatus::Published,
                 );
+                $awaitingResponseReports = $publishedFinalReports->filter(
+                    fn ($report) => $report->governmentResponses->isEmpty(),
+                );
+                $draftRecommendations = $review->recommendations->take(3);
+                $publishedReportCount = $review->reports
+                    ->where('status', \App\Domain\Reporting\Enums\ReportStatus::Published)
+                    ->count();
+                $receivedResponseCount = $review->governmentResponses
+                    ->where('response_status', \App\Domain\Reporting\Enums\GovernmentResponseStatus::Received)
+                    ->count();
+                $reportDocumentTypes = [
+                    \App\Domain\Documents\Enums\DocumentType::DraftReport,
+                    \App\Domain\Documents\Enums\DocumentType::FinalReport,
+                    \App\Domain\Documents\Enums\DocumentType::GroupReport,
+                    \App\Domain\Documents\Enums\DocumentType::PolicyReport,
+                ];
+                $preferredReportDocuments = $review->documents->filter(
+                    fn ($document) => in_array($document->document_type, $reportDocumentTypes, true),
+                );
+                $otherReportDocuments = $review->documents->reject(
+                    fn ($document) => in_array($document->document_type, $reportDocumentTypes, true),
+                );
+                $preferredResponseDocuments = $review->documents->filter(
+                    fn ($document) => $document->document_type === \App\Domain\Documents\Enums\DocumentType::GovernmentResponse,
+                );
+                $otherResponseDocuments = $review->documents->reject(
+                    fn ($document) => $document->document_type === \App\Domain\Documents\Enums\DocumentType::GovernmentResponse,
+                );
+                $selectedReportDocument = $reportDocumentId === ''
+                    ? null
+                    : $review->documents->firstWhere('id', (int) $reportDocumentId);
+                $selectedGovernmentResponseReport = $governmentResponseReportId === ''
+                    ? null
+                    : $review->reports->firstWhere('id', (int) $governmentResponseReportId);
+                $selectedGovernmentResponseLatest = $selectedGovernmentResponseReport
+                    ? $this->latestGovernmentResponseForReport($selectedGovernmentResponseReport)
+                    : null;
+                $selectedGovernmentResponseDocument = $governmentResponseDocumentId === ''
+                    ? null
+                    : $review->documents->firstWhere('id', (int) $governmentResponseDocumentId);
             @endphp
 
             <div class="space-y-6">
@@ -1176,6 +1765,192 @@
                         </div>
                     </flux:card>
                 @endif
+
+                <flux:card class="space-y-5">
+                    <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                        <div class="space-y-2">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <flux:badge size="sm">{{ __('End-stage review workspace') }}</flux:badge>
+                                <flux:badge size="sm" color="zinc">{{ __('Reports + executive follow-up') }}</flux:badge>
+                            </div>
+
+                            <div class="space-y-1">
+                                <flux:heading size="lg">{{ __('Reporting workspace') }}</flux:heading>
+                                <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                                    {{ __('Move from findings and recommendations into report drafting, publication tracking, and government follow-up without leaving the review workspace.') }}
+                                </flux:text>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap gap-2">
+                            <flux:modal.trigger name="add-report">
+                                <flux:button
+                                    variant="ghost"
+                                    size="sm"
+                                    icon="document-text"
+                                    wire:click='prepareReportCreate(@js(\App\Domain\Reporting\Enums\ReportType::DraftReport->value), @js(\App\Domain\Reporting\Enums\ReportStatus::Draft->value))'
+                                >
+                                    {{ __('New draft report') }}
+                                </flux:button>
+                            </flux:modal.trigger>
+
+                            <flux:modal.trigger name="add-report">
+                                <flux:button
+                                    variant="ghost"
+                                    size="sm"
+                                    icon="clipboard-document-list"
+                                    wire:click='prepareReportCreate(@js(\App\Domain\Reporting\Enums\ReportType::FinalReport->value), @js(\App\Domain\Reporting\Enums\ReportStatus::Draft->value))'
+                                >
+                                    {{ __('New final report') }}
+                                </flux:button>
+                            </flux:modal.trigger>
+
+                            @if ($review->reports->isNotEmpty())
+                                <flux:modal.trigger name="add-government-response">
+                                    <flux:button variant="primary" size="sm" icon="chat-bubble-left-right" wire:click="prepareGovernmentResponseCreate">
+                                        {{ __('Track response') }}
+                                    </flux:button>
+                                </flux:modal.trigger>
+                            @endif
+                        </div>
+                    </div>
+
+                    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                            <flux:text class="text-xs font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500">{{ __('Analysis ready') }}</flux:text>
+                            <p class="mt-2 text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $review->findings->count() }}/{{ $review->recommendations->count() }}</p>
+                            <flux:text class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+                                {{ __(':findings findings and :recommendations recommendations available as drafting inputs.', [
+                                    'findings' => $review->findings->count(),
+                                    'recommendations' => $review->recommendations->count(),
+                                ]) }}
+                            </flux:text>
+                        </div>
+                        <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                            <flux:text class="text-xs font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500">{{ __('Report outputs') }}</flux:text>
+                            <p class="mt-2 text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $review->reports->count() }}</p>
+                            <flux:text class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+                                {{ __(':draft drafts, :final final reports, and :published published outputs are on record.', [
+                                    'draft' => $review->reports->where('report_type', \App\Domain\Reporting\Enums\ReportType::DraftReport)->count(),
+                                    'final' => $review->reports->where('report_type', \App\Domain\Reporting\Enums\ReportType::FinalReport)->count(),
+                                    'published' => $publishedReportCount,
+                                ]) }}
+                            </flux:text>
+                        </div>
+                        <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                            <flux:text class="text-xs font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500">{{ __('Awaiting follow-up') }}</flux:text>
+                            <p class="mt-2 text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $awaitingResponseReports->count() }}</p>
+                            <flux:text class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+                                {{ __('Published final reports that still need a request, reply, or overdue marker.') }}
+                            </flux:text>
+                        </div>
+                        <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                            <flux:text class="text-xs font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500">{{ __('Responses captured') }}</flux:text>
+                            <p class="mt-2 text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $review->governmentResponses->count() }}</p>
+                            <flux:text class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+                                {{ __(':received received and :overdue overdue follow-up records are attached to reports.', [
+                                    'received' => $receivedResponseCount,
+                                    'overdue' => $this->overdueGovernmentResponseCount($review),
+                                ]) }}
+                            </flux:text>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.95fr)]">
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+                            <div class="space-y-2">
+                                <flux:text class="text-xs font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500">{{ __('Drafting inputs from analysis') }}</flux:text>
+                                <flux:text class="text-sm text-zinc-600 dark:text-zinc-400">
+                                    {{ __('Reporting stays grounded in the analysis workspace. Findings and recommendations remain the source material for report drafting and response follow-up.') }}
+                                </flux:text>
+                            </div>
+
+                            @if ($draftRecommendations->isEmpty())
+                                <div class="mt-4 rounded-xl border border-dashed border-zinc-300/80 bg-white/80 p-4 dark:border-zinc-700 dark:bg-zinc-950/40">
+                                    <p class="text-sm font-medium text-zinc-900 dark:text-white">{{ __('No recommendations drafted yet') }}</p>
+                                    <flux:text class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                                        {{ __('Capture the strongest findings and recommendations in the analysis tab first, then come back here to turn them into report outputs.') }}
+                                    </flux:text>
+                                </div>
+                            @else
+                                <div class="mt-4 space-y-3">
+                                    @foreach ($draftRecommendations as $recommendation)
+                                        <div class="rounded-xl border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950/50">
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <span class="text-sm font-medium text-zinc-900 dark:text-white">{{ $recommendation->title }}</span>
+                                                <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($recommendation->recommendation_type->value) }}</flux:badge>
+                                            </div>
+                                            @if ($recommendation->finding)
+                                                <flux:text class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                                                    {{ __('From finding: :finding', ['finding' => $recommendation->finding->title]) }}
+                                                </flux:text>
+                                            @endif
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+
+                        <div class="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
+                            <div class="space-y-2">
+                                <flux:text class="text-xs font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500">{{ __('Lifecycle view') }}</flux:text>
+                                <flux:text class="text-sm text-zinc-600 dark:text-zinc-400">
+                                    {{ __('Use this sequence to keep report drafting and government follow-up attached to the same end-stage review record.') }}
+                                </flux:text>
+                            </div>
+
+                            <div class="mt-4 space-y-3">
+                                <div class="flex items-start justify-between gap-3 rounded-xl border border-zinc-200 px-4 py-3 dark:border-zinc-800">
+                                    <div>
+                                        <p class="text-sm font-medium text-zinc-900 dark:text-white">{{ __('1. Analysis ready') }}</p>
+                                        <flux:text class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                                            {{ __('Sufficient findings and recommendations are in place to support drafting.') }}
+                                        </flux:text>
+                                    </div>
+                                    <span class="rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                                        {{ $review->recommendations->isNotEmpty() ? __('Ready') : __('Pending') }}
+                                    </span>
+                                </div>
+
+                                <div class="flex items-start justify-between gap-3 rounded-xl border border-zinc-200 px-4 py-3 dark:border-zinc-800">
+                                    <div>
+                                        <p class="text-sm font-medium text-zinc-900 dark:text-white">{{ __('2. Draft and final outputs') }}</p>
+                                        <flux:text class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                                            {{ __('Create draft, final, briefing, or summary outputs and keep the linked publication document current.') }}
+                                        </flux:text>
+                                    </div>
+                                    <span class="rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                                        {{ trans_choice(':count report|:count reports', $review->reports->count(), ['count' => $review->reports->count()]) }}
+                                    </span>
+                                </div>
+
+                                <div class="flex items-start justify-between gap-3 rounded-xl border border-zinc-200 px-4 py-3 dark:border-zinc-800">
+                                    <div>
+                                        <p class="text-sm font-medium text-zinc-900 dark:text-white">{{ __('3. Publication status') }}</p>
+                                        <flux:text class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                                            {{ __('Published status and publication dates should be explicit so response obligations are visible.') }}
+                                        </flux:text>
+                                    </div>
+                                    <span class="rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                                        {{ trans_choice(':count published|:count published', $publishedReportCount, ['count' => $publishedReportCount]) }}
+                                    </span>
+                                </div>
+
+                                <div class="flex items-start justify-between gap-3 rounded-xl border border-zinc-200 px-4 py-3 dark:border-zinc-800">
+                                    <div>
+                                        <p class="text-sm font-medium text-zinc-900 dark:text-white">{{ __('4. Government follow-up') }}</p>
+                                        <flux:text class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                                            {{ __('Requests, received replies, and overdue follow-up stay attached to the final report they address.') }}
+                                        </flux:text>
+                                    </div>
+                                    <span class="rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                                        {{ $awaitingResponseReports->isNotEmpty() ? __('Action needed') : __('Tracked') }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </flux:card>
 
                 <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
@@ -1207,7 +1982,14 @@
                             </div>
 
                             <flux:modal.trigger name="add-report">
-                                <flux:button variant="primary" size="sm" icon="plus">{{ __('Add report') }}</flux:button>
+                                <flux:button
+                                    variant="primary"
+                                    size="sm"
+                                    icon="plus"
+                                    wire:click='prepareReportCreate(@js(\App\Domain\Reporting\Enums\ReportType::DraftReport->value), @js(\App\Domain\Reporting\Enums\ReportStatus::Draft->value))'
+                                >
+                                    {{ __('Add report') }}
+                                </flux:button>
                             </flux:modal.trigger>
                         </div>
 
@@ -1217,7 +1999,7 @@
                                     {{ __('No report records created yet.') }}
                                 </flux:text>
                                 <flux:text class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-                                    {{ __('Start by creating the committee’s draft or final report record, then link the publication document when it is ready.') }}
+                                    {{ __('Start by creating a draft or final report record, then link the publication document when it is ready.') }}
                                 </flux:text>
                             </div>
                         @else
@@ -1226,6 +2008,11 @@
                                     @php
                                         $responseIndicator = $this->reportResponseIndicator($report);
                                         $latestResponse = $this->latestGovernmentResponseForReport($report);
+                                        $statusClasses = match ($report->status) {
+                                            \App\Domain\Reporting\Enums\ReportStatus::Published => 'border-emerald-200/80 bg-emerald-50/80 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-300',
+                                            \App\Domain\Reporting\Enums\ReportStatus::Archived => 'border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300',
+                                            \App\Domain\Reporting\Enums\ReportStatus::Draft => 'border-amber-200/80 bg-amber-50/80 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300',
+                                        };
                                     @endphp
 
                                     <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
@@ -1234,21 +2021,29 @@
                                                 <div class="flex flex-wrap items-center gap-2">
                                                     <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $report->title }}</p>
                                                     <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($report->report_type->value) }}</flux:badge>
+                                                    <span class="inline-flex items-center justify-center rounded-md border px-2.5 py-1 text-[11px] font-medium leading-none {{ $statusClasses }}">
+                                                        {{ \Illuminate\Support\Str::headline($report->status->value) }}
+                                                    </span>
                                                 </div>
 
                                                 <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-400 dark:text-zinc-500">
-                                                    <span>{{ \Illuminate\Support\Str::headline($report->status->value) }}</span>
                                                     <span>{{ $report->published_at?->toFormattedDateString() ?? __('Not published') }}</span>
-                                                    @if ($report->document)
-                                                        <span>{{ $report->document->title }}</span>
-                                                    @endif
+                                                    <span>{{ $report->document?->title ?? __('No linked document') }}</span>
                                                 </div>
                                             </div>
 
-                                            <div class="flex shrink-0 items-center gap-2">
+                                            <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
                                                 <span class="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md border px-2.5 py-1 text-center text-[11px] font-medium leading-none {{ $responseIndicator['classes'] }}">
                                                     {{ $responseIndicator['label'] }}
                                                 </span>
+
+                                                @if ($report->report_type === \App\Domain\Reporting\Enums\ReportType::FinalReport && $report->status === \App\Domain\Reporting\Enums\ReportStatus::Published)
+                                                    <flux:modal.trigger name="add-government-response">
+                                                        <flux:button variant="ghost" size="sm" icon="chat-bubble-left-right" wire:click="prepareGovernmentResponseCreate({{ $report->id }})">
+                                                            {{ $latestResponse ? __('Add follow-up') : __('Track response') }}
+                                                        </flux:button>
+                                                    </flux:modal.trigger>
+                                                @endif
 
                                                 <flux:modal.trigger name="edit-report">
                                                     <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingReport({{ $report->id }})">
@@ -1267,6 +2062,21 @@
                                                         {{ __('Delete') }}
                                                     </flux:button>
                                                 </flux:modal.trigger>
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                                            <div class="rounded-lg border border-zinc-100 bg-zinc-50/70 px-3 py-2 dark:border-zinc-800/60 dark:bg-zinc-900/60">
+                                                <flux:text class="text-xs text-zinc-400 dark:text-zinc-500">{{ __('Publication') }}</flux:text>
+                                                <p class="mt-1 text-sm text-zinc-800 dark:text-zinc-200">{{ $report->published_at?->toFormattedDateString() ?? __('Not published') }}</p>
+                                            </div>
+                                            <div class="rounded-lg border border-zinc-100 bg-zinc-50/70 px-3 py-2 dark:border-zinc-800/60 dark:bg-zinc-900/60">
+                                                <flux:text class="text-xs text-zinc-400 dark:text-zinc-500">{{ __('Linked document') }}</flux:text>
+                                                <p class="mt-1 text-sm text-zinc-800 dark:text-zinc-200">{{ $report->document?->title ?? __('No document linked') }}</p>
+                                            </div>
+                                            <div class="rounded-lg border border-zinc-100 bg-zinc-50/70 px-3 py-2 dark:border-zinc-800/60 dark:bg-zinc-900/60">
+                                                <flux:text class="text-xs text-zinc-400 dark:text-zinc-500">{{ __('Response tracking') }}</flux:text>
+                                                <p class="mt-1 text-sm text-zinc-800 dark:text-zinc-200">{{ $responseIndicator['label'] }}</p>
                                             </div>
                                         </div>
 
@@ -1291,6 +2101,23 @@
                                                     {{ $latestResponse->summary }}
                                                 </flux:text>
                                             @endif
+                                        @elseif ($report->report_type === \App\Domain\Reporting\Enums\ReportType::FinalReport && $report->status === \App\Domain\Reporting\Enums\ReportStatus::Published)
+                                            <div class="mt-4 rounded-xl border border-dashed border-amber-200/80 bg-amber-50/70 px-4 py-3 dark:border-amber-900/60 dark:bg-amber-950/20">
+                                                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                                    <div>
+                                                        <p class="text-sm font-medium text-amber-900 dark:text-amber-100">{{ __('Published final report awaiting response tracking') }}</p>
+                                                        <flux:text class="mt-1 text-sm text-amber-800/90 dark:text-amber-200/90">
+                                                            {{ __('Record whether government has been asked to respond, whether a reply arrived, or whether follow-up is overdue.') }}
+                                                        </flux:text>
+                                                    </div>
+
+                                                    <flux:modal.trigger name="add-government-response">
+                                                        <flux:button variant="primary" size="sm" icon="chat-bubble-left-right" wire:click="prepareGovernmentResponseCreate({{ $report->id }})">
+                                                            {{ __('Track response') }}
+                                                        </flux:button>
+                                                    </flux:modal.trigger>
+                                                </div>
+                                            </div>
                                         @endif
                                     </div>
                                 @endforeach
@@ -1307,10 +2134,44 @@
                                 </flux:text>
                             </div>
 
-                            <flux:modal.trigger name="add-government-response">
-                                <flux:button variant="primary" size="sm" icon="plus">{{ __('Add response') }}</flux:button>
-                            </flux:modal.trigger>
+                            @if ($review->reports->isNotEmpty())
+                                <flux:modal.trigger name="add-government-response">
+                                    <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareGovernmentResponseCreate">
+                                        {{ __('Add response') }}
+                                    </flux:button>
+                                </flux:modal.trigger>
+                            @endif
                         </div>
+
+                        @if ($awaitingResponseReports->isNotEmpty())
+                            <div class="space-y-3 rounded-xl border border-amber-200/80 bg-amber-50/60 p-4 dark:border-amber-900/60 dark:bg-amber-950/20">
+                                <div class="space-y-1">
+                                    <p class="text-sm font-medium text-amber-900 dark:text-amber-100">{{ __('Awaiting response on published final reports') }}</p>
+                                    <flux:text class="text-sm text-amber-800/90 dark:text-amber-200/90">
+                                        {{ __('These final reports have been published but do not yet have a response request, response received, or overdue record attached.') }}
+                                    </flux:text>
+                                </div>
+
+                                <div class="space-y-2">
+                                    @foreach ($awaitingResponseReports as $awaitingReport)
+                                        <div class="flex flex-col gap-3 rounded-xl border border-amber-200/80 bg-white/80 px-4 py-3 dark:border-amber-900/40 dark:bg-zinc-950/40 sm:flex-row sm:items-center sm:justify-between">
+                                            <div class="min-w-0">
+                                                <p class="text-sm font-medium text-zinc-900 dark:text-white">{{ $awaitingReport->title }}</p>
+                                                <flux:text class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                                                    {{ __('Published :date', ['date' => $awaitingReport->published_at?->toFormattedDateString() ?? __('date not set')]) }}
+                                                </flux:text>
+                                            </div>
+
+                                            <flux:modal.trigger name="add-government-response">
+                                                <flux:button variant="primary" size="sm" icon="chat-bubble-left-right" wire:click="prepareGovernmentResponseCreate({{ $awaitingReport->id }})">
+                                                    {{ __('Track response') }}
+                                                </flux:button>
+                                            </flux:modal.trigger>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
 
                         @if ($review->governmentResponses->isEmpty())
                             <div class="rounded-xl border border-dashed border-zinc-200 p-4 dark:border-zinc-800">
@@ -1370,7 +2231,25 @@
                 <form wire:submit="storeReport" class="space-y-6">
                     <div>
                         <flux:heading size="lg">{{ __('Add report') }}</flux:heading>
-                        <flux:text class="mt-1">{{ __('Create a report record and optionally link it to a document.') }}</flux:text>
+                        <flux:text class="mt-1">{{ __('Create a report record, connect it to the linked publication file when available, and keep its status explicit.') }}</flux:text>
+                    </div>
+
+                    <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+                        <flux:text class="text-xs font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500">{{ __('Drafting context') }}</flux:text>
+                        <flux:text class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                            {{ __('This review currently has :findings findings and :recommendations recommendations that should inform report drafting.', [
+                                'findings' => $review->findings->count(),
+                                'recommendations' => $review->recommendations->count(),
+                            ]) }}
+                        </flux:text>
+
+                        @if ($draftRecommendations->isNotEmpty())
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                @foreach ($draftRecommendations as $recommendation)
+                                    <flux:badge size="sm">{{ $recommendation->title }}</flux:badge>
+                                @endforeach
+                            </div>
+                        @endif
                     </div>
 
                     <flux:input wire:model="reportTitle" :invalid="$errors->has('reportTitle')" :label="__('Title')" />
@@ -1390,12 +2269,29 @@
 
                     <div class="grid gap-4 sm:grid-cols-2">
                         <flux:select wire:model="reportDocumentId" :invalid="$errors->has('reportDocumentId')" :label="__('Linked document')" :placeholder="__('None')">
-                            @foreach ($review->documents as $documentOption)
+                            @foreach ($preferredReportDocuments as $documentOption)
+                                <flux:select.option :value="$documentOption->id">{{ $documentOption->title }}</flux:select.option>
+                            @endforeach
+                            @foreach ($otherReportDocuments as $documentOption)
                                 <flux:select.option :value="$documentOption->id">{{ $documentOption->title }}</flux:select.option>
                             @endforeach
                         </flux:select>
                         <flux:input wire:model="reportPublishedAt" :invalid="$errors->has('reportPublishedAt')" :label="__('Published at')" type="date" />
                     </div>
+
+                    @if ($selectedReportDocument)
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/60">
+                            <flux:text class="text-xs font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500">{{ __('Selected document') }}</flux:text>
+                            <div class="mt-2 flex flex-wrap items-center gap-2">
+                                <span class="text-sm font-medium text-zinc-900 dark:text-white">{{ $selectedReportDocument->title }}</span>
+                                <flux:badge size="sm">{{ $this->documentTypeLabel($selectedReportDocument->document_type) }}</flux:badge>
+                            </div>
+                        </div>
+                    @endif
+
+                    <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                        {{ __('If the report is marked published and the date is blank, today is used automatically.') }}
+                    </flux:text>
 
                     <div class="flex justify-end">
                         <flux:button variant="primary" type="submit">{{ __('Add') }}</flux:button>
@@ -1407,7 +2303,14 @@
                 <form wire:submit="updateReport" class="space-y-6">
                     <div>
                         <flux:heading size="lg">{{ __('Edit report') }}</flux:heading>
-                        <flux:text class="mt-1">{{ __('Keep the report record aligned with its publication status and linked document.') }}</flux:text>
+                        <flux:text class="mt-1">{{ __('Keep the report record aligned with its publication status, source document, and downstream response tracking.') }}</flux:text>
+                    </div>
+
+                    <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+                        <flux:text class="text-xs font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500">{{ __('Drafting context') }}</flux:text>
+                        <flux:text class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                            {{ __('Use this record as the source of truth for whether the output is still drafting, published, or archived.') }}
+                        </flux:text>
                     </div>
 
                     <flux:input wire:model="reportTitle" :invalid="$errors->has('reportTitle')" :label="__('Title')" />
@@ -1427,12 +2330,25 @@
 
                     <div class="grid gap-4 sm:grid-cols-2">
                         <flux:select wire:model="reportDocumentId" :invalid="$errors->has('reportDocumentId')" :label="__('Linked document')" :placeholder="__('None')">
-                            @foreach ($review->documents as $documentOption)
+                            @foreach ($preferredReportDocuments as $documentOption)
+                                <flux:select.option :value="$documentOption->id">{{ $documentOption->title }}</flux:select.option>
+                            @endforeach
+                            @foreach ($otherReportDocuments as $documentOption)
                                 <flux:select.option :value="$documentOption->id">{{ $documentOption->title }}</flux:select.option>
                             @endforeach
                         </flux:select>
                         <flux:input wire:model="reportPublishedAt" :invalid="$errors->has('reportPublishedAt')" :label="__('Published at')" type="date" />
                     </div>
+
+                    @if ($selectedReportDocument)
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/60">
+                            <flux:text class="text-xs font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500">{{ __('Selected document') }}</flux:text>
+                            <div class="mt-2 flex flex-wrap items-center gap-2">
+                                <span class="text-sm font-medium text-zinc-900 dark:text-white">{{ $selectedReportDocument->title }}</span>
+                                <flux:badge size="sm">{{ $this->documentTypeLabel($selectedReportDocument->document_type) }}</flux:badge>
+                            </div>
+                        </div>
+                    @endif
 
                     <div class="flex justify-end">
                         <flux:button variant="primary" type="submit">{{ __('Save changes') }}</flux:button>
@@ -1441,40 +2357,100 @@
             </flux:modal>
 
             <flux:modal name="add-government-response" class="md:w-[34rem]">
-                <form wire:submit="storeGovernmentResponse" class="space-y-6">
-                    <div>
-                        <flux:heading size="lg">{{ __('Add government response') }}</flux:heading>
-                        <flux:text class="mt-1">{{ __('Record the response status for a report and capture the document or summary that came back from government.') }}</flux:text>
+                @if ($review->reports->isEmpty())
+                    <div class="space-y-4">
+                        <div>
+                            <flux:heading size="lg">{{ __('Add government response') }}</flux:heading>
+                            <flux:text class="mt-1">{{ __('Create a report record first so response tracking can stay attached to the review lifecycle.') }}</flux:text>
+                        </div>
+
+                        <div class="rounded-xl border border-dashed border-zinc-200 p-4 dark:border-zinc-800">
+                            <p class="text-sm font-medium text-zinc-900 dark:text-white">{{ __('No reports available yet') }}</p>
+                            <flux:text class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                                {{ __('Once at least one report is recorded, you can log response requests, received replies, and overdue follow-up here.') }}
+                            </flux:text>
+                        </div>
                     </div>
+                @else
+                    <form wire:submit="storeGovernmentResponse" class="space-y-6">
+                        <div>
+                            <flux:heading size="lg">{{ __('Add government response') }}</flux:heading>
+                            <flux:text class="mt-1">{{ __('Record the response status for a report and capture the document or summary that came back from government.') }}</flux:text>
+                        </div>
 
-                    <flux:select wire:model="governmentResponseReportId" :invalid="$errors->has('governmentResponseReportId')" :label="__('Report')" :placeholder="__('Select report')">
-                        @foreach ($review->reports as $reportOption)
-                            <flux:select.option :value="$reportOption->id">{{ $reportOption->title }}</flux:select.option>
-                        @endforeach
-                    </flux:select>
+                        @if ($selectedGovernmentResponseReport)
+                            <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+                                <flux:text class="text-xs font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500">{{ __('Selected report') }}</flux:text>
+                                <div class="mt-2 flex flex-wrap items-center gap-2">
+                                    <span class="text-sm font-medium text-zinc-900 dark:text-white">{{ $selectedGovernmentResponseReport->title }}</span>
+                                    <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($selectedGovernmentResponseReport->report_type->value) }}</flux:badge>
+                                    <flux:badge size="sm" color="zinc">{{ \Illuminate\Support\Str::headline($selectedGovernmentResponseReport->status->value) }}</flux:badge>
+                                </div>
 
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <flux:select wire:model="governmentResponseStatus" :invalid="$errors->has('governmentResponseStatus')" :label="__('Response status')">
-                            @foreach ($governmentResponseStatuses as $status)
-                                <flux:select.option :value="$status->value">{{ \Illuminate\Support\Str::headline($status->value) }}</flux:select.option>
+                                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                    <div>
+                                        <flux:text class="text-xs text-zinc-400 dark:text-zinc-500">{{ __('Published') }}</flux:text>
+                                        <p class="mt-1 text-sm text-zinc-800 dark:text-zinc-200">{{ $selectedGovernmentResponseReport->published_at?->toFormattedDateString() ?? __('Not published') }}</p>
+                                    </div>
+                                    <div>
+                                        <flux:text class="text-xs text-zinc-400 dark:text-zinc-500">{{ __('Latest response') }}</flux:text>
+                                        <p class="mt-1 text-sm text-zinc-800 dark:text-zinc-200">
+                                            {{ $selectedGovernmentResponseLatest ? \Illuminate\Support\Str::headline($selectedGovernmentResponseLatest->response_status->value) : __('No response tracked yet') }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        @endif
+
+                        <flux:select wire:model="governmentResponseReportId" :invalid="$errors->has('governmentResponseReportId')" :label="__('Report')" :placeholder="__('Select report')">
+                            @foreach ($awaitingResponseReports as $reportOption)
+                                <flux:select.option :value="$reportOption->id">{{ $reportOption->title }}</flux:select.option>
+                            @endforeach
+                            @foreach ($review->reports->reject(fn ($reportOption) => $awaitingResponseReports->contains('id', $reportOption->id)) as $reportOption)
+                                <flux:select.option :value="$reportOption->id">{{ $reportOption->title }}</flux:select.option>
                             @endforeach
                         </flux:select>
 
-                        <flux:input wire:model="governmentResponseReceivedAt" :invalid="$errors->has('governmentResponseReceivedAt')" :label="__('Received at')" type="date" />
-                    </div>
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <flux:select wire:model="governmentResponseStatus" :invalid="$errors->has('governmentResponseStatus')" :label="__('Response status')">
+                                @foreach ($governmentResponseStatuses as $status)
+                                    <flux:select.option :value="$status->value">{{ \Illuminate\Support\Str::headline($status->value) }}</flux:select.option>
+                                @endforeach
+                            </flux:select>
 
-                    <flux:select wire:model="governmentResponseDocumentId" :invalid="$errors->has('governmentResponseDocumentId')" :label="__('Linked document')" :placeholder="__('None')">
-                        @foreach ($review->documents as $documentOption)
-                            <flux:select.option :value="$documentOption->id">{{ $documentOption->title }}</flux:select.option>
-                        @endforeach
-                    </flux:select>
+                            <flux:input wire:model="governmentResponseReceivedAt" :invalid="$errors->has('governmentResponseReceivedAt')" :label="__('Received at')" type="date" />
+                        </div>
 
-                    <flux:textarea wire:model="governmentResponseSummary" :invalid="$errors->has('governmentResponseSummary')" :label="__('Summary')" rows="4" />
+                        <flux:select wire:model="governmentResponseDocumentId" :invalid="$errors->has('governmentResponseDocumentId')" :label="__('Linked document')" :placeholder="__('None')">
+                            @foreach ($preferredResponseDocuments as $documentOption)
+                                <flux:select.option :value="$documentOption->id">{{ $documentOption->title }}</flux:select.option>
+                            @endforeach
+                            @foreach ($otherResponseDocuments as $documentOption)
+                                <flux:select.option :value="$documentOption->id">{{ $documentOption->title }}</flux:select.option>
+                            @endforeach
+                        </flux:select>
 
-                    <div class="flex justify-end">
-                        <flux:button variant="primary" type="submit">{{ __('Add response') }}</flux:button>
-                    </div>
-                </form>
+                        @if ($selectedGovernmentResponseDocument)
+                            <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/60">
+                                <flux:text class="text-xs font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500">{{ __('Selected document') }}</flux:text>
+                                <div class="mt-2 flex flex-wrap items-center gap-2">
+                                    <span class="text-sm font-medium text-zinc-900 dark:text-white">{{ $selectedGovernmentResponseDocument->title }}</span>
+                                    <flux:badge size="sm">{{ $this->documentTypeLabel($selectedGovernmentResponseDocument->document_type) }}</flux:badge>
+                                </div>
+                            </div>
+                        @endif
+
+                        <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                            {{ __('Use "requested" when government has been asked to respond, "received" when a reply arrives, and "overdue" when the expected response has slipped.') }}
+                        </flux:text>
+
+                        <flux:textarea wire:model="governmentResponseSummary" :invalid="$errors->has('governmentResponseSummary')" :label="__('Summary')" rows="4" />
+
+                        <div class="flex justify-end">
+                            <flux:button variant="primary" type="submit">{{ __('Add response') }}</flux:button>
+                        </div>
+                    </form>
+                @endif
             </flux:modal>
         </flux:tab.panel>
     </flux:tab.group>

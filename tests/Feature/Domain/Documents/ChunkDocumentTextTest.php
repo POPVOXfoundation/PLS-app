@@ -10,7 +10,7 @@ it('splits raw document text into ordered persisted chunks', function () {
 
     $chunks = app(ChunkDocumentText::class)->chunk($document, implode("\n\n", [
         str_repeat('public finance oversight ', 18),
-        str_repeat('committee evidence implementation reporting ', 16),
+        str_repeat('review group evidence implementation reporting ', 16),
         str_repeat('follow up recommendations scrutiny findings ', 16),
     ]), 120);
 
@@ -30,9 +30,12 @@ it('splits raw document text into ordered persisted chunks', function () {
 it('replaces existing document chunks when text is re-ingested', function () {
     $document = promptNineMakeDocument();
 
-    DocumentChunk::factory()->count(3)->create([
-        'document_id' => $document->id,
-    ]);
+    foreach (range(0, 2) as $chunkIndex) {
+        DocumentChunk::factory()->create([
+            'document_id' => $document->id,
+            'chunk_index' => $chunkIndex,
+        ]);
+    }
 
     $chunks = app(ChunkDocumentText::class)->chunk(
         $document,
@@ -49,9 +52,12 @@ it('replaces existing document chunks when text is re-ingested', function () {
 it('clears stored chunks when blank text is provided', function () {
     $document = promptNineMakeDocument();
 
-    DocumentChunk::factory()->count(2)->create([
-        'document_id' => $document->id,
-    ]);
+    foreach (range(0, 1) as $chunkIndex) {
+        DocumentChunk::factory()->create([
+            'document_id' => $document->id,
+            'chunk_index' => $chunkIndex,
+        ]);
+    }
 
     $chunks = app(ChunkDocumentText::class)->chunk($document, " \n\n\t ");
 
@@ -66,7 +72,7 @@ function promptNineMakeDocument(): Document
 
     return Document::factory()->create([
         'pls_review_id' => $review->id,
-        'document_type' => DocumentType::CommitteeReport,
-        'title' => 'Committee Background Briefing',
+        'document_type' => DocumentType::GroupReport,
+        'title' => 'Review Group Background Briefing',
     ]);
 }

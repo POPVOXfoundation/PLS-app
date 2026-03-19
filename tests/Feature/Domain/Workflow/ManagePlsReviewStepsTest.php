@@ -41,7 +41,7 @@ it('starts a review step and moves the review from draft to active', function ()
 
 it('completes review steps in sequence and marks the review completed on the final step', function () {
     $review = plsReview([
-        'title' => 'Review of committee reporting obligations',
+        'title' => 'Review of reporting obligations',
     ]);
 
     $action = app(CompletePlsReviewStep::class);

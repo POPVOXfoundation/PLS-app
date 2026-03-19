@@ -10,9 +10,7 @@ use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class UpdateReviewDocument
 {
-    public function __construct(private UpdateReviewDocumentValidator $validator)
-    {
-    }
+    public function __construct(private UpdateReviewDocumentValidator $validator) {}
 
     /**
      * @param  array<string, mixed>  $input

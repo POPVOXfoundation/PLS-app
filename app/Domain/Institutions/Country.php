@@ -4,8 +4,8 @@ namespace App\Domain\Institutions;
 
 use App\Domain\Reviews\PlsReview;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Country extends Model
 {
@@ -30,5 +30,10 @@ class Country extends Model
     public function reviews(): HasMany
     {
         return $this->hasMany(PlsReview::class);
+    }
+
+    public function reviewGroups(): HasMany
+    {
+        return $this->hasMany(ReviewGroup::class);
     }
 }

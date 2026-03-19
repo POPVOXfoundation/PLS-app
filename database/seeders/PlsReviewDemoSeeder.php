@@ -14,7 +14,8 @@ use App\Domain\Consultations\Submission;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\DocumentChunk;
 use App\Domain\Documents\Enums\DocumentType;
-use App\Domain\Institutions\Committee;
+use App\Domain\Institutions\Enums\ReviewGroupType;
+use App\Domain\Institutions\ReviewGroup;
 use App\Domain\Legislation\Enums\LegislationType;
 use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
 use App\Domain\Legislation\Legislation;
@@ -32,6 +33,7 @@ use App\Domain\Stakeholders\Enums\ImplementingAgencyType;
 use App\Domain\Stakeholders\Enums\StakeholderType;
 use App\Domain\Stakeholders\ImplementingAgency;
 use App\Domain\Stakeholders\Stakeholder;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 
@@ -39,20 +41,30 @@ class PlsReviewDemoSeeder extends Seeder
 {
     public function run(CreatePlsReview $createPlsReview): void
     {
-        $this->seedBelizeReview($createPlsReview);
-        $this->seedUgandaReview($createPlsReview);
-        $this->seedTennesseeReview($createPlsReview);
+        $owner = User::query()->firstOrCreate(
+            ['email' => 'pls-demo@example.test'],
+            [
+                'name' => 'PLS Demo Reviewer',
+                'password' => 'password',
+            ],
+        );
+
+        $this->seedBelizeReview($createPlsReview, $owner);
+        $this->seedUgandaReview($createPlsReview, $owner);
+        $this->seedTennesseeReview($createPlsReview, $owner);
     }
 
-    private function seedBelizeReview(CreatePlsReview $createPlsReview): void
+    private function seedBelizeReview(CreatePlsReview $createPlsReview, User $owner): void
     {
-        $committee = Committee::query()
-            ->where('slug', 'governance-and-public-service-committee')
+        $reviewGroup = ReviewGroup::query()
+            ->where('type', ReviewGroupType::Committee)
+            ->where('name', 'Governance and Public Service Committee')
             ->firstOrFail();
 
         $review = $this->findOrCreateReview(
             $createPlsReview,
-            $committee,
+            $reviewGroup,
+            $owner,
             'Post-Legislative Review of the Access to Information Act',
             'Assesses whether the access to information framework improved proactive disclosure and response performance across public authorities.',
             '2026-01-15',
@@ -116,10 +128,10 @@ class PlsReviewDemoSeeder extends Seeder
             $review,
             'belize/final-pls-report.pdf',
             'Final PLS Report on the Access to Information Act',
-            DocumentType::FinalReport,
+            DocumentType::GroupReport,
             'application/pdf',
             611004,
-            'Committee report consolidating evidence, findings, and recommendations from the review.',
+            'Final review-group report consolidating evidence, findings, and recommendations from the review.',
         );
 
         $this->upsertChunk($legislationText, 0, 'Defines access rights, timelines, and disclosure duties for public authorities.');
@@ -217,15 +229,17 @@ class PlsReviewDemoSeeder extends Seeder
         );
     }
 
-    private function seedUgandaReview(CreatePlsReview $createPlsReview): void
+    private function seedUgandaReview(CreatePlsReview $createPlsReview, User $owner): void
     {
-        $committee = Committee::query()
-            ->where('slug', 'committee-on-legal-and-parliamentary-affairs')
+        $reviewGroup = ReviewGroup::query()
+            ->where('type', ReviewGroupType::Committee)
+            ->where('name', 'Committee on Legal and Parliamentary Affairs')
             ->firstOrFail();
 
         $review = $this->findOrCreateReview(
             $createPlsReview,
-            $committee,
+            $reviewGroup,
+            $owner,
             'Post-Legislative Scrutiny of the Public Finance Management Act',
             'Reviews fiscal transparency, agency reporting discipline, and follow-through on delegated regulations under the finance management framework.',
             '2026-02-03',
@@ -282,7 +296,7 @@ class PlsReviewDemoSeeder extends Seeder
             DocumentType::HearingTranscript,
             'text/plain',
             45320,
-            'Transcript from the committee hearing with the Ministry of Finance and oversight actors.',
+            'Transcript from the hearing with the Ministry of Finance and oversight actors.',
         );
 
         $briefingNote = $this->upsertDocument(
@@ -331,7 +345,7 @@ class PlsReviewDemoSeeder extends Seeder
         $this->upsertEvidenceItem(
             $review,
             $hearingTranscript,
-            'Committee hearing evidence',
+            'Hearing evidence',
             EvidenceType::Testimony,
             'Recorded evidence from ministry officials, auditors, and civil society witnesses.',
         );
@@ -341,7 +355,7 @@ class PlsReviewDemoSeeder extends Seeder
             'Delegated regulations were not updated in line with reporting reforms',
             FindingType::AdministrativeIssue,
             'Secondary rules lag behind the operational reforms expected by the Act.',
-            'The committee found that guidance and reporting templates have not been updated consistently to reflect statutory accountability changes.',
+            'The review found that guidance and reporting templates have not been updated consistently to reflect statutory accountability changes.',
         );
 
         $this->upsertRecommendation(
@@ -370,15 +384,17 @@ class PlsReviewDemoSeeder extends Seeder
         );
     }
 
-    private function seedTennesseeReview(CreatePlsReview $createPlsReview): void
+    private function seedTennesseeReview(CreatePlsReview $createPlsReview, User $owner): void
     {
-        $committee = Committee::query()
-            ->where('slug', 'senate-state-and-local-government-committee')
+        $reviewGroup = ReviewGroup::query()
+            ->where('type', ReviewGroupType::Committee)
+            ->where('name', 'Senate State and Local Government Committee')
             ->firstOrFail();
 
         $review = $this->findOrCreateReview(
             $createPlsReview,
-            $committee,
+            $reviewGroup,
+            $owner,
             'Review of the Tennessee Public Records Act Implementation',
             'Examines response times, fee practices, and local implementation consistency under the public records framework.',
             '2026-01-28',
@@ -421,7 +437,7 @@ class PlsReviewDemoSeeder extends Seeder
             DocumentType::PolicyReport,
             'application/pdf',
             168990,
-            'Summary document from the committee workshop with county and municipal clerks.',
+            'Summary document from the workshop with county and municipal clerks.',
         );
 
         $this->upsertConsultation(
@@ -444,13 +460,16 @@ class PlsReviewDemoSeeder extends Seeder
 
     private function findOrCreateReview(
         CreatePlsReview $createPlsReview,
-        Committee $committee,
+        ReviewGroup $reviewGroup,
+        User $owner,
         string $title,
         string $description,
         string $startDate,
     ): PlsReview {
+        $reviewGroup->loadMissing('legislature.jurisdiction.country');
+
         $existingReview = PlsReview::query()
-            ->where('committee_id', $committee->id)
+            ->where('review_group_id', $reviewGroup->id)
             ->where('title', $title)
             ->first();
 
@@ -459,10 +478,12 @@ class PlsReviewDemoSeeder extends Seeder
         }
 
         return $createPlsReview->create(new CreatePlsReviewData(
-            committeeId: $committee->id,
+            legislatureId: $reviewGroup->legislature_id,
+            reviewGroupId: $reviewGroup->id,
             title: $title,
             description: $description,
             startDate: CarbonImmutable::parse($startDate),
+            createdBy: $owner->id,
         ));
     }
 

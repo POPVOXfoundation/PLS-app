@@ -28,27 +28,29 @@ test('dashboard shows portfolio metrics, review activity, and attention reviews'
     $this->actingAs($user);
 
     $firstContext = plsReviewContext([
+        'created_by' => $user->id,
         'title' => 'Review of procurement implementation',
     ], [
-        'committee' => [
+        'review_group' => [
             'name' => 'Public Accounts Committee',
-            'slug' => 'public-accounts-committee',
         ],
     ]);
 
     app(CreatePlsReview::class)->create(new CreatePlsReviewData(
-        committeeId: $firstContext['committee']->id,
+        legislatureId: $firstContext['legislature']->id,
+        reviewGroupId: null,
         title: 'Review of delegated procurement regulations',
         description: 'Examines delegated legislation and oversight follow-up.',
         startDate: \Carbon\CarbonImmutable::parse('2026-03-10'),
+        createdBy: $user->id,
     ));
 
     $thirdContext = plsReviewContext([
+        'created_by' => $user->id,
         'title' => 'Review of access to information implementation',
     ], [
-        'committee' => [
+        'review_group' => [
             'name' => 'Governance and Legal Affairs Committee',
-            'slug' => 'governance-and-legal-affairs-committee',
         ],
     ]);
 
@@ -72,7 +74,7 @@ test('dashboard shows portfolio metrics, review activity, and attention reviews'
         ->assertSee('Reviews')
         ->assertSee('Active')
         ->assertSee('Needs attention')
-        ->assertSee('Committee workload')
+        ->assertSee('Assignment workload')
         ->assertSee('Review of procurement implementation')
         ->assertSee('Review of delegated procurement regulations')
         ->assertSee('Public Accounts Committee')

@@ -3,7 +3,7 @@
         <div class="space-y-2">
             <flux:heading size="xl" level="1">{{ __('Create PLS Review') }}</flux:heading>
             <flux:subheading size="lg" class="max-w-3xl">
-                {{ __('Start a new post-legislative scrutiny inquiry. The selected committee determines the legislature, jurisdiction, country, and seeded 11-step workflow.') }}
+                {{ __('Start a new post-legislative scrutiny inquiry. Choose the legislature first, then optionally link the review to a review group for institutional context.') }}
             </flux:subheading>
         </div>
 
@@ -23,15 +23,31 @@
                 <div class="grid gap-6 md:grid-cols-2">
                     <div class="md:col-span-2">
                         <flux:select
-                            wire:model.live="committee_id"
-                            :invalid="$errors->has('committee_id')"
-                            :label="__('Committee')"
-                            :description="__('The committee drives the institutional hierarchy for this review.')"
-                            :placeholder="__('Select a committee')"
+                            wire:model.live="legislature_id"
+                            :invalid="$errors->has('legislature_id')"
+                            :label="__('Legislature')"
+                            :description="__('The legislature anchors the review’s institutional context.')"
+                            :placeholder="__('Select a legislature')"
                         >
-                            @foreach ($committees as $committee)
-                                <flux:select.option :value="$committee->id">
-                                    {{ $committee->name }} · {{ $committee->legislature->name }}
+                            @foreach ($legislatures as $legislature)
+                                <flux:select.option :value="$legislature->id">
+                                    {{ $legislature->name }} · {{ $legislature->jurisdiction->name }}
+                                </flux:select.option>
+                            @endforeach
+                        </flux:select>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <flux:select
+                            wire:model.live="review_group_id"
+                            :invalid="$errors->has('review_group_id')"
+                            :label="__('Review group')"
+                            :description="__('Optional. Add a review group for organizational context only. Access is managed separately through collaborators.')"
+                            :placeholder="$selectedLegislature ? __('Select a review group') : __('Choose a legislature first')"
+                        >
+                            @foreach ($reviewGroups as $reviewGroup)
+                                <flux:select.option :value="$reviewGroup->id">
+                                    {{ $reviewGroup->name }} · {{ \Illuminate\Support\Str::headline($reviewGroup->type->value) }}
                                 </flux:select.option>
                             @endforeach
                         </flux:select>
@@ -91,34 +107,40 @@
             <flux:card class="space-y-4">
                 <div class="space-y-2">
                     <flux:heading size="lg">{{ __('Institution preview') }}</flux:heading>
-                    <flux:text>{{ __('Derived automatically from the chosen committee.') }}</flux:text>
+                    <flux:text>{{ __('The legislature sets the required institutional context. Review group assignment is optional and does not control access.') }}</flux:text>
                 </div>
 
-                @if ($selectedCommittee)
+                @if ($selectedLegislature)
                     <flux:table>
                         <flux:table.rows>
-                            <flux:table.row>
-                                <flux:table.cell variant="strong">{{ __('Committee') }}</flux:table.cell>
-                                <flux:table.cell>{{ $selectedCommittee->name }}</flux:table.cell>
-                            </flux:table.row>
+                            @if ($selectedReviewGroup)
+                                <flux:table.row>
+                                    <flux:table.cell variant="strong">{{ __('Review group') }}</flux:table.cell>
+                                    <flux:table.cell>{{ $selectedReviewGroup->name }}</flux:table.cell>
+                                </flux:table.row>
+                                <flux:table.row>
+                                    <flux:table.cell variant="strong">{{ __('Type') }}</flux:table.cell>
+                                    <flux:table.cell>{{ \Illuminate\Support\Str::headline($selectedReviewGroup->type->value) }}</flux:table.cell>
+                                </flux:table.row>
+                            @endif
                             <flux:table.row>
                                 <flux:table.cell variant="strong">{{ __('Legislature') }}</flux:table.cell>
-                                <flux:table.cell>{{ $selectedCommittee->legislature->name }}</flux:table.cell>
+                                <flux:table.cell>{{ $selectedLegislature->name }}</flux:table.cell>
                             </flux:table.row>
                             <flux:table.row>
                                 <flux:table.cell variant="strong">{{ __('Jurisdiction') }}</flux:table.cell>
-                                <flux:table.cell>{{ $selectedCommittee->legislature->jurisdiction->name }}</flux:table.cell>
+                                <flux:table.cell>{{ $selectedLegislature->jurisdiction->name }}</flux:table.cell>
                             </flux:table.row>
                             <flux:table.row>
                                 <flux:table.cell variant="strong">{{ __('Country') }}</flux:table.cell>
-                                <flux:table.cell>{{ $selectedCommittee->legislature->jurisdiction->country->name }}</flux:table.cell>
+                                <flux:table.cell>{{ $selectedLegislature->jurisdiction->country->name }}</flux:table.cell>
                             </flux:table.row>
                         </flux:table.rows>
                     </flux:table>
                 @else
                     <flux:callout icon="arrow-left">
                         <flux:callout.text>
-                            {{ __('Choose a committee to preview the legislature, jurisdiction, and country.') }}
+                            {{ __('Choose a legislature to preview the jurisdiction and country, then optionally add a review group for context.') }}
                         </flux:callout.text>
                     </flux:callout>
                 @endif

@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Domain\Reviews\Enums\PlsReviewStatus;
 use App\Domain\Reviews\PlsReview;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Component;
 
@@ -14,7 +15,7 @@ class Dashboard extends Component
     {
         return view('livewire.dashboard', [
             'heroChips' => $this->heroChips(),
-            'committeeSummaries' => $this->committeeSummaries(),
+            'assignmentSummaries' => $this->assignmentSummaries(),
             'attentionReviews' => $this->attentionReviews(),
             'phasePipeline' => $this->phasePipeline(),
             'recentReviews' => $this->recentReviews(),
@@ -25,10 +26,7 @@ class Dashboard extends Component
 
     public function reviewAssignmentLabel(PlsReview $review): string
     {
-        return $review->committee?->name
-            ?? $review->legislature?->name
-            ?? $review->jurisdiction?->name
-            ?? __('Unassigned');
+        return $review->assignmentLabel();
     }
 
     /**
@@ -36,20 +34,22 @@ class Dashboard extends Component
      */
     private function heroChips(): array
     {
+        $reviews = $this->accessibleReviewsQuery();
+
         return [
             [
                 'label' => __('Active reviews'),
-                'value' => (string) PlsReview::query()->where('status', PlsReviewStatus::Active)->count(),
+                'value' => (string) (clone $reviews)->where('status', PlsReviewStatus::Active)->count(),
                 'detail' => __('Currently moving through the workflow'),
             ],
             [
-                'label' => __('Committees engaged'),
-                'value' => (string) PlsReview::query()->distinct('committee_id')->count('committee_id'),
-                'detail' => __('Committees with at least one live review record'),
+                'label' => __('Review groups engaged'),
+                'value' => (string) (clone $reviews)->whereNotNull('review_group_id')->distinct('review_group_id')->count('review_group_id'),
+                'detail' => __('Review groups with at least one live review record'),
             ],
             [
                 'label' => __('Needs attention'),
-                'value' => (string) PlsReview::query()->whereIn('status', [
+                'value' => (string) (clone $reviews)->whereIn('status', [
                     PlsReviewStatus::Draft,
                     PlsReviewStatus::Active,
                 ])->count(),
@@ -62,7 +62,7 @@ class Dashboard extends Component
      * @return array<int, array{
      *     review_id: int,
      *     title: string,
-     *     committee_name: string,
+     *     assignment_name: string,
      *     current_step: string,
      *     phase: string,
      *     reason: string,
@@ -75,9 +75,9 @@ class Dashboard extends Component
      */
     private function attentionReviews(): array
     {
-        return PlsReview::query()
+        return $this->accessibleReviewsQuery()
             ->with([
-                'committee',
+                'reviewGroup',
                 'legislature',
                 'jurisdiction',
                 'steps',
@@ -113,7 +113,7 @@ class Dashboard extends Component
                 return [
                     'review_id' => $review->id,
                     'title' => $review->title,
-                    'committee_name' => $this->reviewAssignmentLabel($review),
+                    'assignment_name' => $this->reviewAssignmentLabel($review),
                     'current_step' => __('Step :number', ['number' => $review->current_step_number]).' · '.$review->currentStepTitle(),
                     'phase' => $phase['label'],
                     'reason' => $reason,
@@ -144,7 +144,7 @@ class Dashboard extends Component
      */
     private function phasePipeline(): array
     {
-        $reviews = PlsReview::query()->get(['id', 'current_step_number', 'status']);
+        $reviews = $this->accessibleReviewsQuery()->get(['id', 'current_step_number', 'status']);
         $portfolioCount = max($reviews->count(), 1);
 
         return collect($this->phaseDefinitions())
@@ -173,7 +173,7 @@ class Dashboard extends Component
 
     /**
      * @return array<int, array{
-     *     committee_name: string,
+     *     assignment_name: string,
      *     legislature_name: string,
      *     reviews_count: int,
      *     active_reviews_count: int,
@@ -183,12 +183,26 @@ class Dashboard extends Component
      *     latest_review_id: ?int
      * }>
      */
-    private function committeeSummaries(): array
+    private function assignmentSummaries(): array
     {
-        return PlsReview::query()
-            ->with(['committee.legislature', 'legislature', 'jurisdiction', 'steps'])
+        return $this->accessibleReviewsQuery()
+            ->with(['reviewGroup.legislature', 'legislature', 'jurisdiction', 'steps'])
             ->get()
-            ->groupBy('committee_id')
+            ->groupBy(function (PlsReview $review): string {
+                if ($review->review_group_id !== null) {
+                    return 'review-group:'.$review->review_group_id;
+                }
+
+                if ($review->legislature_id !== null) {
+                    return 'legislature:'.$review->legislature_id;
+                }
+
+                if ($review->jurisdiction_id !== null) {
+                    return 'jurisdiction:'.$review->jurisdiction_id;
+                }
+
+                return 'unassigned';
+            })
             ->map(function (Collection $reviews): array {
                 /** @var PlsReview $firstReview */
                 $firstReview = $reviews->first();
@@ -196,7 +210,7 @@ class Dashboard extends Component
                 $latestReview = $reviews->sortByDesc('created_at')->first();
 
                 return [
-                    'committee_name' => $this->reviewAssignmentLabel($firstReview),
+                    'assignment_name' => $this->reviewAssignmentLabel($firstReview),
                     'legislature_name' => $firstReview->legislature?->name
                         ?? $firstReview->jurisdiction?->name
                         ?? __('Unassigned'),
@@ -224,9 +238,9 @@ class Dashboard extends Component
      */
     private function recentReviews(): Collection
     {
-        return PlsReview::query()
+        return $this->accessibleReviewsQuery()
             ->with([
-                'committee',
+                'reviewGroup',
                 'legislature',
                 'jurisdiction',
                 'steps',
@@ -234,6 +248,11 @@ class Dashboard extends Component
             ->latest()
             ->limit(5)
             ->get();
+    }
+
+    private function accessibleReviewsQuery(): Builder
+    {
+        return PlsReview::query()->visibleTo(auth()->user());
     }
 
     public function reviewPhaseLabel(PlsReview $review): string

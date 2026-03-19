@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "laravel-boost": {
+      "command": "/Users/bryandease/Library/Application Support/Herd/bin/php",
+      "args": [
+        "/Users/bryandease/Herd/dpp/artisan",
+        "boost:mcp"
+      ],
+      "env": {
+        "APP_ENV": "local"
+      }
+    }
+  }
+}

@@ -2,9 +2,13 @@
 
 namespace App\Models;
 
+use App\Domain\Reviews\PlsReview;
+use App\Domain\Reviews\PlsReviewMembership;
 use App\Models\Enums\UserRole;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
@@ -57,7 +61,7 @@ class User extends Authenticatable
     {
         return in_array($this->role, [
             UserRole::Admin,
-            UserRole::CommitteeStaff,
+            UserRole::ReviewGroupStaff,
             UserRole::Reviewer,
         ], true);
     }
@@ -65,6 +69,23 @@ class User extends Authenticatable
     public function canViewPlsReviews(): bool
     {
         return in_array($this->role, UserRole::cases(), true);
+    }
+
+    public function ownedPlsReviews(): HasMany
+    {
+        return $this->hasMany(PlsReview::class, 'created_by');
+    }
+
+    public function plsReviewMemberships(): HasMany
+    {
+        return $this->hasMany(PlsReviewMembership::class);
+    }
+
+    public function accessiblePlsReviews(): BelongsToMany
+    {
+        return $this->belongsToMany(PlsReview::class, 'pls_review_memberships')
+            ->withPivot(['role', 'invited_by'])
+            ->withTimestamps();
     }
 
     /**

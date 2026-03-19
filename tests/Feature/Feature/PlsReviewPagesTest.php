@@ -9,6 +9,7 @@ use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Legislation\Enums\LegislationType;
 use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
 use App\Domain\Legislation\Legislation;
+use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Domain\Reviews\PlsReview;
 use App\Livewire\Pls\Reviews\Create as CreateReviewPage;
 use App\Livewire\Pls\Reviews\Show as ShowReviewPage;
@@ -28,14 +29,14 @@ test('reviews index page is displayed', function () {
         ->assertOk()
         ->assertSee('PLS Reviews')
         ->assertSee($review->title)
-        ->assertSee($review->committee->name);
+        ->assertSee($review->assignmentLabel());
 });
 
-test('review can be created from the create page', function () {
-    $committee = plsHierarchy()['committee'];
+test('review can be created from the create page without a review group', function () {
+    ['legislature' => $legislature] = plsHierarchy();
 
     $response = Livewire::test(CreateReviewPage::class)
-        ->set('committee_id', (string) $committee->id)
+        ->set('legislature_id', (string) $legislature->id)
         ->set('title', 'Post-Legislative Review of the Public Procurement Act')
         ->set('description', 'Evaluates implementation delays, supplier access, and compliance monitoring.')
         ->set('start_date', '2026-03-10')
@@ -46,23 +47,45 @@ test('review can be created from the create page', function () {
         ->where('title', 'Post-Legislative Review of the Public Procurement Act')
         ->firstOrFail();
 
-    expect($review->committee_id)->toBe($committee->id);
-    expect($review->legislature_id)->toBe($committee->legislature_id);
-    expect($review->jurisdiction_id)->toBe($committee->legislature->jurisdiction_id);
-    expect($review->country_id)->toBe($committee->legislature->jurisdiction->country_id);
+    expect($review->review_group_id)->toBeNull();
+    expect($review->created_by)->toBe(auth()->id());
+    expect($review->legislature_id)->toBe($legislature->id);
+    expect($review->jurisdiction_id)->toBe($legislature->jurisdiction_id);
+    expect($review->country_id)->toBe($legislature->jurisdiction->country_id);
     expect($review->steps()->count())->toBe(11);
+    expect($review->memberships()->where('user_id', auth()->id())->firstOrFail()->role)->toBe(PlsReviewMembershipRole::Owner);
     $response->assertRedirect(route('pls.reviews.show', ['review' => $review->id]));
+});
+
+test('review can be created from the create page with a review group', function () {
+    ['legislature' => $legislature, 'reviewGroup' => $reviewGroup] = plsHierarchy();
+
+    Livewire::test(CreateReviewPage::class)
+        ->set('legislature_id', (string) $legislature->id)
+        ->set('review_group_id', (string) $reviewGroup->id)
+        ->set('title', 'Review group scoped review')
+        ->set('description', 'Evaluates implementation under a designated review group.')
+        ->call('save')
+        ->assertHasNoErrors();
+
+    $review = PlsReview::query()
+        ->where('title', 'Review group scoped review')
+        ->firstOrFail();
+
+    expect($review->review_group_id)->toBe($reviewGroup->id)
+        ->and($review->created_by)->toBe(auth()->id())
+        ->and($review->memberships()->where('user_id', auth()->id())->firstOrFail()->role)->toBe(PlsReviewMembershipRole::Owner);
 });
 
 test('review create page validates required fields', function () {
     $component = Livewire::test(CreateReviewPage::class)
         ->call('save')
         ->assertHasErrors([
-            'committee_id' => ['required'],
+            'legislature_id' => ['required'],
             'title' => ['required'],
         ]);
 
-    expect(substr_count($component->html(), 'Choose the committee responsible for this review.'))->toBe(1);
+    expect(substr_count($component->html(), 'Choose the legislature for this review.'))->toBe(1);
     expect(substr_count($component->html(), 'Enter the public-facing review title.'))->toBe(1);
 });
 
@@ -111,6 +134,7 @@ test('review show page renders workflow details and supports step switching', fu
     $response
         ->assertOk()
         ->assertSee($review->title)
+        ->assertSee('Collaborators')
         ->assertSee($legislation->title)
         ->assertSee($document->title)
         ->assertSee($finding->title);

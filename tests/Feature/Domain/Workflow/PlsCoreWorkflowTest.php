@@ -30,7 +30,7 @@ it('creates a review with seeded steps in the official order and initializes cur
             'name' => 'Parliament of Uganda',
             'legislature_type' => \App\Domain\Institutions\Enums\LegislatureType::Parliament,
         ],
-        'committee' => [
+        'review_group' => [
             'name' => 'Committee on Legal and Parliamentary Affairs',
         ],
     ]);
@@ -52,7 +52,7 @@ it('creates a review with seeded steps in the official order and initializes cur
     ]);
 });
 
-it('assigns the review to its committee, legislature, jurisdiction, and country hierarchy', function () {
+it('assigns the review to its review group, legislature, jurisdiction, country, and owner hierarchy', function () {
     $context = plsReviewContext([
         'title' => 'Review of delegated legislation oversight',
     ], [
@@ -65,14 +65,15 @@ it('assigns the review to its committee, legislature, jurisdiction, and country 
             'name' => 'Parliament of Uganda',
             'legislature_type' => \App\Domain\Institutions\Enums\LegislatureType::Parliament,
         ],
-        'committee' => [
+        'review_group' => [
             'name' => 'Committee on Legal and Parliamentary Affairs',
         ],
     ]);
 
     $review = $context['review'];
 
-    expect($review->committee->is($context['committee']))->toBeTrue()
+    expect($review->reviewGroup->is($context['reviewGroup']))->toBeTrue()
+        ->and($review->owner->is($context['owner']))->toBeTrue()
         ->and($review->legislature->is($context['legislature']))->toBeTrue()
         ->and($review->jurisdiction->is($context['jurisdiction']))->toBeTrue()
         ->and($review->country->is($context['country']))->toBeTrue();
@@ -91,7 +92,7 @@ it('can link legislation and documents to a review', function () {
             'name' => 'Parliament of Uganda',
             'legislature_type' => \App\Domain\Institutions\Enums\LegislatureType::Parliament,
         ],
-        'committee' => [
+        'review_group' => [
             'name' => 'Committee on Legal and Parliamentary Affairs',
         ],
     ]);
@@ -143,7 +144,7 @@ it('can associate findings to a review and recommendations to findings', functio
             'name' => 'Parliament of Uganda',
             'legislature_type' => \App\Domain\Institutions\Enums\LegislatureType::Parliament,
         ],
-        'committee' => [
+        'review_group' => [
             'name' => 'Committee on Legal and Parliamentary Affairs',
         ],
     ]);
@@ -195,7 +196,7 @@ it('can associate reports to a review', function () {
             'name' => 'Parliament of Uganda',
             'legislature_type' => \App\Domain\Institutions\Enums\LegislatureType::Parliament,
         ],
-        'committee' => [
+        'review_group' => [
             'name' => 'Committee on Legal and Parliamentary Affairs',
         ],
     ]);

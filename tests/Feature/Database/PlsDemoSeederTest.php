@@ -9,7 +9,7 @@ it('seeds a realistic pls demo dataset', function () {
     expect(\App\Domain\Institutions\Country::query()->count())->toBeGreaterThanOrEqual(3)
         ->and(\App\Domain\Institutions\Jurisdiction::query()->count())->toBeGreaterThanOrEqual(4)
         ->and(\App\Domain\Institutions\Legislature::query()->count())->toBeGreaterThanOrEqual(4)
-        ->and(\App\Domain\Institutions\Committee::query()->count())->toBeGreaterThanOrEqual(6)
+        ->and(\App\Domain\Institutions\ReviewGroup::query()->count())->toBeGreaterThanOrEqual(6)
         ->and(PlsReview::query()->count())->toBeGreaterThanOrEqual(3)
         ->and(\App\Domain\Legislation\Legislation::query()->count())->toBeGreaterThanOrEqual(3)
         ->and(\App\Domain\Analysis\Finding::query()->count())->toBeGreaterThanOrEqual(2)

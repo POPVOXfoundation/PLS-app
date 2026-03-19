@@ -1,5 +1,7 @@
 <?php
 
+use App\Domain\Analysis\Enums\FindingType;
+use App\Domain\Analysis\Enums\RecommendationType;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Legislation\Enums\LegislationType;
@@ -12,6 +14,7 @@ use App\Domain\Reporting\Report;
 use App\Livewire\Pls\Reviews\Show as ShowReviewPage;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
@@ -77,21 +80,21 @@ test('document metadata can be added from the review workspace', function () {
     ]);
 
     Livewire::test(ShowReviewPage::class, ['review' => $review])
-        ->set('documentTitle', 'Committee Briefing Pack')
-        ->set('documentType', DocumentType::CommitteeReport->value)
-        ->set('documentStoragePath', 'documents/committee-briefing-pack.pdf')
+        ->set('documentTitle', 'Review Group Briefing Pack')
+        ->set('documentType', DocumentType::GroupReport->value)
+        ->set('documentStoragePath', 'documents/review-group-briefing-pack.pdf')
         ->set('documentMimeType', 'application/pdf')
         ->set('documentFileSize', '120000')
         ->set('documentSummary', 'Working pack covering delegated powers, reporting delays, and evidence priorities.')
         ->call('storeDocument')
         ->assertHasNoErrors()
-        ->assertSee('Committee Briefing Pack');
+        ->assertSee('Review Group Briefing Pack');
 
     $this->assertDatabaseHas('documents', [
         'pls_review_id' => $review->id,
-        'title' => 'Committee Briefing Pack',
-        'document_type' => DocumentType::CommitteeReport->value,
-        'storage_path' => 'documents/committee-briefing-pack.pdf',
+        'title' => 'Review Group Briefing Pack',
+        'document_type' => DocumentType::GroupReport->value,
+        'storage_path' => 'documents/review-group-briefing-pack.pdf',
     ]);
 });
 
@@ -106,7 +109,7 @@ test('review documents can be uploaded, edited, and deleted from the review work
 
     $component = Livewire::test(ShowReviewPage::class, ['review' => $review])
         ->set('documentTitle', 'Implementation brief')
-        ->set('documentType', DocumentType::CommitteeReport->value)
+        ->set('documentType', DocumentType::GroupReport->value)
         ->set('documentUpload', $uploadedFile)
         ->set('documentSummary', 'Initial evidence pack for the review team.')
         ->call('storeDocument')
@@ -175,7 +178,7 @@ test('findings and recommendations can be added from the review workspace', func
     $component
         ->set('recommendationFindingId', $findingId)
         ->set('recommendationTitle', 'Mandate a standard reporting template')
-        ->set('recommendationDescription', 'Require a common quarterly template and committee compliance review.')
+        ->set('recommendationDescription', 'Require a common quarterly template and review-group compliance review.')
         ->call('storeRecommendation')
         ->assertHasNoErrors()
         ->assertSee('Mandate a standard reporting template');
@@ -202,7 +205,7 @@ test('findings and recommendations can be edited and deleted from the review wor
     $recommendation = $review->recommendations()->create([
         'finding_id' => $finding->id,
         'title' => 'Mandate a standard reporting template',
-        'description' => 'Require a common quarterly template and committee compliance review.',
+        'description' => 'Require a common quarterly template and review-group compliance review.',
         'recommendation_type' => \App\Domain\Analysis\Enums\RecommendationType::ImproveImplementation,
     ]);
 
@@ -217,7 +220,7 @@ test('findings and recommendations can be edited and deleted from the review wor
     $component
         ->call('startEditingRecommendation', $recommendation->id)
         ->set('recommendationTitle', 'Adopt a common quarterly reporting template')
-        ->set('recommendationDescription', 'Issue a single template and require committee compliance tracking.')
+        ->set('recommendationDescription', 'Issue a single template and require review-group compliance tracking.')
         ->call('updateRecommendation')
         ->assertHasNoErrors()
         ->assertSee('Adopt a common quarterly reporting template');
@@ -320,9 +323,39 @@ test('reports can be edited and deleted from the review workspace', function () 
     ]);
 });
 
+test('reporting quick actions prefill report and government response forms', function () {
+    Carbon::setTestNow('2026-03-18 10:00:00');
+
+    try {
+        $review = plsReview([
+            'title' => 'Review of publication and executive follow-up',
+        ]);
+
+        $awaitingResponseReport = $review->reports()->create([
+            'title' => 'Final Report on Publication Duties',
+            'report_type' => ReportType::FinalReport,
+            'status' => ReportStatus::Published,
+            'document_id' => null,
+            'published_at' => now()->subDay(),
+        ]);
+
+        Livewire::test(ShowReviewPage::class, ['review' => $review])
+            ->call('prepareReportCreate', ReportType::FinalReport->value, ReportStatus::Published->value)
+            ->assertSet('reportType', ReportType::FinalReport->value)
+            ->assertSet('reportStatus', ReportStatus::Published->value)
+            ->assertSet('reportPublishedAt', '2026-03-18')
+            ->call('prepareGovernmentResponseCreate', null, GovernmentResponseStatus::Received->value)
+            ->assertSet('governmentResponseReportId', (string) $awaitingResponseReport->id)
+            ->assertSet('governmentResponseStatus', GovernmentResponseStatus::Received->value)
+            ->assertSet('governmentResponseReceivedAt', '2026-03-18');
+    } finally {
+        Carbon::setTestNow();
+    }
+});
+
 test('government responses can be recorded from the review workspace', function () {
     $review = plsReview([
-        'title' => 'Review of executive follow-up on committee reports',
+        'title' => 'Review of executive follow-up on group reports',
     ]);
 
     $document = Document::factory()->create([
@@ -358,6 +391,41 @@ test('government responses can be recorded from the review workspace', function 
         'response_status' => GovernmentResponseStatus::Received->value,
         'summary' => 'Cabinet accepted the primary recommendation and requested a six-month implementation update.',
     ]);
+});
+
+test('reporting workspace surfaces analysis inputs and awaiting response work', function () {
+    $review = plsReview([
+        'title' => 'Review of implementation reporting obligations',
+    ]);
+
+    $finding = $review->findings()->create([
+        'title' => 'Agency reporting remains inconsistent',
+        'finding_type' => FindingType::ImplementationGap,
+        'summary' => 'Quarterly implementation reports are incomplete across multiple agencies.',
+        'detail' => null,
+    ]);
+
+    $review->recommendations()->create([
+        'finding_id' => $finding->id,
+        'title' => 'Mandate a standard reporting template',
+        'description' => 'Require a common quarterly template and review-group compliance review.',
+        'recommendation_type' => RecommendationType::ImproveImplementation,
+    ]);
+
+    $review->reports()->create([
+        'title' => 'Final Report on Implementation Reporting',
+        'report_type' => ReportType::FinalReport,
+        'status' => ReportStatus::Published,
+        'document_id' => null,
+        'published_at' => now()->subWeek(),
+    ]);
+
+    Livewire::test(ShowReviewPage::class, ['review' => $review])
+        ->assertSee('Reporting workspace')
+        ->assertSee('Drafting inputs from analysis')
+        ->assertSee('Mandate a standard reporting template')
+        ->assertSee('Awaiting response on published final reports')
+        ->assertSee('Final Report on Implementation Reporting');
 });
 
 test('published final reports without responses are shown as awaiting response', function () {

@@ -26,8 +26,9 @@ class Index extends Component
     private function reviews(): LengthAwarePaginator
     {
         return PlsReview::query()
+            ->visibleTo(auth()->user())
             ->with([
-                'committee:id,legislature_id,name',
+                'reviewGroup:id,legislature_id,jurisdiction_id,country_id,name,type',
                 'legislature:id,jurisdiction_id,name',
                 'jurisdiction:id,country_id,name',
                 'country:id,name',

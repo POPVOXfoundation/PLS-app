@@ -6,14 +6,14 @@ use App\Domain\Analysis\Finding;
 use App\Domain\Analysis\Validation\StoreFindingValidator;
 use App\Domain\Analysis\Validation\StoreRecommendationValidator;
 use App\Domain\Documents\Document;
-use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Documents\Validation\StoreDocumentMetadataValidator;
-use App\Domain\Institutions\Committee;
 use App\Domain\Institutions\Country;
 use App\Domain\Institutions\Enums\JurisdictionType;
 use App\Domain\Institutions\Enums\LegislatureType;
+use App\Domain\Institutions\Enums\ReviewGroupType;
 use App\Domain\Institutions\Jurisdiction;
 use App\Domain\Institutions\Legislature;
+use App\Domain\Institutions\ReviewGroup;
 use App\Domain\Legislation\Enums\LegislationType;
 use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
 use App\Domain\Legislation\Legislation;
@@ -21,6 +21,7 @@ use App\Domain\Legislation\Validation\AttachLegislationToReviewValidator;
 use App\Domain\Reviews\Actions\CreatePlsReview;
 use App\Domain\Reviews\Data\CreatePlsReviewData;
 use App\Domain\Reviews\PlsReview;
+use App\Models\User;
 use Illuminate\Validation\ValidationException;
 
 test('legislation attachment validation prevents duplicate review links', function () {
@@ -116,18 +117,23 @@ function makeValidationReview(): PlsReview
         'legislature_type' => LegislatureType::Assembly,
     ]);
 
-    $committee = Committee::factory()->create([
+    $reviewGroup = ReviewGroup::factory()->create([
+        'country_id' => $country->id,
+        'jurisdiction_id' => $jurisdiction->id,
         'legislature_id' => $legislature->id,
         'name' => 'Governance and Oversight Committee',
-        'slug' => fake()->unique()->slug(),
+        'type' => ReviewGroupType::Committee,
     ]);
+    $owner = User::factory()->reviewer()->create();
 
     return app(CreatePlsReview::class)->create(
         CreatePlsReviewData::from([
-            'committee_id' => $committee->id,
+            'legislature_id' => $legislature->id,
+            'review_group_id' => $reviewGroup->id,
             'title' => fake()->unique()->sentence(6),
             'description' => fake()->paragraph(),
             'start_date' => '2026-03-10',
+            'created_by' => $owner->id,
         ]),
     );
 }

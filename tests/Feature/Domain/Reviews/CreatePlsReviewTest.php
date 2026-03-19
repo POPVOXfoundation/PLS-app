@@ -1,15 +1,18 @@
 <?php
 
-use App\Domain\Institutions\Committee;
+use App\Domain\Institutions\Enums\ReviewGroupType;
+use App\Domain\Institutions\ReviewGroup;
 use App\Domain\Reviews\Actions\CreatePlsReview;
 use App\Domain\Reviews\Data\CreatePlsReviewData;
+use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Domain\Reviews\Enums\PlsReviewStatus;
 use App\Domain\Reviews\Support\PlsReviewWorkflow;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Validation\ValidationException;
 
-it('creates a draft review with the derived institutional hierarchy', function () {
-    ['country' => $country, 'jurisdiction' => $jurisdiction, 'legislature' => $legislature, 'committee' => $committee] = plsHierarchy([
+it('creates a draft review without a review group and uses the creator as the owner', function () {
+    ['country' => $country, 'jurisdiction' => $jurisdiction, 'legislature' => $legislature] = plsHierarchy([
         'country' => [
             'name' => 'Belize',
             'iso2' => 'BZ',
@@ -23,24 +26,23 @@ it('creates a draft review with the derived institutional hierarchy', function (
             'name' => 'National Assembly',
             'slug' => 'national-assembly',
         ],
-        'committee' => [
-            'name' => 'Governance and Oversight Committee',
-            'slug' => 'governance-and-oversight-committee',
-        ],
     ]);
+    $owner = User::factory()->reviewer()->create();
 
     $review = app(CreatePlsReview::class)->create(
         CreatePlsReviewData::from([
-            'committee_id' => $committee->id,
+            'legislature_id' => $legislature->id,
             'title' => 'Review of the Access to Information Act',
             'description' => 'Assess implementation outcomes after enactment.',
             'start_date' => '2026-03-10',
+            'created_by' => $owner->id,
         ]),
     );
 
     expect($review->status)->toBe(PlsReviewStatus::Draft)
         ->and($review->current_step_number)->toBe(1)
-        ->and($review->committee_id)->toBe($committee->id)
+        ->and($review->review_group_id)->toBeNull()
+        ->and($review->created_by)->toBe($owner->id)
         ->and($review->legislature_id)->toBe($legislature->id)
         ->and($review->jurisdiction_id)->toBe($jurisdiction->id)
         ->and($review->country_id)->toBe($country->id)
@@ -49,23 +51,60 @@ it('creates a draft review with the derived institutional hierarchy', function (
 
     $this->assertDatabaseHas('pls_reviews', [
         'id' => $review->id,
-        'committee_id' => $committee->id,
+        'review_group_id' => null,
+        'created_by' => $owner->id,
         'legislature_id' => $legislature->id,
         'jurisdiction_id' => $jurisdiction->id,
         'country_id' => $country->id,
         'status' => PlsReviewStatus::Draft->value,
         'current_step_number' => 1,
     ]);
+
+    $this->assertDatabaseHas('pls_review_memberships', [
+        'pls_review_id' => $review->id,
+        'user_id' => $owner->id,
+        'role' => PlsReviewMembershipRole::Owner->value,
+    ]);
+});
+
+it('creates a draft review with a review group and the derived institutional hierarchy', function () {
+    ['country' => $country, 'jurisdiction' => $jurisdiction, 'legislature' => $legislature] = plsHierarchy();
+    $owner = User::factory()->reviewer()->create();
+    $reviewGroup = ReviewGroup::factory()->create([
+        'country_id' => $country->id,
+        'jurisdiction_id' => $jurisdiction->id,
+        'legislature_id' => $legislature->id,
+        'name' => 'Governance and Oversight Committee',
+        'type' => ReviewGroupType::Committee,
+    ]);
+
+    $review = app(CreatePlsReview::class)->create(new CreatePlsReviewData(
+        legislatureId: $legislature->id,
+        reviewGroupId: $reviewGroup->id,
+        title: 'Review of delegated legislation oversight',
+        description: 'Review-group scoped review',
+        startDate: CarbonImmutable::parse('2026-03-11'),
+        createdBy: $owner->id,
+    ));
+
+    expect($review->review_group_id)->toBe($reviewGroup->id)
+        ->and($review->created_by)->toBe($owner->id)
+        ->and($review->legislature_id)->toBe($legislature->id)
+        ->and($review->jurisdiction_id)->toBe($jurisdiction->id)
+        ->and($review->country_id)->toBe($country->id);
 });
 
 it('seeds the official workflow steps in build plan order', function () {
-    $committee = plsHierarchy()['committee'];
+    ['legislature' => $legislature] = plsHierarchy();
+    $owner = User::factory()->reviewer()->create();
 
     $review = app(CreatePlsReview::class)->create(new CreatePlsReviewData(
-        committeeId: $committee->id,
+        legislatureId: $legislature->id,
+        reviewGroupId: null,
         title: 'Review of delegated legislation oversight',
         description: null,
         startDate: CarbonImmutable::parse('2026-03-11'),
+        createdBy: $owner->id,
     ));
 
     $steps = $review->steps()->get();
@@ -78,19 +117,24 @@ it('seeds the official workflow steps in build plan order', function () {
         ->and($steps->pluck('status')->map(fn ($status) => $status->value)->all())->toBe(array_fill(0, 11, 'pending'));
 });
 
-it('creates unique slugs for reviews with the same title in the same committee', function () {
-    $committee = plsHierarchy()['committee'];
+it('creates unique slugs for reviews with the same title for the same owner', function () {
+    ['legislature' => $legislature] = plsHierarchy();
+    $owner = User::factory()->reviewer()->create();
 
     $action = app(CreatePlsReview::class);
 
     $firstReview = $action->create(new CreatePlsReviewData(
-        committeeId: $committee->id,
+        legislatureId: $legislature->id,
+        reviewGroupId: null,
         title: 'Implementation review',
+        createdBy: $owner->id,
     ));
 
     $secondReview = $action->create(new CreatePlsReviewData(
-        committeeId: $committee->id,
+        legislatureId: $legislature->id,
+        reviewGroupId: null,
         title: 'Implementation review',
+        createdBy: $owner->id,
     ));
 
     expect($firstReview->slug)->toBe('implementation-review')
@@ -98,13 +142,16 @@ it('creates unique slugs for reviews with the same title in the same committee',
 });
 
 it('validates review creation input before persisting', function () {
-    $committee = plsHierarchy()['committee'];
+    ['legislature' => $legislature] = plsHierarchy();
+    $owner = User::factory()->reviewer()->create();
 
     expect(fn () => app(CreatePlsReview::class)->create(
         new CreatePlsReviewData(
-            committeeId: $committee->id,
+            legislatureId: $legislature->id,
+            reviewGroupId: null,
             title: ' ',
             description: str_repeat('x', 5001),
+            createdBy: $owner->id,
         ),
     ))->toThrow(ValidationException::class);
 

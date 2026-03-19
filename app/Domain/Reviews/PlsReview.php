@@ -8,24 +8,27 @@ use App\Domain\Analysis\Recommendation;
 use App\Domain\Consultations\Consultation;
 use App\Domain\Consultations\Submission;
 use App\Domain\Documents\Document;
-use App\Domain\Institutions\Committee;
 use App\Domain\Institutions\Country;
 use App\Domain\Institutions\Jurisdiction;
 use App\Domain\Institutions\Legislature;
+use App\Domain\Institutions\ReviewGroup;
 use App\Domain\Legislation\Legislation;
 use App\Domain\Legislation\LegislationObjective;
 use App\Domain\Legislation\PlsReviewLegislation;
 use App\Domain\Reporting\GovernmentResponse;
 use App\Domain\Reporting\Report;
+use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Domain\Reviews\Enums\PlsReviewStatus;
 use App\Domain\Reviews\Enums\PlsStepStatus;
 use App\Domain\Stakeholders\ImplementingAgency;
 use App\Domain\Stakeholders\Stakeholder;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 class PlsReview extends Model
@@ -37,10 +40,11 @@ class PlsReview extends Model
      * @var list<string>
      */
     protected $fillable = [
-        'committee_id',
+        'review_group_id',
         'legislature_id',
         'jurisdiction_id',
         'country_id',
+        'created_by',
         'title',
         'slug',
         'description',
@@ -50,9 +54,9 @@ class PlsReview extends Model
         'completed_at',
     ];
 
-    public function committee(): BelongsTo
+    public function reviewGroup(): BelongsTo
     {
-        return $this->belongsTo(Committee::class);
+        return $this->belongsTo(ReviewGroup::class);
     }
 
     public function legislature(): BelongsTo
@@ -68,6 +72,23 @@ class PlsReview extends Model
     public function country(): BelongsTo
     {
         return $this->belongsTo(Country::class);
+    }
+
+    public function owner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function memberships(): HasMany
+    {
+        return $this->hasMany(PlsReviewMembership::class);
+    }
+
+    public function members(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'pls_review_memberships')
+            ->withPivot(['role', 'invited_by'])
+            ->withTimestamps();
     }
 
     public function steps(): HasMany
@@ -212,6 +233,87 @@ class PlsReview extends Model
             : (string) $this->status;
 
         return Str::headline($value);
+    }
+
+    public function assignmentLabel(): string
+    {
+        return $this->reviewGroup?->name
+            ?? $this->legislature?->name
+            ?? $this->jurisdiction?->name
+            ?? __('Unassigned');
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function assignmentLocationParts(): array
+    {
+        if ($this->review_group_id !== null) {
+            return array_values(array_filter([
+                $this->legislature?->name,
+                $this->jurisdiction?->name,
+                $this->country?->name,
+            ]));
+        }
+
+        if ($this->legislature_id !== null) {
+            return array_values(array_filter([
+                $this->jurisdiction?->name,
+                $this->country?->name,
+            ]));
+        }
+
+        if ($this->jurisdiction_id !== null) {
+            return array_values(array_filter([
+                $this->country?->name,
+            ]));
+        }
+
+        return [];
+    }
+
+    public function canBeViewedBy(User $user): bool
+    {
+        return $this->created_by === $user->id || $this->membershipFor($user) !== null;
+    }
+
+    public function canBeUpdatedBy(User $user): bool
+    {
+        return $this->canBeViewedBy($user);
+    }
+
+    public function canManageCollaborators(User $user): bool
+    {
+        if ($this->created_by === $user->id) {
+            return true;
+        }
+
+        return $this->membershipFor($user)?->role === PlsReviewMembershipRole::Owner;
+    }
+
+    public function membershipFor(User $user): ?PlsReviewMembership
+    {
+        if ($this->relationLoaded('memberships')) {
+            /** @var ?PlsReviewMembership $membership */
+            $membership = $this->memberships->firstWhere('user_id', $user->id);
+
+            return $membership;
+        }
+
+        return $this->memberships()
+            ->where('user_id', $user->id)
+            ->first();
+    }
+
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        return $query->where(function (Builder $builder) use ($user): void {
+            $builder
+                ->where('created_by', $user->id)
+                ->orWhereHas('memberships', function (Builder $membershipQuery) use ($user): void {
+                    $membershipQuery->where('user_id', $user->id);
+                });
+        });
     }
 
     /**

@@ -8,10 +8,11 @@ use App\Domain\Consultations\Submission;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\DocumentChunk;
 use App\Domain\Documents\Enums\DocumentType;
-use App\Domain\Institutions\Committee;
 use App\Domain\Institutions\Country;
+use App\Domain\Institutions\Enums\ReviewGroupType;
 use App\Domain\Institutions\Jurisdiction;
 use App\Domain\Institutions\Legislature;
+use App\Domain\Institutions\ReviewGroup;
 use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
 use App\Domain\Legislation\Legislation;
 use App\Domain\Legislation\LegislationObjective;
@@ -21,18 +22,20 @@ use App\Domain\Reviews\Actions\CreatePlsReview;
 use App\Domain\Reviews\Data\CreatePlsReviewData;
 use App\Domain\Stakeholders\ImplementingAgency;
 use App\Domain\Stakeholders\Stakeholder;
+use App\Models\User;
 
 it('loads the institutional relationships around a review', function () {
-    [$country, $jurisdiction, $legislature, $committee, $review] = createReviewHierarchy();
+    ['country' => $country, 'jurisdiction' => $jurisdiction, 'legislature' => $legislature, 'reviewGroup' => $reviewGroup, 'owner' => $owner, 'review' => $review] = createReviewHierarchy();
 
     expect($country->jurisdictions()->sole()->is($jurisdiction))->toBeTrue()
         ->and($jurisdiction->country->is($country))->toBeTrue()
         ->and($jurisdiction->legislatures()->sole()->is($legislature))->toBeTrue()
         ->and($legislature->jurisdiction->is($jurisdiction))->toBeTrue()
-        ->and($legislature->committees()->sole()->is($committee))->toBeTrue()
-        ->and($committee->legislature->is($legislature))->toBeTrue()
-        ->and($committee->reviews()->sole()->is($review))->toBeTrue()
-        ->and($review->committee->is($committee))->toBeTrue()
+        ->and($legislature->reviewGroups()->sole()->is($reviewGroup))->toBeTrue()
+        ->and($reviewGroup->legislature->is($legislature))->toBeTrue()
+        ->and($review->reviewGroup->is($reviewGroup))->toBeTrue()
+        ->and($review->owner->is($owner))->toBeTrue()
+        ->and($review->memberships()->sole()->user->is($owner))->toBeTrue()
         ->and($review->legislature->is($legislature))->toBeTrue()
         ->and($review->jurisdiction->is($jurisdiction))->toBeTrue()
         ->and($review->country->is($country))->toBeTrue()
@@ -40,7 +43,7 @@ it('loads the institutional relationships around a review', function () {
 });
 
 it('loads legislation, document, and objective relationships for a review', function () {
-    [, $jurisdiction, , , $review] = createReviewHierarchy();
+    ['jurisdiction' => $jurisdiction, 'review' => $review] = createReviewHierarchy();
 
     $legislation = Legislation::factory()->for($jurisdiction)->create([
         'title' => 'Access to Information Act',
@@ -76,7 +79,7 @@ it('loads legislation, document, and objective relationships for a review', func
 });
 
 it('loads analysis, stakeholder, consultation, and reporting relationships', function () {
-    [, , , , $review] = createReviewHierarchy();
+    ['review' => $review] = createReviewHierarchy();
 
     $document = Document::factory()->create([
         'pls_review_id' => $review->id,
@@ -174,17 +177,30 @@ function createReviewHierarchy(): array
         'slug' => 'parliament-of-uganda',
     ]);
 
-    $committee = Committee::factory()->for($legislature)->create([
+    $reviewGroup = ReviewGroup::factory()->create([
+        'country_id' => $country->id,
+        'jurisdiction_id' => $jurisdiction->id,
+        'legislature_id' => $legislature->id,
         'name' => 'Committee on Legal and Parliamentary Affairs',
-        'slug' => 'committee-on-legal-and-parliamentary-affairs',
+        'type' => ReviewGroupType::Committee,
     ]);
+    $owner = User::factory()->reviewer()->create();
 
     $review = app(CreatePlsReview::class)->create(
         new CreatePlsReviewData(
-            committeeId: $committee->id,
+            legislatureId: $legislature->id,
+            reviewGroupId: $reviewGroup->id,
             title: 'Review of statutory implementation',
+            createdBy: $owner->id,
         ),
     );
 
-    return [$country, $jurisdiction, $legislature, $committee, $review];
+    return [
+        'country' => $country,
+        'jurisdiction' => $jurisdiction,
+        'legislature' => $legislature,
+        'reviewGroup' => $reviewGroup,
+        'owner' => $owner,
+        'review' => $review,
+    ];
 }

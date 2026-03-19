@@ -10,7 +10,6 @@ return new class extends Migration
     {
         Schema::create('pls_reviews', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('committee_id')->constrained()->cascadeOnDelete();
             $table->foreignId('legislature_id')->constrained()->cascadeOnDelete();
             $table->foreignId('jurisdiction_id')->constrained()->cascadeOnDelete();
             $table->foreignId('country_id')->constrained()->cascadeOnDelete();
@@ -23,7 +22,6 @@ return new class extends Migration
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();
 
-            $table->unique(['committee_id', 'slug']);
             $table->index(['status', 'current_step_number']);
             $table->index(['country_id', 'jurisdiction_id']);
         });

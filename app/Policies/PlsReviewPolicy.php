@@ -14,7 +14,7 @@ class PlsReviewPolicy
 
     public function view(User $user, PlsReview $plsReview): bool
     {
-        return $user->canViewPlsReviews();
+        return $user->canViewPlsReviews() && $plsReview->canBeViewedBy($user);
     }
 
     public function create(User $user): bool
@@ -24,11 +24,16 @@ class PlsReviewPolicy
 
     public function update(User $user, PlsReview $plsReview): bool
     {
-        return $user->canManagePlsReviews();
+        return $plsReview->canBeUpdatedBy($user);
+    }
+
+    public function manageCollaborators(User $user, PlsReview $plsReview): bool
+    {
+        return $plsReview->canManageCollaborators($user);
     }
 
     public function delete(User $user, PlsReview $plsReview): bool
     {
-        return $user->canManagePlsReviews();
+        return $plsReview->canManageCollaborators($user);
     }
 }

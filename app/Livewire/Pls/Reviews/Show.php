@@ -28,17 +28,22 @@ use App\Domain\Reporting\Enums\ReportStatus;
 use App\Domain\Reporting\Enums\ReportType;
 use App\Domain\Reporting\GovernmentResponse;
 use App\Domain\Reporting\Report;
+use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Domain\Reviews\PlsReview;
+use App\Domain\Reviews\PlsReviewMembership;
 use App\Domain\Reviews\PlsReviewStep;
 use App\Domain\Stakeholders\Actions\StoreImplementingAgency;
 use App\Domain\Stakeholders\Actions\StoreStakeholder;
+use App\Domain\Stakeholders\Actions\UpdateStakeholder;
 use App\Domain\Stakeholders\Enums\ImplementingAgencyType;
 use App\Domain\Stakeholders\Enums\StakeholderType;
 use App\Domain\Stakeholders\Stakeholder;
+use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
@@ -71,7 +76,7 @@ class Show extends Component
 
     public string $documentTitle = '';
 
-    public string $documentType = DocumentType::CommitteeReport->value;
+    public string $documentType = DocumentType::GroupReport->value;
 
     public string $documentEditingId = '';
 
@@ -106,6 +111,8 @@ class Show extends Component
     public string $submissionSummary = '';
 
     public string $stakeholderTypeFilter = 'all';
+
+    public string $stakeholderEditingId = '';
 
     public string $stakeholderName = '';
 
@@ -163,6 +170,15 @@ class Show extends Component
 
     public string $governmentResponseSummary = '';
 
+    public string $inviteCollaboratorUserId = '';
+
+    public string $inviteCollaboratorRole = PlsReviewMembershipRole::Editor->value;
+
+    /**
+     * @var array<int|string, string>
+     */
+    public array $collaboratorRoles = [];
+
     public function mount(PlsReview $review): void
     {
         $this->authorize('view', $review);
@@ -174,6 +190,7 @@ class Show extends Component
     public function render(): View
     {
         $review = $this->loadReview();
+        $this->syncCollaboratorRoles($review);
         $selectedStep = $review->steps->firstWhere('step_number', $this->selectedStepNumber) ?? $review->steps->first();
 
         if ($selectedStep !== null && $selectedStep->step_number !== $this->selectedStepNumber) {
@@ -193,6 +210,9 @@ class Show extends Component
             'implementingAgencyTypes' => ImplementingAgencyType::cases(),
             'findingTypes' => FindingType::cases(),
             'recommendationTypes' => RecommendationType::cases(),
+            'collaboratorRoleOptions' => PlsReviewMembershipRole::cases(),
+            'availableCollaborators' => $this->availableCollaborators($review),
+            'canManageCollaborators' => auth()->user()?->can('manageCollaborators', $review) ?? false,
             'reportTypes' => ReportType::cases(),
             'reportStatuses' => ReportStatus::cases(),
             'governmentResponseStatuses' => GovernmentResponseStatus::cases(),
@@ -209,6 +229,134 @@ class Show extends Component
         }
 
         $this->selectedStepNumber = $stepNumber;
+    }
+
+    public function clearStakeholderFilter(): void
+    {
+        $this->stakeholderTypeFilter = 'all';
+    }
+
+    public function prepareStakeholderCreate(): void
+    {
+        $this->resetStakeholderForm();
+    }
+
+    public function prepareImplementingAgencyCreate(): void
+    {
+        $this->resetImplementingAgencyForm();
+    }
+
+    public function prepareConsultationCreate(): void
+    {
+        $this->resetConsultationForm();
+    }
+
+    public function prepareSubmissionCreate(?int $stakeholderId = null): void
+    {
+        $this->resetSubmissionForm();
+
+        if (
+            $stakeholderId !== null
+            && $this->review->stakeholders()->whereKey($stakeholderId)->exists()
+        ) {
+            $this->submissionStakeholderId = (string) $stakeholderId;
+        }
+    }
+
+    public function inviteCollaborator(): void
+    {
+        $this->authorize('manageCollaborators', $this->review);
+
+        validator(
+            [
+                'inviteCollaboratorUserId' => $this->inviteCollaboratorUserId,
+                'inviteCollaboratorRole' => $this->inviteCollaboratorRole,
+            ],
+            [
+                'inviteCollaboratorUserId' => [
+                    'required',
+                    'integer',
+                    Rule::exists('users', 'id'),
+                    Rule::unique('pls_review_memberships', 'user_id')
+                        ->where(fn ($query) => $query->where('pls_review_id', $this->review->id)),
+                ],
+                'inviteCollaboratorRole' => [
+                    'required',
+                    Rule::enum(PlsReviewMembershipRole::class),
+                ],
+            ],
+            [
+                'inviteCollaboratorUserId.required' => __('Select a user to invite.'),
+                'inviteCollaboratorUserId.unique' => __('That user is already a collaborator on this review.'),
+            ],
+        )->validate();
+
+        $this->review->memberships()->create([
+            'user_id' => (int) $this->inviteCollaboratorUserId,
+            'role' => $this->inviteCollaboratorRole,
+            'invited_by' => auth()->id(),
+        ]);
+
+        $this->review = $this->loadReview();
+        $this->syncCollaboratorRoles($this->review, true);
+        $this->inviteCollaboratorUserId = '';
+        $this->inviteCollaboratorRole = PlsReviewMembershipRole::Editor->value;
+        $this->resetValidation(['inviteCollaboratorUserId', 'inviteCollaboratorRole']);
+
+        session()->flash('status', __('Collaborator invited to this review.'));
+    }
+
+    public function updateCollaboratorRole(int $membershipId): void
+    {
+        $this->authorize('manageCollaborators', $this->review);
+
+        $membership = $this->review->memberships()
+            ->whereKey($membershipId)
+            ->first();
+
+        if ($membership === null || $membership->user_id === $this->review->created_by) {
+            return;
+        }
+
+        validator(
+            [
+                'role' => $this->collaboratorRoles[$membershipId] ?? null,
+            ],
+            [
+                'role' => ['required', Rule::enum(PlsReviewMembershipRole::class)],
+            ],
+        )->validate();
+
+        $membership->update([
+            'role' => $this->collaboratorRoles[$membershipId],
+        ]);
+
+        $this->review = $this->loadReview();
+        $this->syncCollaboratorRoles($this->review, true);
+
+        session()->flash('status', __('Collaborator role updated.'));
+    }
+
+    public function removeCollaborator(int $membershipId): void
+    {
+        $this->authorize('manageCollaborators', $this->review);
+
+        $membership = $this->review->memberships()
+            ->whereKey($membershipId)
+            ->first();
+
+        if ($membership === null || $membership->user_id === $this->review->created_by) {
+            return;
+        }
+
+        $membership->delete();
+
+        unset($this->collaboratorRoles[$membershipId]);
+
+        $this->review = $this->loadReview();
+        $this->syncCollaboratorRoles($this->review, true);
+
+        session()->flash('status', __('Collaborator removed from this review.'));
     }
 
     public function attachLegislation(AttachLegislationToReview $action): void
@@ -491,6 +639,69 @@ class Show extends Component
         session()->flash('status', __('Submission logged for this review.'));
     }
 
+    public function startEditingStakeholder(int $stakeholderId): void
+    {
+        $this->authorizeReviewMutation();
+
+        $stakeholder = $this->review->stakeholders()
+            ->whereKey($stakeholderId)
+            ->first();
+
+        if ($stakeholder === null) {
+            return;
+        }
+
+        $this->stakeholderEditingId = (string) $stakeholder->id;
+        $this->stakeholderName = $stakeholder->name;
+        $this->stakeholderType = $stakeholder->stakeholder_type->value;
+        $this->stakeholderOrganization = $stakeholder->contact_details['organization'] ?? '';
+        $this->stakeholderEmail = $stakeholder->contact_details['email'] ?? '';
+        $this->stakeholderPhone = $stakeholder->contact_details['phone'] ?? '';
+
+        $this->resetValidation([
+            'stakeholderEditingId',
+            'stakeholderName',
+            'stakeholderType',
+            'stakeholderOrganization',
+            'stakeholderEmail',
+            'stakeholderPhone',
+        ]);
+    }
+
+    public function updateStakeholder(UpdateStakeholder $action): void
+    {
+        $this->authorizeReviewMutation();
+
+        try {
+            $this->review = $action->update([
+                'stakeholder_id' => $this->stakeholderEditingId,
+                'pls_review_id' => $this->review->id,
+                'name' => $this->stakeholderName,
+                'stakeholder_type' => $this->stakeholderType,
+                'contact_details' => [
+                    'organization' => $this->blankToNull($this->stakeholderOrganization),
+                    'email' => $this->blankToNull($this->stakeholderEmail),
+                    'phone' => $this->blankToNull($this->stakeholderPhone),
+                ],
+            ])->fresh();
+        } catch (ValidationException $exception) {
+            $this->mapValidationErrors($exception, [
+                'stakeholder_id' => 'stakeholderEditingId',
+                'name' => 'stakeholderName',
+                'stakeholder_type' => 'stakeholderType',
+                'contact_details.organization' => 'stakeholderOrganization',
+                'contact_details.email' => 'stakeholderEmail',
+                'contact_details.phone' => 'stakeholderPhone',
+            ]);
+
+            return;
+        }
+
+        $this->resetStakeholderForm();
+
+        session()->flash('status', __('Stakeholder updated.'));
+    }
+
     public function storeStakeholder(StoreStakeholder $action): void
     {
         $this->authorizeReviewMutation();
@@ -717,6 +928,38 @@ class Show extends Component
         session()->flash('status', __('Recommendation updated.'));
     }
 
+    public function prepareReportCreate(?string $reportType = null, ?string $reportStatus = null): void
+    {
+        $this->authorizeReviewMutation();
+
+        $this->resetReportForm();
+
+        if (($resolvedReportType = ReportType::tryFrom((string) $reportType)) !== null) {
+            $this->reportType = $resolvedReportType->value;
+        }
+
+        if (($resolvedReportStatus = ReportStatus::tryFrom((string) $reportStatus)) !== null) {
+            $this->reportStatus = $resolvedReportStatus->value;
+        }
+
+        if (
+            $this->reportStatus === ReportStatus::Published->value
+            && $this->reportPublishedAt === ''
+        ) {
+            $this->reportPublishedAt = now()->toDateString();
+        }
+    }
+
+    public function updatedReportStatus(string $reportStatus): void
+    {
+        if (
+            $reportStatus === ReportStatus::Published->value
+            && $this->reportPublishedAt === ''
+        ) {
+            $this->reportPublishedAt = now()->toDateString();
+        }
+    }
+
     public function storeReport(StoreReport $action): void
     {
         $this->authorizeReviewMutation();
@@ -821,6 +1064,37 @@ class Show extends Component
         };
     }
 
+    public function prepareGovernmentResponseCreate(?int $reportId = null, ?string $responseStatus = null): void
+    {
+        $this->authorizeReviewMutation();
+
+        $this->resetGovernmentResponseForm();
+
+        $preferredReportId = $reportId;
+
+        if (
+            $preferredReportId === null
+            || ! $this->review->reports()->whereKey($preferredReportId)->exists()
+        ) {
+            $preferredReportId = $this->preferredGovernmentResponseReportId();
+        }
+
+        if ($preferredReportId !== null) {
+            $this->governmentResponseReportId = (string) $preferredReportId;
+        }
+
+        if (($resolvedResponseStatus = GovernmentResponseStatus::tryFrom((string) $responseStatus)) !== null) {
+            $this->governmentResponseStatus = $resolvedResponseStatus->value;
+        }
+
+        if (
+            $this->governmentResponseStatus === GovernmentResponseStatus::Received->value
+            && $this->governmentResponseReceivedAt === ''
+        ) {
+            $this->governmentResponseReceivedAt = now()->toDateString();
+        }
+    }
+
     public function storeGovernmentResponse(StoreGovernmentResponse $action): void
     {
         $this->authorizeReviewMutation();
@@ -851,16 +1125,26 @@ class Show extends Component
         session()->flash('status', __('Government response recorded for this review.'));
     }
 
+    public function updatedGovernmentResponseStatus(string $responseStatus): void
+    {
+        if (
+            $responseStatus === GovernmentResponseStatus::Received->value
+            && $this->governmentResponseReceivedAt === ''
+        ) {
+            $this->governmentResponseReceivedAt = now()->toDateString();
+        }
+    }
+
     public function stepContext(PlsReviewStep $step): string
     {
         return match ($step->step_key) {
-            'define_scope' => __('Confirm the legislation under review, the committee mandate, and the boundaries of the inquiry.'),
+            'define_scope' => __('Confirm the legislation under review, the institutional context, and the boundaries of the inquiry.'),
             'background_data_plan' => __('Assemble source material, implementation records, and baseline evidence to guide the review.'),
             'stakeholder_plan' => __('Map the institutions and external actors that should inform the scrutiny process.'),
             'implementation_review' => __('Examine delivery agencies, delegated powers, and operational bottlenecks in implementation.'),
             'consultations' => __('Capture written and oral input from the public, experts, and implementing institutions.'),
             'analysis' => __('Synthesize evidence into findings and identify the strongest recommendation themes.'),
-            'draft_report' => __('Translate the inquiry record into a committee report with clear conclusions and actions.'),
+            'draft_report' => __('Translate the inquiry record into a review report with clear conclusions and actions.'),
             'dissemination' => __('Track publication readiness, accessibility, and the materials needed for public release.'),
             'government_response' => __('Monitor whether the executive has responded and whether commitments are on record.'),
             'follow_up' => __('Keep sight of implementation progress after the report phase concludes.'),
@@ -995,7 +1279,7 @@ class Show extends Component
         return match ($currentStep->step_key) {
             'draft_report' => [
                 'label' => __('Current focus'),
-                'title' => __('Draft the committee report'),
+                'title' => __('Draft the review report'),
                 'summary' => __('Shape the evidence base into a report record, connect the working document, and confirm the publication path.'),
             ],
             'dissemination' => [
@@ -1033,13 +1317,13 @@ class Show extends Component
                 'title' => __('Define the review scope'),
                 'summary' => __('Start by linking the legislation under review and adding the first working papers or briefing documents for the inquiry team.'),
                 'tab' => __('Legislation and documents'),
-                'action' => __('Link the governing law and upload the committee brief, bill text, or background pack.'),
+                'action' => __('Link the governing law and upload the initial briefing, bill text, or background pack.'),
             ],
             'background_data_plan' => [
                 'title' => __('Build the evidence base'),
                 'summary' => __('Use the documents area to collect background papers, implementation records, and supporting material before consultations begin.'),
                 'tab' => __('Documents'),
-                'action' => __('Upload implementation reports, audits, and committee research notes.'),
+                'action' => __('Upload implementation reports, audits, and background research notes.'),
             ],
             'stakeholder_plan' => [
                 'title' => __('Map the people and institutions to involve'),
@@ -1049,7 +1333,7 @@ class Show extends Component
             ],
             'implementation_review' => [
                 'title' => __('Assess implementation delivery'),
-                'summary' => __('Keep agencies, supporting documents, and early findings in sync while the committee examines how the law is working in practice.'),
+                'summary' => __('Keep agencies, supporting documents, and early findings in sync while the review examines how the law is working in practice.'),
                 'tab' => __('Stakeholders and analysis'),
                 'action' => __('Record implementing agencies, then capture the first findings that emerge from implementation evidence.'),
             ],
@@ -1067,7 +1351,7 @@ class Show extends Component
             ],
             'draft_report', 'dissemination' => [
                 'title' => __('Prepare the report record'),
-                'summary' => __('Reports and linked publication documents should now become the source of truth for what the committee is releasing.'),
+                'summary' => __('Reports and linked publication documents should now become the source of truth for what this inquiry is releasing.'),
                 'tab' => __('Reports'),
                 'action' => __('Create the report record, link the published file, and keep status up to date.'),
             ],
@@ -1081,10 +1365,22 @@ class Show extends Component
         };
     }
 
+    public function documentTypeLabel(DocumentType $type): string
+    {
+        return match ($type) {
+            DocumentType::GroupReport => __('Group report'),
+            default => str($type->value)->headline()->toString(),
+        };
+    }
+
     private function loadReview(): PlsReview
     {
         return $this->review->load([
-            'committee.legislature.jurisdiction.country',
+            'owner',
+            'reviewGroup.legislature.jurisdiction.country',
+            'legislature.jurisdiction.country',
+            'memberships.user',
+            'memberships.invitedBy',
             'steps',
             'legislation',
             'legislationObjectives',
@@ -1096,7 +1392,7 @@ class Show extends Component
             'submissions.stakeholder',
             'submissions.document',
             'findings',
-            'recommendations',
+            'recommendations.finding',
             'reports.document',
             'reports.governmentResponses.document',
             'governmentResponses.report',
@@ -1214,11 +1510,50 @@ class Show extends Component
         )->values();
     }
 
+    /**
+     * @return EloquentCollection<int, User>
+     */
+    private function availableCollaborators(PlsReview $review): EloquentCollection
+    {
+        return User::query()
+            ->whereNotIn('id', $review->memberships->pluck('user_id'))
+            ->orderBy('name')
+            ->get();
+    }
+
     private function blankToNull(string $value): ?string
     {
         $trimmed = trim($value);
 
         return $trimmed === '' ? null : $trimmed;
+    }
+
+    private function preferredGovernmentResponseReportId(): ?int
+    {
+        /** @var ?Report $awaitingReport */
+        $awaitingReport = $this->review->reports
+            ->first(function (Report $report): bool {
+                return $report->report_type === ReportType::FinalReport
+                    && $report->status === ReportStatus::Published
+                    && $report->governmentResponses->isEmpty();
+            });
+
+        if ($awaitingReport !== null) {
+            return $awaitingReport->id;
+        }
+
+        /** @var ?Report $publishedFinalReport */
+        $publishedFinalReport = $this->review->reports
+            ->first(function (Report $report): bool {
+                return $report->report_type === ReportType::FinalReport
+                    && $report->status === ReportStatus::Published;
+            });
+
+        if ($publishedFinalReport !== null) {
+            return $publishedFinalReport->id;
+        }
+
+        return $this->review->reports->first()?->id;
     }
 
     /**
@@ -1240,6 +1575,27 @@ class Show extends Component
     private function authorizeReviewMutation(): void
     {
         $this->authorize('update', $this->review);
+    }
+
+    private function syncCollaboratorRoles(PlsReview $review, bool $replace = false): void
+    {
+        $roles = $review->memberships
+            ->mapWithKeys(fn (PlsReviewMembership $membership): array => [
+                $membership->id => $membership->role->value,
+            ])
+            ->all();
+
+        if ($replace) {
+            $this->collaboratorRoles = $roles;
+
+            return;
+        }
+
+        foreach ($roles as $membershipId => $role) {
+            if (! array_key_exists($membershipId, $this->collaboratorRoles)) {
+                $this->collaboratorRoles[$membershipId] = $role;
+            }
+        }
     }
 
     private function resetLegislationForm(): void
@@ -1278,7 +1634,7 @@ class Show extends Component
             'documentUpload',
         ]);
 
-        $this->documentType = DocumentType::CommitteeReport->value;
+        $this->documentType = DocumentType::GroupReport->value;
         $this->documentMimeType = 'application/pdf';
 
         $this->resetValidation([
@@ -1334,6 +1690,7 @@ class Show extends Component
     private function resetStakeholderForm(): void
     {
         $this->reset([
+            'stakeholderEditingId',
             'stakeholderName',
             'stakeholderOrganization',
             'stakeholderEmail',

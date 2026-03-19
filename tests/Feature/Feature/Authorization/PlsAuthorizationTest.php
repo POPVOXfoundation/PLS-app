@@ -1,39 +1,192 @@
 <?php
 
 use App\Domain\Documents\Enums\DocumentType;
-use App\Domain\Reviews\PlsReview;
+use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
+use App\Domain\Reviews\PlsReviewMembership;
 use App\Livewire\Pls\Reviews\Create as CreateReviewPage;
 use App\Livewire\Pls\Reviews\Show as ShowReviewPage;
 use App\Models\User;
 use Livewire\Livewire;
 
-test('observer can view reviews but cannot access the create page', function () {
-    $observer = User::factory()->observer()->create();
-    $review = plsReview();
+test('creator can access and edit their review workspace', function () {
+    $owner = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
 
-    $this->actingAs($observer)
-        ->get(route('pls.reviews.index'))
-        ->assertSuccessful();
-
-    $this->actingAs($observer)
+    $this->actingAs($owner)
         ->get(route('pls.reviews.show', $review))
         ->assertSuccessful();
 
-    $this->actingAs($observer)
-        ->get(route('pls.reviews.create'))
+    Livewire::actingAs($owner)
+        ->test(ShowReviewPage::class, ['review' => $review])
+        ->set('documentTitle', 'Owner working paper')
+        ->set('documentType', DocumentType::GroupReport->value)
+        ->set('documentStoragePath', 'documents/owner-working-paper.pdf')
+        ->call('storeDocument')
+        ->assertHasNoErrors()
+        ->assertSee('Owner working paper');
+});
+
+test('non-member cannot access a review', function () {
+    $owner = User::factory()->reviewer()->create();
+    $outsider = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    $this->actingAs($outsider)
+        ->get(route('pls.reviews.index'))
+        ->assertSuccessful()
+        ->assertDontSee($review->title);
+
+    $this->actingAs($outsider)
+        ->get(route('pls.reviews.show', $review))
         ->assertForbidden();
 });
 
-test('observer cannot mutate review workspace records', function () {
-    $observer = User::factory()->observer()->create();
-    $review = plsReview();
+test('invited member can access and edit a review', function () {
+    $owner = User::factory()->reviewer()->create();
+    $editor = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
 
-    Livewire::actingAs($observer)
+    $review->memberships()->create([
+        'user_id' => $editor->id,
+        'role' => PlsReviewMembershipRole::Editor,
+        'invited_by' => $owner->id,
+    ]);
+
+    $this->actingAs($editor)
+        ->get(route('pls.reviews.show', $review))
+        ->assertSuccessful();
+
+    Livewire::actingAs($editor)
         ->test(ShowReviewPage::class, ['review' => $review])
-        ->set('documentTitle', 'Observer document attempt')
-        ->set('documentType', DocumentType::CommitteeReport->value)
-        ->set('documentStoragePath', 'documents/observer-attempt.pdf')
+        ->set('documentTitle', 'Editor working paper')
+        ->set('documentType', DocumentType::GroupReport->value)
+        ->set('documentStoragePath', 'documents/editor-working-paper.pdf')
         ->call('storeDocument')
+        ->assertHasNoErrors()
+        ->assertSee('Editor working paper');
+});
+
+test('owner can invite and remove collaborators', function () {
+    $owner = User::factory()->reviewer()->create();
+    $invitee = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    Livewire::actingAs($owner)
+        ->test(ShowReviewPage::class, ['review' => $review])
+        ->set('inviteCollaboratorUserId', (string) $invitee->id)
+        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Editor->value)
+        ->call('inviteCollaborator')
+        ->assertHasNoErrors()
+        ->assertSee($invitee->email);
+
+    $membership = PlsReviewMembership::query()
+        ->where('pls_review_id', $review->id)
+        ->where('user_id', $invitee->id)
+        ->firstOrFail();
+
+    $this->assertDatabaseHas('pls_review_memberships', [
+        'pls_review_id' => $review->id,
+        'user_id' => $invitee->id,
+        'role' => PlsReviewMembershipRole::Editor->value,
+        'invited_by' => $owner->id,
+    ]);
+
+    Livewire::actingAs($owner)
+        ->test(ShowReviewPage::class, ['review' => $review])
+        ->call('removeCollaborator', $membership->id)
+        ->assertHasNoErrors();
+
+    $this->assertDatabaseMissing('pls_review_memberships', [
+        'id' => $membership->id,
+    ]);
+});
+
+test('invited editor cannot manage collaborators', function () {
+    $owner = User::factory()->reviewer()->create();
+    $editor = User::factory()->reviewer()->create();
+    $invitee = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    $review->memberships()->create([
+        'user_id' => $editor->id,
+        'role' => PlsReviewMembershipRole::Editor,
+        'invited_by' => $owner->id,
+    ]);
+
+    Livewire::actingAs($editor)
+        ->test(ShowReviewPage::class, ['review' => $review])
+        ->set('inviteCollaboratorUserId', (string) $invitee->id)
+        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Editor->value)
+        ->call('inviteCollaborator')
+        ->assertForbidden();
+});
+
+test('invited owner can manage collaborators when explicitly allowed', function () {
+    $creator = User::factory()->reviewer()->create();
+    $delegatedOwner = User::factory()->reviewer()->create();
+    $invitee = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $creator->id,
+    ]);
+
+    $review->memberships()->create([
+        'user_id' => $delegatedOwner->id,
+        'role' => PlsReviewMembershipRole::Owner,
+        'invited_by' => $creator->id,
+    ]);
+
+    Livewire::actingAs($delegatedOwner)
+        ->test(ShowReviewPage::class, ['review' => $review])
+        ->set('inviteCollaboratorUserId', (string) $invitee->id)
+        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Editor->value)
+        ->call('inviteCollaborator')
+        ->assertHasNoErrors();
+
+    $this->assertDatabaseHas('pls_review_memberships', [
+        'pls_review_id' => $review->id,
+        'user_id' => $invitee->id,
+        'role' => PlsReviewMembershipRole::Editor->value,
+        'invited_by' => $delegatedOwner->id,
+    ]);
+});
+
+test('review group does not grant access by itself', function () {
+    $owner = User::factory()->reviewer()->create();
+    $outsider = User::factory()->reviewer()->create();
+    ['reviewGroup' => $reviewGroup, 'legislature' => $legislature] = plsHierarchy();
+
+    $ownersReview = plsReview([
+        'created_by' => $owner->id,
+        'legislature_id' => $legislature->id,
+        'review_group_id' => $reviewGroup->id,
+        'title' => 'Owner review in shared group',
+    ]);
+
+    $outsiderReview = plsReview([
+        'created_by' => $outsider->id,
+        'legislature_id' => $legislature->id,
+        'review_group_id' => $reviewGroup->id,
+        'title' => 'Outsider review in shared group',
+    ]);
+
+    $this->actingAs($outsider)
+        ->get(route('pls.reviews.index'))
+        ->assertSuccessful()
+        ->assertDontSee($ownersReview->title)
+        ->assertSee($outsiderReview->title);
+
+    $this->actingAs($outsider)
+        ->get(route('pls.reviews.show', $ownersReview))
         ->assertForbidden();
 });
 
@@ -47,33 +200,22 @@ test('reviewer can access create page and create reviews', function () {
 
     Livewire::actingAs($reviewer)
         ->test(CreateReviewPage::class)
-        ->set('committee_id', (string) $hierarchy['committee']->id)
+        ->set('legislature_id', (string) $hierarchy['legislature']->id)
+        ->set('review_group_id', (string) $hierarchy['reviewGroup']->id)
         ->set('title', 'Reviewer-created PLS review')
-        ->set('description', 'Created by a reviewer with baseline authorization.')
+        ->set('description', 'Created by a reviewer with explicit owner membership.')
         ->set('start_date', '2026-03-11')
         ->call('save')
         ->assertHasNoErrors();
 
     $this->assertDatabaseHas('pls_reviews', [
         'title' => 'Reviewer-created PLS review',
-        'committee_id' => $hierarchy['committee']->id,
+        'review_group_id' => $hierarchy['reviewGroup']->id,
+        'created_by' => $reviewer->id,
     ]);
-});
 
-test('admin can update review workspace records', function () {
-    $admin = User::factory()->admin()->create();
-    $review = plsReview();
-
-    Livewire::actingAs($admin)
-        ->test(ShowReviewPage::class, ['review' => $review])
-        ->set('documentTitle', 'Admin working paper')
-        ->set('documentType', DocumentType::CommitteeReport->value)
-        ->set('documentStoragePath', 'documents/admin-working-paper.pdf')
-        ->set('documentMimeType', 'application/pdf')
-        ->set('documentFileSize', '2048')
-        ->call('storeDocument')
-        ->assertHasNoErrors()
-        ->assertSee('Admin working paper');
-
-    expect(PlsReview::query()->findOrFail($review->id)->documents()->where('title', 'Admin working paper')->exists())->toBeTrue();
+    $this->assertDatabaseHas('pls_review_memberships', [
+        'user_id' => $reviewer->id,
+        'role' => PlsReviewMembershipRole::Owner->value,
+    ]);
 });

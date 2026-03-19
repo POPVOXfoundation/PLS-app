@@ -66,10 +66,10 @@ class UserFactory extends Factory
         ]);
     }
 
-    public function committeeStaff(): static
+    public function reviewGroupStaff(): static
     {
         return $this->state(fn (array $attributes) => [
-            'role' => UserRole::CommitteeStaff,
+            'role' => UserRole::ReviewGroupStaff,
         ]);
     }
 

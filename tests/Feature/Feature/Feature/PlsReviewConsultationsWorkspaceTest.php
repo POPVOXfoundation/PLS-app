@@ -22,15 +22,17 @@ test('consultations can be created from the review workspace', function () {
     $document = Document::factory()->create([
         'pls_review_id' => $review->id,
         'title' => 'Public hearing agenda',
-        'document_type' => DocumentType::CommitteeReport,
+        'document_type' => DocumentType::GroupReport,
     ]);
 
     Livewire::test(ShowReviewPage::class, ['review' => $review])
+        ->assertSee('Workflow-linked engagement')
+        ->assertSee('Consultation and evidence intake')
         ->set('consultationTitle', 'Public hearing on implementation obstacles')
         ->set('consultationType', ConsultationType::Hearing->value)
         ->set('consultationHeldAt', '2026-03-11')
         ->set('consultationDocumentId', (string) $document->id)
-        ->set('consultationSummary', 'Committee members heard evidence on implementation delays and citizen access problems.')
+        ->set('consultationSummary', 'Review-group members heard evidence on implementation delays and citizen access problems.')
         ->call('storeConsultation')
         ->assertHasNoErrors()
         ->assertSee('Public hearing on implementation obstacles');
@@ -90,10 +92,14 @@ test('submissions can be logged from the review workspace', function () {
     ]);
 
     Livewire::test(ShowReviewPage::class, ['review' => $review])
+        ->assertSee('Submissions and evidence')
+        ->call('prepareSubmissionCreate', $stakeholder->id)
+        ->assertSet('submissionStakeholderId', (string) $stakeholder->id)
+        ->assertSee('Selected stakeholder')
         ->set('submissionStakeholderId', (string) $stakeholder->id)
         ->set('submissionDocumentId', (string) $document->id)
         ->set('submissionSubmittedAt', '2026-03-09')
-        ->set('submissionSummary', 'Requested stronger publication duties, compliance monitoring, and annual committee review.')
+        ->set('submissionSummary', 'Requested stronger publication duties, compliance monitoring, and annual review-group review.')
         ->call('storeSubmission')
         ->assertHasNoErrors()
         ->assertSee('Belize Civil Society Forum')
@@ -103,6 +109,6 @@ test('submissions can be logged from the review workspace', function () {
         'pls_review_id' => $review->id,
         'stakeholder_id' => $stakeholder->id,
         'document_id' => $document->id,
-        'summary' => 'Requested stronger publication duties, compliance monitoring, and annual committee review.',
+        'summary' => 'Requested stronger publication duties, compliance monitoring, and annual review-group review.',
     ]);
 });

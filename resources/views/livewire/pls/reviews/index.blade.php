@@ -36,13 +36,6 @@
     @elseif ($viewMode === 'cards')
         <div class="grid gap-4 xl:grid-cols-2">
             @foreach ($reviews as $review)
-                @php
-                    $reviewAssignmentLabel = $review->committee?->name
-                        ?? $review->legislature?->name
-                        ?? $review->jurisdiction?->name
-                        ?? __('Unassigned');
-                @endphp
-
                 <flux:card class="space-y-4">
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0 space-y-1">
@@ -50,7 +43,7 @@
                                 {{ $review->title }}
                             </flux:link>
                             <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                                {{ $reviewAssignmentLabel }} · {{ $review->jurisdiction?->name ?? __('No jurisdiction') }}{{ $review->country?->name ? ', '.$review->country->name : '' }}
+                                {{ $review->assignmentLabel() }}@if ($review->assignmentLocationParts() !== []) · {{ implode(' · ', $review->assignmentLocationParts()) }}@endif
                             </flux:text>
                         </div>
                         <flux:badge size="sm">{{ $review->statusLabel() }}</flux:badge>
@@ -90,13 +83,6 @@
 
                 <flux:table.rows>
                     @foreach ($reviews as $review)
-                        @php
-                            $reviewAssignmentLabel = $review->committee?->name
-                                ?? $review->legislature?->name
-                                ?? $review->jurisdiction?->name
-                                ?? __('Unassigned');
-                        @endphp
-
                         <flux:table.row :key="$review->id">
                             <flux:table.cell variant="strong">
                                 <div class="min-w-0">
@@ -104,7 +90,7 @@
                                         {{ $review->title }}
                                     </flux:link>
                                     <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
-                                        {{ $reviewAssignmentLabel }}
+                                        {{ $review->assignmentLabel() }}
                                     </flux:text>
                                 </div>
                             </flux:table.cell>
