@@ -18,6 +18,15 @@ yarn-error.log
 /auth.json
 /.fleet
 /.idea
+/.agents
+/.ai
+/.claude
+/.codex
+/.cursor
+/.gemini
+/.kiro
+/.mcp.json
+/.specs
 /.nova
 /.vscode
 /.zed
