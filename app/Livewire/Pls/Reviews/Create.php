@@ -61,7 +61,7 @@ class Create extends Component
 
         session()->flash('status', __('Review created and workflow steps seeded.'));
 
-        $this->redirectRoute('pls.reviews.show', ['review' => $review->id], navigate: true);
+        $this->redirectRoute('pls.reviews.workflow', ['review' => $review->id], navigate: true);
     }
 
     public function updatedLegislatureId(): void

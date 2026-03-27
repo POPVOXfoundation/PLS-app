@@ -12,7 +12,7 @@ use App\Domain\Legislation\Legislation;
 use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Domain\Reviews\PlsReview;
 use App\Livewire\Pls\Reviews\Create as CreateReviewPage;
-use App\Livewire\Pls\Reviews\Show as ShowReviewPage;
+use App\Livewire\Pls\Reviews\WorkflowPage;
 use App\Models\User;
 use Livewire\Livewire;
 
@@ -54,7 +54,7 @@ test('review can be created from the create page without a review group', functi
     expect($review->country_id)->toBe($legislature->jurisdiction->country_id);
     expect($review->steps()->count())->toBe(11);
     expect($review->memberships()->where('user_id', auth()->id())->firstOrFail()->role)->toBe(PlsReviewMembershipRole::Owner);
-    $response->assertRedirect(route('pls.reviews.show', ['review' => $review->id]));
+    $response->assertRedirect(route('pls.reviews.workflow', ['review' => $review->id]));
 });
 
 test('review can be created from the create page with a review group', function () {
@@ -89,7 +89,14 @@ test('review create page validates required fields', function () {
     expect(substr_count($component->html(), 'Enter the public-facing review title.'))->toBe(1);
 });
 
-test('review show page renders workflow details and supports step switching', function () {
+test('review show route redirects to workflow route', function () {
+    $review = plsReview();
+
+    $this->get(route('pls.reviews.show', ['review' => $review->id]))
+        ->assertRedirect(route('pls.reviews.workflow', ['review' => $review->id]));
+});
+
+test('review workflow page renders workflow details and supports step switching', function () {
     $review = plsReview([
         'title' => 'Review of the Access to Information Act',
         'description' => 'Focuses on response timelines, disclosure quality, and agency compliance.',
@@ -129,20 +136,66 @@ test('review show page renders workflow details and supports step switching', fu
         'recommendation_type' => RecommendationType::ImproveImplementation,
     ]);
 
-    $response = $this->get(route('pls.reviews.show', ['review' => $review->id]));
+    $response = $this->get(route('pls.reviews.workflow', ['review' => $review->id]));
 
     $response
         ->assertOk()
+        ->assertSee(config('app.name'))
         ->assertSee($review->title)
         ->assertSee('Collaborators')
-        ->assertSee($legislation->title)
-        ->assertSee($document->title)
-        ->assertSee($finding->title);
+        ->assertSee('PLS Assistant')
+        ->assertSee('Step 1 of 11')
+        ->assertSee('9%')
+        ->assertSee('dark:bg-white', false)
+        ->assertSee('bg-violet-50', false)
+        ->assertSee('text-violet-900', false)
+        ->assertSee('bg-violet-50 font-semibold text-violet-900', false)
+        ->assertDontSee('wire:key="assistant-', false)
+        ->assertDontSee('animate-in fade-in duration-150', false)
+        ->assertDontSee('dark:bg-violet-950/50', false)
+        ->assertDontSee('dark:hover:border-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200', false)
+        ->assertDontSee('dark:bg-zinc-800 dark:text-zinc-100', false)
+        ->assertDontSee('dark:bg-zinc-800/80', false)
+        ->assertDontSee('dark:hover:bg-zinc-900', false)
+        ->assertDontSee('dark:bg-violet-950/30', false)
+        ->assertDontSee('dark:bg-violet-900', false);
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review])
+    $component = Livewire::test(WorkflowPage::class, ['review' => $review])
         ->assertSet('selectedStepNumber', 1)
         ->call('selectStep', 6)
         ->assertSet('selectedStepNumber', 6)
         ->assertSee('Analyse post-legislative scrutiny findings')
-        ->assertSee('Issue a standard disclosure directive');
+        ->assertSee('Synthesize evidence into findings and identify the strongest recommendation themes.');
+
+    $html = $component->html();
+
+    expect($html)->toContain('Step 1 of 11')
+        ->and($html)->toContain('Best next area')
+        ->and(strpos($html, 'Best next area'))->toBeGreaterThan(strpos($html, 'Step 1 of 11'));
+});
+
+test('all review section routes render inside the shared workspace shell', function () {
+    $review = plsReview([
+        'title' => 'Route-based review workspace',
+    ]);
+
+    $routes = [
+        'pls.reviews.workflow' => 'Best next area',
+        'pls.reviews.collaborators' => 'Collaborators',
+        'pls.reviews.legislation' => 'No legislation linked to this review yet.',
+        'pls.reviews.documents' => 'No documents linked to this review yet.',
+        'pls.reviews.stakeholders' => 'Stakeholder directory',
+        'pls.reviews.consultations' => 'Consultation activity',
+        'pls.reviews.analysis' => 'Findings & recommendations',
+        'pls.reviews.reports' => 'Reporting workspace',
+    ];
+
+    foreach ($routes as $route => $expectedText) {
+        $this->get(route($route, ['review' => $review->id]))
+            ->assertOk()
+            ->assertSee($review->title)
+            ->assertSee('PLS Assistant')
+            ->assertSee('Workflow')
+            ->assertSee($expectedText);
+    }
 });

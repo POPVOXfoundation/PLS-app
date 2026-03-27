@@ -39,7 +39,7 @@
                 <flux:card class="space-y-4">
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0 space-y-1">
-                            <flux:link :href="route('pls.reviews.show', ['review' => $review->id])" wire:navigate variant="subtle" class="text-base font-semibold">
+                            <flux:link :href="route('pls.reviews.workflow', ['review' => $review->id])" wire:navigate variant="subtle" class="text-base font-semibold">
                                 {{ $review->title }}
                             </flux:link>
                             <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
@@ -86,7 +86,7 @@
                         <flux:table.row :key="$review->id">
                             <flux:table.cell variant="strong">
                                 <div class="min-w-0">
-                                    <flux:link :href="route('pls.reviews.show', ['review' => $review->id])" wire:navigate variant="subtle" class="text-sm font-medium">
+                                    <flux:link :href="route('pls.reviews.workflow', ['review' => $review->id])" wire:navigate variant="subtle" class="text-sm font-medium">
                                         {{ $review->title }}
                                     </flux:link>
                                     <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
@@ -114,7 +114,7 @@
                                 </div>
                             </flux:table.cell>
                             <flux:table.cell>
-                                <flux:button variant="ghost" size="sm" icon="arrow-right" :href="route('pls.reviews.show', ['review' => $review->id])" wire:navigate />
+                                <flux:button variant="ghost" size="sm" icon="arrow-right" :href="route('pls.reviews.workflow', ['review' => $review->id])" wire:navigate />
                             </flux:table.cell>
                         </flux:table.row>
                     @endforeach

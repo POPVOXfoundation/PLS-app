@@ -3,8 +3,9 @@
 use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Domain\Reviews\PlsReviewMembership;
+use App\Livewire\Pls\Reviews\CollaboratorsPage;
 use App\Livewire\Pls\Reviews\Create as CreateReviewPage;
-use App\Livewire\Pls\Reviews\Show as ShowReviewPage;
+use App\Livewire\Pls\Reviews\DocumentsPage;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
@@ -16,11 +17,11 @@ test('creator can access and edit their review workspace', function () {
     ]);
 
     $this->actingAs($owner)
-        ->get(route('pls.reviews.show', $review))
+        ->get(route('pls.reviews.workflow', $review))
         ->assertSuccessful();
 
     Livewire::actingAs($owner)
-        ->test(ShowReviewPage::class, ['review' => $review])
+        ->test(DocumentsPage::class, ['review' => $review])
         ->set('documentTitle', 'Owner working paper')
         ->set('documentType', DocumentType::GroupReport->value)
         ->set('documentStoragePath', 'documents/owner-working-paper.pdf')
@@ -80,11 +81,11 @@ test('invited member can access and edit a review', function () {
     ]);
 
     $this->actingAs($editor)
-        ->get(route('pls.reviews.show', $review))
+        ->get(route('pls.reviews.workflow', $review))
         ->assertSuccessful();
 
     Livewire::actingAs($editor)
-        ->test(ShowReviewPage::class, ['review' => $review])
+        ->test(DocumentsPage::class, ['review' => $review])
         ->set('documentTitle', 'Editor working paper')
         ->set('documentType', DocumentType::GroupReport->value)
         ->set('documentStoragePath', 'documents/editor-working-paper.pdf')
@@ -101,7 +102,7 @@ test('owner can invite and remove collaborators', function () {
     ]);
 
     Livewire::actingAs($owner)
-        ->test(ShowReviewPage::class, ['review' => $review])
+        ->test(CollaboratorsPage::class, ['review' => $review])
         ->set('inviteCollaboratorUserId', (string) $invitee->id)
         ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Editor->value)
         ->call('inviteCollaborator')
@@ -121,7 +122,7 @@ test('owner can invite and remove collaborators', function () {
     ]);
 
     Livewire::actingAs($owner)
-        ->test(ShowReviewPage::class, ['review' => $review])
+        ->test(CollaboratorsPage::class, ['review' => $review])
         ->call('removeCollaborator', $membership->id)
         ->assertHasNoErrors();
 
@@ -145,7 +146,7 @@ test('invited editor cannot manage collaborators', function () {
     ]);
 
     Livewire::actingAs($editor)
-        ->test(ShowReviewPage::class, ['review' => $review])
+        ->test(CollaboratorsPage::class, ['review' => $review])
         ->set('inviteCollaboratorUserId', (string) $invitee->id)
         ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Editor->value)
         ->call('inviteCollaborator')
@@ -160,7 +161,7 @@ test('collaborators cannot be promoted to owner from the review workspace', func
     ]);
 
     Livewire::actingAs($creator)
-        ->test(ShowReviewPage::class, ['review' => $review])
+        ->test(CollaboratorsPage::class, ['review' => $review])
         ->set('inviteCollaboratorUserId', (string) $invitee->id)
         ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Owner->value)
         ->call('inviteCollaborator')

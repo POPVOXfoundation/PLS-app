@@ -1,80 +1,84 @@
+@php
+    $primaryNavigation = [
+        [
+            'label' => __('Dashboard'),
+            'route' => route('dashboard'),
+            'current' => request()->routeIs('dashboard'),
+            'icon' => 'home',
+        ],
+        [
+            'label' => __('PLS Reviews'),
+            'route' => route('pls.reviews.index'),
+            'current' => request()->routeIs('pls.reviews.*'),
+            'icon' => 'clipboard-document-list',
+        ],
+    ];
+@endphp
+
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
     <head>
         @include('partials.head')
     </head>
-    <body class="min-h-screen bg-white dark:bg-zinc-800">
-        <flux:header container class="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
-            <flux:sidebar.toggle class="lg:hidden mr-2" icon="bars-2" inset="left" />
+    <body class="min-h-screen bg-zinc-50 text-zinc-950 antialiased dark:bg-zinc-950">
+        <div class="min-h-screen">
+            <flux:header class="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/92 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/92">
+                <div class="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+                    <div class="flex min-w-0 items-center gap-5">
+                        <x-app-logo href="{{ route('dashboard') }}" wire:navigate class="shrink-0" />
 
-            <x-app-logo href="{{ route('dashboard') }}" wire:navigate />
+                        <flux:navbar class="hidden md:flex items-center gap-1">
+                            @foreach ($primaryNavigation as $item)
+                                <flux:navbar.item
+                                    :icon="$item['icon']"
+                                    :href="$item['route']"
+                                    :current="$item['current']"
+                                    wire:navigate
+                                >
+                                    {{ $item['label'] }}
+                                </flux:navbar.item>
+                            @endforeach
+                        </flux:navbar>
+                    </div>
 
-            <flux:navbar class="-mb-px max-lg:hidden">
-                <flux:navbar.item icon="layout-grid" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
-                    {{ __('Dashboard') }}
-                </flux:navbar.item>
-            </flux:navbar>
+                    <div class="flex shrink-0 items-center gap-2">
+                        <flux:tooltip :content="__('Toggle dark mode')" position="bottom">
+                            <flux:button
+                                x-data
+                                x-on:click="$flux.dark = ! $flux.dark"
+                                icon="moon"
+                                variant="subtle"
+                                aria-label="{{ __('Toggle dark mode') }}"
+                                class="!h-10 [&>svg]:size-5"
+                            />
+                        </flux:tooltip>
 
-            <flux:spacer />
+                        <x-desktop-user-menu />
+                    </div>
+                </div>
 
-            <flux:navbar class="me-1.5 space-x-0.5 rtl:space-x-reverse py-0!">
-                <flux:tooltip :content="__('Search')" position="bottom">
-                    <flux:navbar.item class="!h-10 [&>div>svg]:size-5" icon="magnifying-glass" href="#" :label="__('Search')" />
-                </flux:tooltip>
-                <flux:tooltip :content="__('Repository')" position="bottom">
-                    <flux:navbar.item
-                        class="h-10 max-lg:hidden [&>div>svg]:size-5"
-                        icon="folder-git-2"
-                        href="https://github.com/laravel/livewire-starter-kit"
-                        target="_blank"
-                        :label="__('Repository')"
-                    />
-                </flux:tooltip>
-                <flux:tooltip :content="__('Documentation')" position="bottom">
-                    <flux:navbar.item
-                        class="h-10 max-lg:hidden [&>div>svg]:size-5"
-                        icon="book-open-text"
-                        href="https://laravel.com/docs/starter-kits#livewire"
-                        target="_blank"
-                        :label="__('Documentation')"
-                    />
-                </flux:tooltip>
-                <flux:tooltip :content="__('Toggle dark mode')" position="bottom">
-                    <flux:button x-data x-on:click="$flux.dark = ! $flux.dark" icon="moon" variant="subtle" aria-label="Toggle dark mode" class="!h-10 [&>svg]:size-5" />
-                </flux:tooltip>
-            </flux:navbar>
+                <div class="border-t border-zinc-200/80 md:hidden dark:border-zinc-800">
+                    <div class="mx-auto flex w-full max-w-[1600px] items-center gap-2 overflow-x-auto px-4 py-2 sm:px-6">
+                        @foreach ($primaryNavigation as $item)
+                            <flux:button
+                                :href="$item['route']"
+                                wire:navigate
+                                size="sm"
+                                :variant="$item['current'] ? 'primary' : 'ghost'"
+                                :icon="$item['icon']"
+                                class="shrink-0"
+                            >
+                                {{ $item['label'] }}
+                            </flux:button>
+                        @endforeach
+                    </div>
+                </div>
+            </flux:header>
 
-            <x-desktop-user-menu />
-        </flux:header>
-
-        <!-- Mobile Menu -->
-        <flux:sidebar collapsible="mobile" sticky class="lg:hidden border-e border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
-            <flux:sidebar.header>
-                <x-app-logo :sidebar="true" href="{{ route('dashboard') }}" wire:navigate />
-                <flux:sidebar.collapse class="in-data-flux-sidebar-on-desktop:not-in-data-flux-sidebar-collapsed-desktop:-mr-2" />
-            </flux:sidebar.header>
-
-            <flux:sidebar.nav>
-                <flux:sidebar.group :heading="__('Platform')">
-                    <flux:sidebar.item icon="layout-grid" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
-                        {{ __('Dashboard')  }}
-                    </flux:sidebar.item>
-                </flux:sidebar.group>
-            </flux:sidebar.nav>
-
-            <flux:spacer />
-
-            <flux:sidebar.nav>
-                <flux:sidebar.item icon="folder-git-2" href="https://github.com/laravel/livewire-starter-kit" target="_blank">
-                    {{ __('Repository') }}
-                </flux:sidebar.item>
-                <flux:sidebar.item icon="book-open-text" href="https://laravel.com/docs/starter-kits#livewire" target="_blank">
-                    {{ __('Documentation') }}
-                </flux:sidebar.item>
-            </flux:sidebar.nav>
-        </flux:sidebar>
-
-        {{ $slot }}
+            <flux:main class="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-[1600px] flex-col px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+                {{ $slot }}
+            </flux:main>
+        </div>
 
         @fluxScripts
     </body>

@@ -18,7 +18,10 @@ test('authenticated users can visit the dashboard', function () {
     $response = $this->get(route('dashboard'));
     $response
         ->assertOk()
+        ->assertSee(config('app.name'))
         ->assertSee('Dashboard')
+        ->assertSee(route('dashboard'), false)
+        ->assertSee(route('pls.reviews.index'), false)
         ->assertSee('New review')
         ->assertSee('All reviews');
 });

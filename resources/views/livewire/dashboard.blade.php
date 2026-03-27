@@ -128,7 +128,7 @@
                     <div class="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
                         <div class="min-w-0 space-y-1">
                             <div class="flex items-center gap-2">
-                                <flux:link :href="route('pls.reviews.show', ['review' => $item['review_id']])" wire:navigate variant="subtle" class="truncate text-sm font-medium">
+                                <flux:link :href="route('pls.reviews.workflow', ['review' => $item['review_id']])" wire:navigate variant="subtle" class="truncate text-sm font-medium">
                                     {{ $item['title'] }}
                                 </flux:link>
                                 <flux:badge size="sm" :color="$item['tone'] === 'urgent' || $item['tone'] === 'draft' ? 'red' : 'zinc'">
@@ -168,7 +168,7 @@
                         <div class="flex items-center gap-4 py-3 first:pt-0 last:pb-0">
                             <div class="min-w-0 flex-1 space-y-0.5">
                                 <div class="flex items-center gap-2">
-                                    <flux:link :href="route('pls.reviews.show', ['review' => $review->id])" wire:navigate variant="subtle" class="truncate text-sm font-medium">
+                                    <flux:link :href="route('pls.reviews.workflow', ['review' => $review->id])" wire:navigate variant="subtle" class="truncate text-sm font-medium">
                                         {{ $review->title }}
                                     </flux:link>
                                     <flux:badge size="sm">{{ $review->statusLabel() }}</flux:badge>

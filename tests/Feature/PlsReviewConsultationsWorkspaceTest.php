@@ -6,7 +6,7 @@ use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Stakeholders\Enums\StakeholderType;
 use App\Domain\Stakeholders\Stakeholder;
-use App\Livewire\Pls\Reviews\Show as ShowReviewPage;
+use App\Livewire\Pls\Reviews\ConsultationsPage;
 use App\Models\User;
 use Livewire\Livewire;
 
@@ -25,8 +25,7 @@ test('consultations can be created from the review workspace', function () {
         'document_type' => DocumentType::GroupReport,
     ]);
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review])
-        ->assertSee('Workflow-linked engagement')
+    Livewire::test(ConsultationsPage::class, ['review' => $review])
         ->assertSee('Consultation and evidence intake')
         ->set('consultationTitle', 'Public hearing on implementation obstacles')
         ->set('consultationType', ConsultationType::Hearing->value)
@@ -59,7 +58,7 @@ test('consultations can be edited from the review workspace', function () {
         'document_id' => null,
     ]);
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review])
+    Livewire::test(ConsultationsPage::class, ['review' => $review])
         ->call('startEditingConsultation', $consultation->id)
         ->set('consultationHeldAt', '2026-03-12')
         ->set('consultationSummary', 'Roundtable completed with agreement on evidence themes and outreach priorities.')
@@ -91,11 +90,10 @@ test('submissions can be logged from the review workspace', function () {
         'document_type' => DocumentType::ConsultationSubmission,
     ]);
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review])
+    Livewire::withQueryParams(['stakeholder' => $stakeholder->id])
+        ->test(ConsultationsPage::class, ['review' => $review])
         ->assertSee('Submissions and evidence')
-        ->call('prepareSubmissionCreate', $stakeholder->id)
         ->assertSet('submissionStakeholderId', (string) $stakeholder->id)
-        ->assertSee('Selected stakeholder')
         ->set('submissionStakeholderId', (string) $stakeholder->id)
         ->set('submissionDocumentId', (string) $document->id)
         ->set('submissionSubmittedAt', '2026-03-09')

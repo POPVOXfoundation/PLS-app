@@ -7,7 +7,8 @@ use App\Domain\Stakeholders\Enums\ImplementingAgencyType;
 use App\Domain\Stakeholders\Enums\StakeholderType;
 use App\Domain\Stakeholders\ImplementingAgency;
 use App\Domain\Stakeholders\Stakeholder;
-use App\Livewire\Pls\Reviews\Show as ShowReviewPage;
+use App\Livewire\Pls\Reviews\ConsultationsPage;
+use App\Livewire\Pls\Reviews\StakeholdersPage;
 use App\Models\User;
 use Livewire\Livewire;
 
@@ -26,7 +27,7 @@ test('stakeholders can be added and filtered from the review workspace', functio
         'stakeholder_type' => StakeholderType::Ministry,
     ]);
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review])
+    Livewire::test(StakeholdersPage::class, ['review' => $review])
         ->set('stakeholderName', 'Open Budget Coalition')
         ->set('stakeholderType', StakeholderType::Ngo->value)
         ->set('stakeholderOrganization', 'Open Budget Coalition')
@@ -58,7 +59,7 @@ test('stakeholders can be edited and submissions can be prepared from the stakeh
         'contact_details' => null,
     ]);
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review])
+    Livewire::test(StakeholdersPage::class, ['review' => $review])
         ->assertSee('Stakeholder directory')
         ->assertSee('Missing contact detail')
         ->call('startEditingStakeholder', $stakeholder->id)
@@ -70,8 +71,11 @@ test('stakeholders can be edited and submissions can be prepared from the stakeh
         ->assertHasNoErrors()
         ->assertSee('National Audit Office and Inspectorate')
         ->call('prepareSubmissionCreate', $stakeholder->id)
-        ->assertSet('submissionStakeholderId', (string) $stakeholder->id)
-        ->assertSee('Awaiting written evidence');
+        ->assertRedirect(route('pls.reviews.consultations', ['review' => $review, 'stakeholder' => $stakeholder->id]));
+
+    Livewire::withQueryParams(['stakeholder' => $stakeholder->id])
+        ->test(ConsultationsPage::class, ['review' => $review])
+        ->assertSet('submissionStakeholderId', (string) $stakeholder->id);
 
     $this->assertDatabaseHas('stakeholders', [
         'id' => $stakeholder->id,
@@ -104,8 +108,7 @@ test('stakeholder records show linked submissions in the review workspace', func
         'summary' => 'Requested stronger publication deadlines and reporting transparency.',
     ]);
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review])
-        ->assertSee('Latest submission')
+    Livewire::test(StakeholdersPage::class, ['review' => $review])
         ->assertSee('National Access to Information Forum')
         ->assertSee('Requested stronger publication deadlines and reporting transparency.')
         ->assertSee('Forum written submission');
@@ -116,7 +119,7 @@ test('implementing agencies can be added from the review workspace', function ()
         'title' => 'Review of implementation responsibility',
     ]);
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review])
+    Livewire::test(StakeholdersPage::class, ['review' => $review])
         ->set('implementingAgencyName', 'Public Service Commission')
         ->set('implementingAgencyType', ImplementingAgencyType::Agency->value)
         ->call('storeImplementingAgency')

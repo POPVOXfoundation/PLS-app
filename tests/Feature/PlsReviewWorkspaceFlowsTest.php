@@ -11,7 +11,11 @@ use App\Domain\Reporting\Enums\GovernmentResponseStatus;
 use App\Domain\Reporting\Enums\ReportStatus;
 use App\Domain\Reporting\Enums\ReportType;
 use App\Domain\Reporting\Report;
-use App\Livewire\Pls\Reviews\Show as ShowReviewPage;
+use App\Livewire\Pls\Reviews\AnalysisPage;
+use App\Livewire\Pls\Reviews\DocumentsPage;
+use App\Livewire\Pls\Reviews\LegislationPage;
+use App\Livewire\Pls\Reviews\ReportsPage;
+use App\Livewire\Pls\Reviews\WorkflowPage;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
@@ -33,7 +37,7 @@ test('existing legislation can be attached from the review workspace', function 
         'legislation_type' => LegislationType::Act,
     ]);
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review])
+    Livewire::test(LegislationPage::class, ['review' => $review])
         ->set('attachLegislationId', (string) $legislation->id)
         ->set('attachLegislationRelationshipType', ReviewLegislationRelationshipType::Primary->value)
         ->call('attachLegislation')
@@ -52,7 +56,7 @@ test('legislation can be created and attached from the review workspace', functi
         'title' => 'Review of access to information implementation',
     ]);
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review])
+    Livewire::test(LegislationPage::class, ['review' => $review])
         ->set('newLegislationTitle', 'Access to Information Act')
         ->set('newLegislationShortTitle', 'ATI Act')
         ->set('newLegislationType', LegislationType::Act->value)
@@ -79,7 +83,7 @@ test('document metadata can be added from the review workspace', function () {
         'title' => 'Review of delegated powers reporting',
     ]);
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review])
+    Livewire::test(DocumentsPage::class, ['review' => $review])
         ->set('documentTitle', 'Review Group Briefing Pack')
         ->set('documentType', DocumentType::GroupReport->value)
         ->set('documentStoragePath', 'documents/review-group-briefing-pack.pdf')
@@ -107,7 +111,7 @@ test('review documents can be uploaded, edited, and deleted from the review work
 
     $uploadedFile = UploadedFile::fake()->create('implementation-brief.pdf', 256, 'application/pdf');
 
-    $component = Livewire::test(ShowReviewPage::class, ['review' => $review])
+    $component = Livewire::test(DocumentsPage::class, ['review' => $review])
         ->set('documentTitle', 'Implementation brief')
         ->set('documentType', DocumentType::GroupReport->value)
         ->set('documentUpload', $uploadedFile)
@@ -150,7 +154,7 @@ test('review documents can be uploaded, edited, and deleted from the review work
     ]);
 
     $component
-        ->call('confirmDeletion', 'document', $updatedDocument->id)
+        ->call('confirmDeletion', $updatedDocument->id)
         ->assertHasNoErrors()
         ->assertDontSee('Implementation brief v2');
 
@@ -166,7 +170,7 @@ test('findings and recommendations can be added from the review workspace', func
         'title' => 'Review of implementation bottlenecks',
     ]);
 
-    $component = Livewire::test(ShowReviewPage::class, ['review' => $review])
+    $component = Livewire::test(AnalysisPage::class, ['review' => $review])
         ->set('findingTitle', 'Agency reporting remains inconsistent')
         ->set('findingSummary', 'Quarterly implementation reports are incomplete across multiple agencies.')
         ->call('storeFinding')
@@ -209,7 +213,7 @@ test('findings and recommendations can be edited and deleted from the review wor
         'recommendation_type' => \App\Domain\Analysis\Enums\RecommendationType::ImproveImplementation,
     ]);
 
-    $component = Livewire::test(ShowReviewPage::class, ['review' => $review])
+    $component = Livewire::test(AnalysisPage::class, ['review' => $review])
         ->call('startEditingFinding', $finding->id)
         ->set('findingTitle', 'Agency reporting standards remain inconsistent')
         ->set('findingSummary', 'Reporting formats still vary significantly across implementing agencies.')
@@ -255,7 +259,7 @@ test('reports can be created from the review workspace and linked to a review do
         'document_type' => DocumentType::DraftReport,
     ]);
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review])
+    Livewire::test(ReportsPage::class, ['review' => $review])
         ->set('reportTitle', 'Draft PLS Report on Dissemination Obligations')
         ->set('reportType', ReportType::DraftReport->value)
         ->set('reportStatus', ReportStatus::Published->value)
@@ -295,7 +299,7 @@ test('reports can be edited and deleted from the review workspace', function () 
         'published_at' => null,
     ]);
 
-    $component = Livewire::test(ShowReviewPage::class, ['review' => $review])
+    $component = Livewire::test(ReportsPage::class, ['review' => $review])
         ->call('startEditingReport', $report->id)
         ->set('reportTitle', 'Final dissemination report record')
         ->set('reportType', ReportType::FinalReport->value)
@@ -339,7 +343,7 @@ test('reporting quick actions prefill report and government response forms', fun
             'published_at' => now()->subDay(),
         ]);
 
-        Livewire::test(ShowReviewPage::class, ['review' => $review])
+        Livewire::test(ReportsPage::class, ['review' => $review])
             ->call('prepareReportCreate', ReportType::FinalReport->value, ReportStatus::Published->value)
             ->assertSet('reportType', ReportType::FinalReport->value)
             ->assertSet('reportStatus', ReportStatus::Published->value)
@@ -372,7 +376,7 @@ test('government responses can be recorded from the review workspace', function 
         'published_at' => now()->subDays(10),
     ]);
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review])
+    Livewire::test(ReportsPage::class, ['review' => $review])
         ->set('governmentResponseReportId', (string) $report->id)
         ->set('governmentResponseDocumentId', (string) $document->id)
         ->set('governmentResponseStatus', GovernmentResponseStatus::Received->value)
@@ -380,7 +384,7 @@ test('government responses can be recorded from the review workspace', function 
         ->set('governmentResponseSummary', 'Cabinet accepted the primary recommendation and requested a six-month implementation update.')
         ->call('storeGovernmentResponse')
         ->assertHasNoErrors()
-        ->assertSee('Government response recorded for this review.')
+        ->assertDispatched('review-workspace-updated', status: 'Government response recorded for this review.')
         ->assertSee('Response received')
         ->assertSee('Executive response memorandum');
 
@@ -420,7 +424,7 @@ test('reporting workspace surfaces analysis inputs and awaiting response work', 
         'published_at' => now()->subWeek(),
     ]);
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review])
+    Livewire::test(ReportsPage::class, ['review' => $review])
         ->assertSee('Reporting workspace')
         ->assertSee('Drafting inputs from analysis')
         ->assertSee('Mandate a standard reporting template')
@@ -445,7 +449,7 @@ test('published final reports without responses are shown as awaiting response',
         'published_at' => now()->subWeek(),
     ]);
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review])
+    Livewire::test(ReportsPage::class, ['review' => $review])
         ->assertSee('Track the government response')
         ->assertSee('Awaiting response')
         ->assertSee('Final Report on Publication Duties');
@@ -460,8 +464,7 @@ test('workspace guidance reflects the current workflow step', function () {
         'current_step_number' => 9,
     ])->save();
 
-    Livewire::test(ShowReviewPage::class, ['review' => $review->fresh()])
-        ->assertSee('Current workspace focus')
+    Livewire::test(WorkflowPage::class, ['review' => $review->fresh()])
         ->assertSee('Track what happens after publication')
         ->assertSee('Best next area: Reports')
         ->assertSee('Keep the report record current and log any response request, reply, or overdue follow-up.');
