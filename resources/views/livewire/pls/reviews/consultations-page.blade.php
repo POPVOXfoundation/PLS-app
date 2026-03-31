@@ -1,32 +1,4 @@
 <div class="space-y-8">
-    <flux:card class="space-y-6">
-        <div>
-            <flux:heading size="lg">{{ __('Consultation and evidence intake') }}</flux:heading>
-            <flux:text class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-                {{ __('Keep planned engagement, completed activity, and written evidence in one workspace so the review team can trace participation back to the workflow.') }}
-            </flux:text>
-        </div>
-
-        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <div class="flex flex-col rounded-xl border border-zinc-200 bg-zinc-50/70 p-5 dark:border-zinc-800 dark:bg-zinc-900/70">
-                <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Consultations held') }}</flux:text>
-                <p class="mt-auto pt-3 text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $completedConsultations->count() }}</p>
-            </div>
-            <div class="flex flex-col rounded-xl border border-zinc-200 bg-zinc-50/70 p-5 dark:border-zinc-800 dark:bg-zinc-900/70">
-                <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Planned consultations') }}</flux:text>
-                <p class="mt-auto pt-3 text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $plannedConsultations->count() }}</p>
-            </div>
-            <div class="flex flex-col rounded-xl border border-zinc-200 bg-zinc-50/70 p-5 dark:border-zinc-800 dark:bg-zinc-900/70">
-                <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Submissions received') }}</flux:text>
-                <p class="mt-auto pt-3 text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $review->submissions->count() }}</p>
-            </div>
-            <div class="flex flex-col rounded-xl border border-zinc-200 bg-zinc-50/70 p-5 dark:border-zinc-800 dark:bg-zinc-900/70">
-                <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('Stakeholders with evidence') }}</flux:text>
-                <p class="mt-auto pt-3 text-2xl font-semibold tabular-nums text-zinc-950 dark:text-white">{{ $stakeholdersWithSubmissions->count() }}</p>
-            </div>
-        </div>
-    </flux:card>
-
     <div class="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.95fr)]">
         <flux:card class="space-y-6">
             <div class="flex items-center justify-between gap-4">

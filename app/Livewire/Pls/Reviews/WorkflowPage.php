@@ -10,38 +10,11 @@ class WorkflowPage extends Workspace
 {
     protected string $workspace = 'workflow';
 
-    public int $selectedStepNumber = 1;
-
-    public function mount(PlsReview $review): void
-    {
-        parent::mount($review);
-
-        $this->selectedStepNumber = max(1, $review->current_step_number);
-    }
-
     public function render(): View
     {
         $review = $this->loadReview();
-        $selectedStep = $review->steps->firstWhere('step_number', $this->selectedStepNumber) ?? $review->steps->first();
 
-        if ($selectedStep !== null && $selectedStep->step_number !== $this->selectedStepNumber) {
-            $this->selectedStepNumber = $selectedStep->step_number;
-        }
-
-        return $this->renderWorkspaceView('livewire.pls.reviews.workflow-page', [
-            'selectedStep' => $selectedStep,
-            'workflowSummary' => $this->workflowSummary($review),
-            'workspaceGuidance' => $this->workspaceGuidance($review),
-        ], $review);
-    }
-
-    public function selectStep(int $stepNumber): void
-    {
-        if (! $this->review->steps()->where('step_number', $stepNumber)->exists()) {
-            return;
-        }
-
-        $this->selectedStepNumber = $stepNumber;
+        return $this->renderWorkspaceView('livewire.pls.reviews.workflow-page', [], $review);
     }
 
     public function stepContext(PlsReviewStep $step): string

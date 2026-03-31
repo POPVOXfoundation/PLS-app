@@ -146,23 +146,6 @@
                 @endif
             </flux:card>
 
-            <flux:card class="space-y-4">
-                <div class="space-y-2">
-                    <flux:heading size="lg">{{ __('Seeded workflow') }}</flux:heading>
-                    <flux:text>{{ __('Every new review starts with the canonical 11-step post-legislative scrutiny workflow.') }}</flux:text>
-                </div>
-
-                <flux:timeline>
-                    @foreach ($workflowSteps as $step)
-                        <flux:timeline.item :status="$loop->first ? 'current' : 'incomplete'">
-                            <flux:timeline.indicator>{{ $step['number'] }}</flux:timeline.indicator>
-                            <flux:timeline.content>
-                                <flux:heading size="sm">{{ $step['title'] }}</flux:heading>
-                            </flux:timeline.content>
-                        </flux:timeline.item>
-                    @endforeach
-                </flux:timeline>
-            </flux:card>
         </div>
     </div>
 </div>

@@ -6,7 +6,6 @@ use App\Domain\Institutions\Legislature;
 use App\Domain\Institutions\ReviewGroup;
 use App\Domain\Reviews\Actions\CreatePlsReview;
 use App\Domain\Reviews\PlsReview;
-use App\Domain\Reviews\Support\PlsReviewWorkflow;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
@@ -40,7 +39,6 @@ class Create extends Component
             'selectedLegislature' => $selectedLegislature,
             'reviewGroups' => $availableReviewGroups,
             'selectedReviewGroup' => $this->resolveSelectedReviewGroup($availableReviewGroups),
-            'workflowSteps' => PlsReviewWorkflow::definitions(),
         ])->layout('layouts.app', [
             'title' => __('Create PLS Review'),
         ]);

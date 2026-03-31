@@ -89,6 +89,14 @@ test('review create page validates required fields', function () {
     expect(substr_count($component->html(), 'Enter the public-facing review title.'))->toBe(1);
 });
 
+test('review create page does not render the seeded workflow panel', function () {
+    $this->get(route('pls.reviews.create'))
+        ->assertOk()
+        ->assertSee('Institution preview')
+        ->assertDontSee('Seeded workflow')
+        ->assertDontSee('Every new review starts with the canonical 11-step post-legislative scrutiny workflow.');
+});
+
 test('review show route redirects to workflow route', function () {
     $review = plsReview();
 
@@ -144,8 +152,8 @@ test('review workflow page renders workflow details and supports step switching'
         ->assertSee($review->title)
         ->assertSee('Collaborators')
         ->assertSee('PLS Assistant')
-        ->assertSee('Step 1 of 11')
-        ->assertSee('9%')
+        ->assertSee('Define the objectives and scope of PLS')
+        ->assertSee('Analyse post-legislative scrutiny findings')
         ->assertSee('dark:bg-white', false)
         ->assertSee('bg-violet-50', false)
         ->assertSee('text-violet-900', false)
@@ -161,17 +169,19 @@ test('review workflow page renders workflow details and supports step switching'
         ->assertDontSee('dark:bg-violet-900', false);
 
     $component = Livewire::test(WorkflowPage::class, ['review' => $review])
-        ->assertSet('selectedStepNumber', 1)
-        ->call('selectStep', 6)
-        ->assertSet('selectedStepNumber', 6)
+        ->assertSee('Define the objectives and scope of PLS')
         ->assertSee('Analyse post-legislative scrutiny findings')
-        ->assertSee('Synthesize evidence into findings and identify the strongest recommendation themes.');
+        ->assertSee('Synthesize evidence into findings and identify the strongest recommendation themes.')
+        ->assertSee('Legislation linked')
+        ->assertSee('No notes recorded.');
 
     $html = $component->html();
 
-    expect($html)->toContain('Step 1 of 11')
-        ->and($html)->toContain('Best next area')
-        ->and(strpos($html, 'Best next area'))->toBeGreaterThan(strpos($html, 'Step 1 of 11'));
+    expect($html)->not->toContain('Best next area')
+        ->and($html)->not->toContain('Do next')
+        ->and($html)->not->toContain('Step 1 of 11')
+        ->and($html)->toContain('data-flux-accordion-item')
+        ->and($html)->not->toContain('wire:click="selectStep(');
 });
 
 test('all review section routes render inside the shared workspace shell', function () {
@@ -180,7 +190,7 @@ test('all review section routes render inside the shared workspace shell', funct
     ]);
 
     $routes = [
-        'pls.reviews.workflow' => 'Best next area',
+        'pls.reviews.workflow' => 'Define the objectives and scope of PLS',
         'pls.reviews.collaborators' => 'Collaborators',
         'pls.reviews.legislation' => 'No legislation linked to this review yet.',
         'pls.reviews.documents' => 'No documents linked to this review yet.',
@@ -198,4 +208,17 @@ test('all review section routes render inside the shared workspace shell', funct
             ->assertSee('Workflow')
             ->assertSee($expectedText);
     }
+});
+
+test('consultations page does not render the intake summary box', function () {
+    $review = plsReview([
+        'title' => 'Consultations workspace',
+    ]);
+
+    $this->get(route('pls.reviews.consultations', ['review' => $review->id]))
+        ->assertOk()
+        ->assertSee('Consultation activity')
+        ->assertSee('Submissions and evidence')
+        ->assertDontSee('Consultation and evidence intake')
+        ->assertDontSee('Keep planned engagement, completed activity, and written evidence in one workspace so the review team can trace participation back to the workflow.');
 });
