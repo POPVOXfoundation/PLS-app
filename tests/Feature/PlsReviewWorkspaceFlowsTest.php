@@ -22,6 +22,7 @@ use App\Models\User;
 use App\Support\PlsAssistant\AssistantSourceExtractionResult;
 use App\Support\PlsAssistant\AssistantSourceTextExtractor;
 use App\Support\PlsAssistant\AssistantSourceTextExtractorFactory;
+use App\Support\Toast;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -1230,7 +1231,10 @@ test('government responses can be recorded from the review workspace', function 
         ->call('storeGovernmentResponse')
         ->assertSet('showAddGovernmentResponseModal', false)
         ->assertHasNoErrors()
-        ->assertDispatched('review-workspace-updated', status: 'Government response recorded for this review.')
+        ->assertDispatched('review-workspace-updated', toast: Toast::success(
+            __('Response recorded'),
+            __('Government response recorded for this review.'),
+        ))
         ->assertSee('Response received')
         ->assertSee('Executive response memorandum');
 

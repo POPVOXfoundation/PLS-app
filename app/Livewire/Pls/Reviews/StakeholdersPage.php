@@ -9,6 +9,7 @@ use App\Domain\Stakeholders\Actions\UpdateStakeholder;
 use App\Domain\Stakeholders\Enums\ImplementingAgencyType;
 use App\Domain\Stakeholders\Enums\StakeholderType;
 use App\Domain\Stakeholders\Stakeholder;
+use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -156,7 +157,10 @@ class StakeholdersPage extends Workspace
         $this->resetStakeholderForm();
         $this->showEditStakeholderModal = false;
 
-        $this->dispatch('review-workspace-updated', status: __('Stakeholder updated.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Stakeholder updated'),
+            __('Stakeholder updated.'),
+        ));
     }
 
     public function storeStakeholder(StoreStakeholder $action): void
@@ -189,7 +193,10 @@ class StakeholdersPage extends Workspace
         $this->resetStakeholderForm();
         $this->showAddStakeholderModal = false;
 
-        $this->dispatch('review-workspace-updated', status: __('Stakeholder added to the review.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Stakeholder added'),
+            __('Stakeholder added to the review.'),
+        ));
     }
 
     public function storeImplementingAgency(StoreImplementingAgency $action): void
@@ -214,7 +221,10 @@ class StakeholdersPage extends Workspace
         $this->resetImplementingAgencyForm();
         $this->showAddImplementingAgencyModal = false;
 
-        $this->dispatch('review-workspace-updated', status: __('Implementing agency added to the review.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Implementing agency added'),
+            __('Implementing agency added to the review.'),
+        ));
     }
 
     public function removeStakeholder(int $stakeholderId): void
@@ -230,7 +240,10 @@ class StakeholdersPage extends Workspace
         $stakeholder->delete();
         $this->review = $this->loadReview();
 
-        $this->dispatch('review-workspace-updated', status: __('Stakeholder removed from the review.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Stakeholder removed'),
+            __('Stakeholder removed from the review.'),
+        ));
     }
 
     /**

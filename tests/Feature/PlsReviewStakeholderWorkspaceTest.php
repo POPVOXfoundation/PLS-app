@@ -5,6 +5,7 @@ use App\Domain\Stakeholders\Enums\StakeholderType;
 use App\Domain\Stakeholders\Stakeholder;
 use App\Livewire\Pls\Reviews\StakeholdersPage;
 use App\Models\User;
+use App\Support\Toast;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -34,6 +35,10 @@ test('stakeholders can be added and filtered from the review workspace', functio
         ->set('stakeholderEmail', 'info@laravel.com')
         ->set('stakeholderPhone', '+1-202-555-0113')
         ->call('storeStakeholder')
+        ->assertDispatched('review-workspace-updated', toast: Toast::success(
+            __('Stakeholder added'),
+            __('Stakeholder added to the review.'),
+        ))
         ->assertSet('showAddStakeholderModal', false)
         ->assertHasNoErrors()
         ->assertSee('Open Budget Coalition')

@@ -8,6 +8,7 @@ use App\Domain\Stakeholders\Enums\StakeholderType;
 use App\Domain\Stakeholders\Stakeholder;
 use App\Livewire\Pls\Reviews\ConsultationsPage;
 use App\Models\User;
+use App\Support\Toast;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -33,6 +34,10 @@ test('consultations can be created from the review workspace', function () {
         ->set('consultationDocumentId', (string) $document->id)
         ->set('consultationSummary', 'Review-group members heard evidence on implementation delays and citizen access problems.')
         ->call('storeConsultation')
+        ->assertDispatched('review-workspace-updated', toast: Toast::success(
+            __('Consultation added'),
+            __('Consultation activity added to the review.'),
+        ))
         ->assertHasNoErrors()
         ->assertSee('Public hearing on implementation obstacles');
 

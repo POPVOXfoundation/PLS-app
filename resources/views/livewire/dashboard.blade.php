@@ -4,12 +4,6 @@
 @endphp
 
 <div class="flex h-full w-full flex-1 flex-col gap-6">
-    @if (session('status'))
-        <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200">
-            {{ session('status') }}
-        </div>
-    @endif
-
     {{-- ── Header ── --}}
     <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div class="space-y-1">

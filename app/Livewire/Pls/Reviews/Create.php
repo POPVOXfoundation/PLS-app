@@ -6,6 +6,7 @@ use App\Domain\Institutions\Legislature;
 use App\Domain\Institutions\ReviewGroup;
 use App\Domain\Reviews\Actions\CreatePlsReview;
 use App\Domain\Reviews\PlsReview;
+use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
@@ -57,7 +58,10 @@ class Create extends Component
             'created_by' => auth()->id(),
         ]);
 
-        session()->flash('status', __('Review created and workflow steps seeded.'));
+        session()->flash('toast', Toast::success(
+            __('Review created'),
+            __('Review created and workflow steps seeded.'),
+        ));
 
         $this->redirectRoute('pls.reviews.workflow', ['review' => $review->id], navigate: true);
     }

@@ -12,6 +12,7 @@ use App\Domain\Legislation\Enums\LegislationType;
 use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
 use App\Domain\Legislation\Legislation;
 use App\Domain\Reviews\PlsReview;
+use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Storage;
@@ -126,11 +127,23 @@ class LegislationPage extends Workspace
         $this->resetValidation(['sourceUpload']);
         $this->review = $this->loadReview();
 
-        $this->dispatch('review-workspace-updated', status: match ($status) {
-            'processing' => __('Source added. Processing has started.'),
-            'needs_review' => __('Source added. It is ready for review.'),
-            'failed' => __('Source added, but it needs attention before it can be reviewed.'),
-            default => __('Source added.'),
+        $this->dispatchWorkspaceToast(match ($status) {
+            'processing' => Toast::warning(
+                __('Source added'),
+                __('Source added. Processing has started.'),
+            ),
+            'needs_review' => Toast::success(
+                __('Source added'),
+                __('Source added. It is ready for review.'),
+            ),
+            'failed' => Toast::warning(
+                __('Source added'),
+                __('Source added, but it needs attention before it can be reviewed.'),
+            ),
+            default => Toast::success(
+                __('Source added'),
+                __('Source added.'),
+            ),
         });
     }
 
@@ -185,7 +198,10 @@ class LegislationPage extends Workspace
 
         $this->resetSourceFlow();
 
-        $this->dispatch('review-workspace-updated', status: __('Legislation saved and linked to the review.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Legislation saved'),
+            __('Legislation saved and linked to the review.'),
+        ));
     }
 
     public function resetSourceFlow(): void
@@ -716,6 +732,9 @@ class LegislationPage extends Workspace
             $this->resetSourceFlow();
         }
 
-        $this->dispatch('review-workspace-updated', status: __('Source removed from records.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Source removed'),
+            __('Source removed from records.'),
+        ));
     }
 }

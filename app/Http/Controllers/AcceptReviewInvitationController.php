@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Domain\Reviews\PlsReviewInvitation;
+use App\Support\Toast;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -29,13 +30,19 @@ class AcceptReviewInvitationController extends Controller
         }
 
         if ($invitation->review->memberships()->where('user_id', $user->id)->exists()) {
-            return redirect()->route('pls.reviews.show', $invitation->review)
-                ->with('status', __('You already have access to this review.'));
+            return redirect()->route('pls.reviews.workflow', $invitation->review)
+                ->with('toast', Toast::warning(
+                    __('Access already granted'),
+                    __('You already have access to this review.'),
+                ));
         }
 
         $invitation->acceptFor($user);
 
-        return redirect()->route('pls.reviews.show', $invitation->review)
-            ->with('status', __('Invitation accepted. Welcome to the review.'));
+        return redirect()->route('pls.reviews.workflow', $invitation->review)
+            ->with('toast', Toast::success(
+                __('Invitation accepted'),
+                __('Invitation accepted. Welcome to the review.'),
+            ));
     }
 }

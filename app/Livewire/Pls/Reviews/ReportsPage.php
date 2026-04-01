@@ -13,6 +13,7 @@ use App\Domain\Reporting\Enums\ReportType;
 use App\Domain\Reporting\GovernmentResponse;
 use App\Domain\Reporting\Report;
 use App\Domain\Reviews\PlsReview;
+use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -157,7 +158,10 @@ class ReportsPage extends Workspace
         $this->resetReportForm();
         $this->showAddReportModal = false;
 
-        $this->dispatch('review-workspace-updated', status: __('Report record added to the review.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Report added'),
+            __('Report record added to the review.'),
+        ));
     }
 
     public function startEditingReport(int $reportId): void
@@ -221,7 +225,10 @@ class ReportsPage extends Workspace
         $this->resetReportForm();
         $this->showEditReportModal = false;
 
-        $this->dispatch('review-workspace-updated', status: __('Report updated.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Report updated'),
+            __('Report updated.'),
+        ));
     }
 
     public function confirmDeletion(string $type, int $id): void
@@ -294,7 +301,10 @@ class ReportsPage extends Workspace
         $this->resetGovernmentResponseForm();
         $this->showAddGovernmentResponseModal = false;
 
-        $this->dispatch('review-workspace-updated', status: __('Government response recorded for this review.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Response recorded'),
+            __('Government response recorded for this review.'),
+        ));
     }
 
     public function updatedGovernmentResponseStatus(string $responseStatus): void
@@ -479,7 +489,10 @@ class ReportsPage extends Workspace
             $this->showEditReportModal = false;
         }
 
-        $this->dispatch('review-workspace-updated', status: __('Report removed from the review.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Report removed'),
+            __('Report removed from the review.'),
+        ));
     }
 
     private function blankToNull(string $value): ?string

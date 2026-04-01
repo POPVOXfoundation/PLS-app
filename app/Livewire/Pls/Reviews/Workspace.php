@@ -25,12 +25,12 @@ class Workspace extends Component
     }
 
     #[On('review-workspace-updated')]
-    public function refreshReviewWorkspace(?string $status = null): void
+    public function refreshReviewWorkspace(?array $toast = null): void
     {
         $this->review = $this->review->fresh();
 
-        if ($status !== null && $status !== '') {
-            session()->flash('status', $status);
+        if ($toast !== null) {
+            $this->dispatchAppToast($toast);
         }
     }
 
@@ -143,5 +143,21 @@ class Workspace extends Component
                 'route' => 'pls.reviews.reports',
             ],
         ];
+    }
+
+    /**
+     * @param  array{heading: string, text: string, variant: 'success'|'warning'|'danger', duration: int}  $toast
+     */
+    protected function dispatchAppToast(array $toast): void
+    {
+        $this->dispatch('app-toast', ...$toast);
+    }
+
+    /**
+     * @param  array{heading: string, text: string, variant: 'success'|'warning'|'danger', duration: int}  $toast
+     */
+    protected function dispatchWorkspaceToast(array $toast): void
+    {
+        $this->dispatch('review-workspace-updated', toast: $toast);
     }
 }

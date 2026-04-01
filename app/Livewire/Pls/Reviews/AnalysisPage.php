@@ -9,6 +9,7 @@ use App\Domain\Analysis\Actions\UpdateRecommendation;
 use App\Domain\Analysis\Enums\FindingType;
 use App\Domain\Analysis\Enums\RecommendationType;
 use App\Domain\Reviews\PlsReview;
+use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Validation\ValidationException;
@@ -107,7 +108,10 @@ class AnalysisPage extends Workspace
         $this->resetFindingForm();
         $this->showAddFindingModal = false;
 
-        $this->dispatch('review-workspace-updated', status: __('Finding added to the review.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Finding added'),
+            __('Finding added to the review.'),
+        ));
     }
 
     public function startEditingFinding(int $findingId): void
@@ -167,7 +171,10 @@ class AnalysisPage extends Workspace
         $this->resetFindingForm();
         $this->showEditFindingModal = false;
 
-        $this->dispatch('review-workspace-updated', status: __('Finding updated.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Finding updated'),
+            __('Finding updated.'),
+        ));
     }
 
     public function storeRecommendation(StoreRecommendation $action): void
@@ -196,7 +203,10 @@ class AnalysisPage extends Workspace
         $this->resetRecommendationForm();
         $this->js("window.Flux.modal('add-analysis-recommendation').close()");
 
-        $this->dispatch('review-workspace-updated', status: __('Recommendation added to the review.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Recommendation added'),
+            __('Recommendation added to the review.'),
+        ));
     }
 
     public function startEditingRecommendation(int $recommendationId): void
@@ -256,7 +266,10 @@ class AnalysisPage extends Workspace
         $this->resetRecommendationForm();
         $this->showEditRecommendationModal = false;
 
-        $this->dispatch('review-workspace-updated', status: __('Recommendation updated.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Recommendation updated'),
+            __('Recommendation updated.'),
+        ));
     }
 
     public function confirmDeletion(string $type, int $id): void
@@ -319,7 +332,10 @@ class AnalysisPage extends Workspace
             $this->showEditFindingModal = false;
         }
 
-        $this->dispatch('review-workspace-updated', status: __('Finding removed from the review.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Finding removed'),
+            __('Finding removed from the review.'),
+        ));
     }
 
     private function performRecommendationDeletion(int $recommendationId): void
@@ -340,7 +356,10 @@ class AnalysisPage extends Workspace
             $this->showEditRecommendationModal = false;
         }
 
-        $this->dispatch('review-workspace-updated', status: __('Recommendation removed from the review.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Recommendation removed'),
+            __('Recommendation removed from the review.'),
+        ));
     }
 
     private function blankToNull(string $value): ?string

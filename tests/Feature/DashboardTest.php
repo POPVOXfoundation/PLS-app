@@ -20,6 +20,7 @@ test('authenticated users can visit the dashboard', function () {
         ->assertOk()
         ->assertSee(config('app.name'))
         ->assertSee('Dashboard')
+        ->assertSee('x-on:app-toast.window', false)
         ->assertSee(route('dashboard'), false)
         ->assertSee(route('pls.reviews.index'), false)
         ->assertSee('New review')

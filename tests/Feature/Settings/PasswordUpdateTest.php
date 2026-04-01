@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Support\Toast;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
 
@@ -15,7 +16,11 @@ test('password can be updated', function () {
         ->set('current_password', 'password')
         ->set('password', 'new-password')
         ->set('password_confirmation', 'new-password')
-        ->call('updatePassword');
+        ->call('updatePassword')
+        ->assertDispatched('app-toast', ...Toast::success(
+            __('Password saved'),
+            __('Your password has been updated.'),
+        ));
 
     $response->assertHasNoErrors();
 

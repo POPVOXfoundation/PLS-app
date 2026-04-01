@@ -7,6 +7,7 @@ use App\Domain\Reviews\PlsReview;
 use App\Domain\Reviews\PlsReviewMembership;
 use App\Models\User;
 use App\Notifications\ReviewInvitationNotification;
+use App\Support\Toast;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\Rule;
@@ -117,7 +118,10 @@ class CollaboratorsPage extends Workspace
                 'invited_by' => auth()->id(),
             ]);
 
-            $statusMessage = __('Access granted.');
+            $toast = Toast::success(
+                __('Access granted'),
+                __('Access granted.'),
+            );
         } else {
             $alreadyInvited = $this->review->pendingInvitations()
                 ->where('email', $this->inviteCollaboratorEmail)
@@ -138,7 +142,10 @@ class CollaboratorsPage extends Workspace
             Notification::route('mail', $invitation->email)
                 ->notify(new ReviewInvitationNotification($invitation));
 
-            $statusMessage = __('Invitation sent.');
+            $toast = Toast::success(
+                __('Invitation sent'),
+                __('Invitation sent.'),
+            );
         }
 
         $this->review = $this->loadReview();
@@ -148,7 +155,7 @@ class CollaboratorsPage extends Workspace
         $this->emailMatches = [];
         $this->resetValidation(['inviteCollaboratorEmail', 'inviteCollaboratorRole']);
 
-        $this->dispatch('review-workspace-updated', status: $statusMessage);
+        $this->dispatchWorkspaceToast($toast);
     }
 
     public function updateCollaboratorRole(int $membershipId): void
@@ -175,7 +182,10 @@ class CollaboratorsPage extends Workspace
         $this->review = $this->loadReview();
         $this->syncCollaboratorRoles($this->review, true);
 
-        $this->dispatch('review-workspace-updated', status: __('Collaborator role updated.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Collaborator updated'),
+            __('Collaborator role updated.'),
+        ));
     }
 
     public function removeCollaborator(int $membershipId): void
@@ -194,7 +204,10 @@ class CollaboratorsPage extends Workspace
         $this->review = $this->loadReview();
         $this->syncCollaboratorRoles($this->review, true);
 
-        $this->dispatch('review-workspace-updated', status: __('Collaborator removed from this review.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Collaborator removed'),
+            __('Collaborator removed from this review.'),
+        ));
     }
 
     public function revokeInvitation(int $invitationId): void
@@ -211,7 +224,10 @@ class CollaboratorsPage extends Workspace
 
         $this->review = $this->loadReview();
 
-        $this->dispatch('review-workspace-updated', status: __('Invitation revoked.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Invitation revoked'),
+            __('Invitation revoked.'),
+        ));
     }
 
     private function loadReview(): PlsReview

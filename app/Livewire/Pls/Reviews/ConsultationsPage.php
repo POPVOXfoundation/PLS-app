@@ -10,6 +10,7 @@ use App\Domain\Consultations\Enums\ConsultationType;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Reviews\PlsReview;
+use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
@@ -155,7 +156,10 @@ class ConsultationsPage extends Workspace
         $this->resetConsultationForm();
         $this->showAddConsultationModal = false;
 
-        $this->dispatch('review-workspace-updated', status: __('Consultation activity added to the review.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Consultation added'),
+            __('Consultation activity added to the review.'),
+        ));
     }
 
     public function startEditingConsultation(int $consultationId): void
@@ -220,7 +224,10 @@ class ConsultationsPage extends Workspace
         $this->resetConsultationForm();
         $this->showEditConsultationModal = false;
 
-        $this->dispatch('review-workspace-updated', status: __('Consultation activity updated.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Consultation updated'),
+            __('Consultation activity updated.'),
+        ));
     }
 
     public function storeSubmission(StoreSubmission $action): void
@@ -249,7 +256,10 @@ class ConsultationsPage extends Workspace
         $this->resetSubmissionForm();
         $this->showAddSubmissionModal = false;
 
-        $this->dispatch('review-workspace-updated', status: __('Submission logged for this review.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Submission logged'),
+            __('Submission logged for this review.'),
+        ));
     }
 
     /**

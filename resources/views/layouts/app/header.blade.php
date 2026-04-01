@@ -78,6 +78,21 @@
             <flux:main class="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-[1600px] flex-col px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
                 {{ $slot }}
             </flux:main>
+
+            @persist('toast')
+                <div x-data x-on:app-toast.window="$flux.toast($event.detail.toast ?? $event.detail)">
+                    <flux:toast.group position="top end" class="pt-20 sm:pt-24">
+                        <flux:toast />
+                    </flux:toast.group>
+                </div>
+            @endpersist
+
+            @if (session()->has('toast'))
+                <div
+                    x-data
+                    x-init="queueMicrotask(() => window.dispatchEvent(new CustomEvent('app-toast', { detail: @js(session('toast')) })))"
+                ></div>
+            @endif
         </div>
 
         @fluxScripts

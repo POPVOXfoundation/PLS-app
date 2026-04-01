@@ -1,11 +1,5 @@
 <x-layouts::app.header :title="$title ?? null">
     <div class="flex h-full w-full flex-1 flex-col gap-4">
-        @if (session('status'))
-            <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200">
-                {{ session('status') }}
-            </div>
-        @endif
-
         <div class="grid flex-1 gap-6 xl:grid-cols-[11rem_minmax(0,1fr)] 2xl:grid-cols-[12rem_minmax(0,1fr)]">
             <aside class="xl:sticky xl:top-24 xl:self-start">
                 <nav aria-label="{{ __('Review sections') }}" class="border-s border-zinc-200 ps-3 dark:border-zinc-200">

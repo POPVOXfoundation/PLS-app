@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Support\PlsAssistant\AssistantSourceExtractionResult;
 use App\Support\PlsAssistant\AssistantSourceTextExtractor;
 use App\Support\PlsAssistant\AssistantSourceTextExtractorFactory;
+use App\Support\Toast;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -454,7 +455,11 @@ test('invitation accept flow creates membership with correct role', function () 
 
     $this->actingAs($invitee)
         ->get(route('pls.invitations.accept', ['token' => $invitation->token]))
-        ->assertRedirect();
+        ->assertRedirect(route('pls.reviews.workflow', ['review' => $review]))
+        ->assertSessionHas('toast', Toast::success(
+            __('Invitation accepted'),
+            __('Invitation accepted. Welcome to the review.'),
+        ));
 
     $this->assertDatabaseHas('pls_review_memberships', [
         'pls_review_id' => $review->id,
@@ -463,6 +468,34 @@ test('invitation accept flow creates membership with correct role', function () 
     ]);
 
     expect($invitation->fresh()->accepted_at)->not->toBeNull();
+});
+
+test('existing collaborators receive a warning toast when accepting an invitation again', function () {
+    $owner = User::factory()->reviewer()->create();
+    $invitee = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    $review->memberships()->create([
+        'user_id' => $invitee->id,
+        'role' => PlsReviewMembershipRole::Viewer->value,
+        'invited_by' => $owner->id,
+    ]);
+
+    $invitation = $review->invitations()->create([
+        'email' => $invitee->email,
+        'role' => PlsReviewMembershipRole::Viewer->value,
+        'invited_by' => $owner->id,
+    ]);
+
+    $this->actingAs($invitee)
+        ->get(route('pls.invitations.accept', ['token' => $invitation->token]))
+        ->assertRedirect(route('pls.reviews.workflow', ['review' => $review]))
+        ->assertSessionHas('toast', Toast::warning(
+            __('Access already granted'),
+            __('You already have access to this review.'),
+        ));
 });
 
 test('accepted invitation cannot be reused', function () {

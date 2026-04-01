@@ -14,6 +14,7 @@ use App\Domain\Reviews\PlsReview;
 use App\Livewire\Pls\Reviews\Create as CreateReviewPage;
 use App\Livewire\Pls\Reviews\WorkflowPage;
 use App\Models\User;
+use App\Support\Toast;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -54,6 +55,10 @@ test('review can be created from the create page without a review group', functi
     expect($review->country_id)->toBe($legislature->jurisdiction->country_id);
     expect($review->steps()->count())->toBe(11);
     expect($review->memberships()->where('user_id', auth()->id())->firstOrFail()->role)->toBe(PlsReviewMembershipRole::Owner);
+    expect(session()->get('toast'))->toBe(Toast::success(
+        'Review created',
+        'Review created and workflow steps seeded.',
+    ));
     $response->assertRedirect(route('pls.reviews.workflow', ['review' => $review->id]));
 });
 

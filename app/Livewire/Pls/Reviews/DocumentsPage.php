@@ -9,6 +9,7 @@ use App\Domain\Documents\Actions\UpdateReviewDocument;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Reviews\PlsReview;
+use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Storage;
@@ -139,11 +140,23 @@ class DocumentsPage extends Workspace
         $this->resetValidation(['documentUploads', 'documentUploads.*']);
         $this->review = $this->loadReview();
 
-        $this->dispatch('review-workspace-updated', status: match (true) {
-            $statuses === [] => __('No documents were uploaded.'),
-            in_array('needs_attention', $statuses, true) => __('Documents uploaded. Some records need attention.'),
-            in_array('processing', $statuses, true) => __('Documents uploaded. Processing has started.'),
-            default => __('Documents uploaded and analyzed.'),
+        $this->dispatchWorkspaceToast(match (true) {
+            $statuses === [] => Toast::warning(
+                __('Upload skipped'),
+                __('No documents were uploaded.'),
+            ),
+            in_array('needs_attention', $statuses, true) => Toast::warning(
+                __('Documents uploaded'),
+                __('Documents uploaded. Some records need attention.'),
+            ),
+            in_array('processing', $statuses, true) => Toast::warning(
+                __('Documents uploaded'),
+                __('Documents uploaded. Processing has started.'),
+            ),
+            default => Toast::success(
+                __('Documents uploaded'),
+                __('Documents uploaded and analyzed.'),
+            ),
         });
     }
 
@@ -200,7 +213,10 @@ class DocumentsPage extends Workspace
 
         $this->resetDocumentState();
 
-        $this->dispatch('review-workspace-updated', status: __('Document updated.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Document updated'),
+            __('Document updated.'),
+        ));
     }
 
     public function retryDocumentAnalysis(int $documentId): void
@@ -225,10 +241,19 @@ class DocumentsPage extends Workspace
             }
         }
 
-        $this->dispatch('review-workspace-updated', status: match ($status) {
-            'processing' => __('Document retry started. Processing continues in the background.'),
-            'saved' => __('Document analysis completed successfully.'),
-            default => __('Document still needs attention after retry.'),
+        $this->dispatchWorkspaceToast(match ($status) {
+            'processing' => Toast::warning(
+                __('Retry started'),
+                __('Document retry started. Processing continues in the background.'),
+            ),
+            'saved' => Toast::success(
+                __('Analysis completed'),
+                __('Document analysis completed successfully.'),
+            ),
+            default => Toast::warning(
+                __('Needs attention'),
+                __('Document still needs attention after retry.'),
+            ),
         });
     }
 
@@ -599,7 +624,10 @@ class DocumentsPage extends Workspace
             $this->resetDocumentState();
         }
 
-        $this->dispatch('review-workspace-updated', status: __('Document removed from the review.'));
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Document removed'),
+            __('Document removed from the review.'),
+        ));
     }
 
     private function resetDocumentState(): void

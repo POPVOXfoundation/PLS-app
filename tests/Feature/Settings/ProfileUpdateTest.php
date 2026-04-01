@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Support\Toast;
 use Livewire\Livewire;
 
 test('profile page is displayed', function () {
@@ -17,7 +18,11 @@ test('profile information can be updated', function () {
     $response = Livewire::test('pages::settings.profile')
         ->set('name', 'Test User')
         ->set('email', 'test@example.com')
-        ->call('updateProfileInformation');
+        ->call('updateProfileInformation')
+        ->assertDispatched('app-toast', ...Toast::success(
+            __('Profile saved'),
+            __('Your profile changes have been saved.'),
+        ));
 
     $response->assertHasNoErrors();
 
@@ -36,7 +41,11 @@ test('email verification status is unchanged when email address is unchanged', f
     $response = Livewire::test('pages::settings.profile')
         ->set('name', 'Test User')
         ->set('email', $user->email)
-        ->call('updateProfileInformation');
+        ->call('updateProfileInformation')
+        ->assertDispatched('app-toast', ...Toast::success(
+            __('Profile saved'),
+            __('Your profile changes have been saved.'),
+        ));
 
     $response->assertHasNoErrors();
 
