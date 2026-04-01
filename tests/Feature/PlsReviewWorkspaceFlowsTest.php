@@ -465,7 +465,7 @@ test('workspace guidance reflects the current workflow step', function () {
     ])->save();
 
     Livewire::test(WorkflowPage::class, ['review' => $review->fresh()])
-        ->assertSee('Track what happens after publication')
-        ->assertSee('Best next area: Reports')
-        ->assertSee('Keep the report record current and log any response request, reply, or overdue follow-up.');
+        ->assertSee('Invite a response from the government to "comply or explain"')
+        ->assertSee('Current')
+        ->assertSee('Monitor whether the executive has responded and whether commitments are on record.');
 });

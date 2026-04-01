@@ -1,8 +1,3 @@
-@php
-    $currentAssistantContext = $assistantWorkspaceContext[$currentWorkspaceKey] ?? $assistantWorkspaceContext['workflow'];
-    $currentWorkspace = collect($workspaceNavigation)->firstWhere('key', $currentWorkspaceKey) ?? $workspaceNavigation[0];
-@endphp
-
 <x-layouts::app.header :title="$title ?? null">
     <div class="flex h-full w-full flex-1 flex-col gap-4">
         @if (session('status'))
@@ -63,53 +58,17 @@
                     </div>
                 </header>
 
-                <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_21rem]">
+                <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] 2xl:grid-cols-[minmax(0,1fr)_26rem]">
                     <main class="min-w-0 space-y-6">
                         {{ $slot }}
                     </main>
 
                     <aside class="xl:sticky xl:top-24 xl:self-start">
-                        <div class="flex flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white dark:border-zinc-200 dark:bg-white">
-                            <div class="flex items-start justify-between gap-3 border-b border-zinc-200/80 px-5 py-4 dark:border-zinc-800">
-                                <div>
-                                    <flux:heading size="base">{{ __('PLS Assistant') }}</flux:heading>
-                                    <flux:text class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                        {{ $currentWorkspace['label'] }}
-                                    </flux:text>
-                                </div>
-                            </div>
-
-                            {{-- Chat area --}}
-                            <div class="flex-1 space-y-4 px-5 py-5">
-                                <div class="max-w-[92%] rounded-2xl rounded-tl-md border border-violet-200 bg-violet-50 px-4 py-3 text-sm leading-relaxed text-violet-900 dark:border-violet-200 dark:bg-violet-50 dark:text-violet-900">
-                                    <p class="font-medium">{{ $currentAssistantContext['title'] }}</p>
-                                    <p class="mt-2">{{ $currentAssistantContext['text'] }}</p>
-                                </div>
-                            </div>
-
-                            {{-- Suggestions + input --}}
-                            <div class="border-t border-zinc-200/80 px-4 py-3 dark:border-zinc-800">
-                                <div class="space-y-2 pb-3">
-                                    @foreach ($currentAssistantContext['prompts'] as $prompt)
-                                        <button
-                                            type="button"
-                                            class="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-left text-xs font-medium text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-200 dark:bg-white dark:text-zinc-600 dark:hover:border-zinc-300 dark:hover:bg-zinc-50"
-                                        >
-                                            {{ $prompt }}
-                                        </button>
-                                    @endforeach
-                                </div>
-
-                                <div class="flex items-center gap-2">
-                                    <div class="flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 dark:border-zinc-200 dark:bg-zinc-50">
-                                        <p class="text-sm text-zinc-400 dark:text-zinc-400">
-                                            {{ __('Ask about this workspace...') }}
-                                        </p>
-                                    </div>
-                                    <flux:button variant="primary" size="sm" icon="paper-airplane" disabled />
-                                </div>
-                            </div>
-                        </div>
+                        <livewire:pls.reviews.assistant-sidebar
+                            :review="$review"
+                            :workspace-key="$currentWorkspaceKey"
+                            :wire:key="'assistant-'.$review->getKey().'-'.$currentWorkspaceKey"
+                        />
                     </aside>
                 </div>
             </div>

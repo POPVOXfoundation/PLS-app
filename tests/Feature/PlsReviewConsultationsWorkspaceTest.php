@@ -26,7 +26,7 @@ test('consultations can be created from the review workspace', function () {
     ]);
 
     Livewire::test(ConsultationsPage::class, ['review' => $review])
-        ->assertSee('Consultation and evidence intake')
+        ->assertSee('Consultation activity')
         ->set('consultationTitle', 'Public hearing on implementation obstacles')
         ->set('consultationType', ConsultationType::Hearing->value)
         ->set('consultationHeldAt', '2026-03-11')

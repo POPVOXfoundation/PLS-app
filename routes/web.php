@@ -14,7 +14,7 @@ use App\Livewire\Pls\Reviews\StakeholdersPage;
 use App\Livewire\Pls\Reviews\WorkflowPage;
 use Illuminate\Support\Facades\Route;
 
-Route::view('/', 'welcome')->name('home');
+Route::redirect('/', '/login')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', Dashboard::class)->name('dashboard');

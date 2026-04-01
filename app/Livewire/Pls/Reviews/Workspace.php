@@ -42,7 +42,6 @@ class Workspace extends Component
 
     /**
      * @return array{
-     *     assistantWorkspaceContext: array<string, array{title: string, text: string, prompts: list<string>}>,
      *     currentWorkspaceKey: string,
      *     review: PlsReview,
      *     title: string,
@@ -53,7 +52,6 @@ class Workspace extends Component
     protected function workspaceLayoutData(PlsReview $review): array
     {
         return [
-            'assistantWorkspaceContext' => $this->assistantWorkspaceContext(),
             'currentWorkspaceKey' => $this->workspace,
             'review' => $review,
             'title' => $review->title,
@@ -192,87 +190,6 @@ class Workspace extends Component
                 'label' => __('Reports'),
                 'icon' => 'clipboard-document-list',
                 'route' => 'pls.reviews.reports',
-            ],
-        ];
-    }
-
-    /**
-     * @return array<string, array{title: string, text: string, prompts: list<string>}>
-     */
-    public function assistantWorkspaceContext(): array
-    {
-        return [
-            'workflow' => [
-                'title' => __('Keep the review moving'),
-                'text' => __('Use the assistant to summarize the current step, turn status into next actions, or draft quick team updates.'),
-                'prompts' => [
-                    __('Summarize the current step and what should happen next.'),
-                    __('Draft a checklist for the current step.'),
-                    __('Turn the workflow status into a short collaborator update.'),
-                ],
-            ],
-            'collaborators' => [
-                'title' => __('Coordinate review access'),
-                'text' => __('Use the assistant to summarize roles, access decisions, and onboarding notes for the review team.'),
-                'prompts' => [
-                    __('Summarize who currently has access to this review.'),
-                    __('Draft an onboarding note for a new collaborator.'),
-                    __('List the access decisions that still need an owner.'),
-                ],
-            ],
-            'legislation' => [
-                'title' => __('Ground the review in the law'),
-                'text' => __('Use the assistant to summarize linked legislation, compare scope records, or draft plain-language legal briefs.'),
-                'prompts' => [
-                    __('Summarize the legislation already linked to this review.'),
-                    __('Draft a plain-language scope note for the team.'),
-                    __('List the legal records that still look incomplete.'),
-                ],
-            ],
-            'documents' => [
-                'title' => __('Work from the review record'),
-                'text' => __('Use the assistant to outline evidence packs, summarize uploaded material, or identify obvious document gaps.'),
-                'prompts' => [
-                    __('Summarize the working documents attached so far.'),
-                    __('List the missing documents the team may still need.'),
-                    __('Draft a briefing note from the current document set.'),
-                ],
-            ],
-            'stakeholders' => [
-                'title' => __('Track who matters to the review'),
-                'text' => __('Use the assistant to organize outreach priorities, summarize stakeholder coverage, or draft contact plans.'),
-                'prompts' => [
-                    __('Summarize the stakeholder groups already mapped.'),
-                    __('Draft an outreach plan for priority stakeholders.'),
-                    __('List which records still need contact detail or evidence.'),
-                ],
-            ],
-            'consultations' => [
-                'title' => __('Synthesize engagement activity'),
-                'text' => __('Use the assistant to summarize consultation activity, extract themes from submissions, or prepare hearing notes.'),
-                'prompts' => [
-                    __('Summarize the consultation activity completed so far.'),
-                    __('List the strongest themes emerging from submissions.'),
-                    __('Draft a short hearing brief from the current record.'),
-                ],
-            ],
-            'analysis' => [
-                'title' => __('Turn evidence into findings'),
-                'text' => __('Use the assistant to cluster evidence themes, tighten recommendation language, or prepare concise analysis summaries.'),
-                'prompts' => [
-                    __('Summarize the strongest findings and recommendations so far.'),
-                    __('Group the current findings into three themes.'),
-                    __('Draft sharper wording for the existing recommendations.'),
-                ],
-            ],
-            'reports' => [
-                'title' => __('Support report drafting and follow-up'),
-                'text' => __('Use the assistant to summarize publication status, draft executive summaries, or outline response follow-up.'),
-                'prompts' => [
-                    __('Summarize the current report and response status.'),
-                    __('Draft an executive summary from the report record.'),
-                    __('List the follow-up actions tied to published reports.'),
-                ],
             ],
         ];
     }

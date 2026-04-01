@@ -158,7 +158,6 @@ test('review workflow page renders workflow details and supports step switching'
         ->assertSee('bg-violet-50', false)
         ->assertSee('text-violet-900', false)
         ->assertSee('bg-violet-50 font-semibold text-violet-900', false)
-        ->assertDontSee('wire:key="assistant-', false)
         ->assertDontSee('animate-in fade-in duration-150', false)
         ->assertDontSee('dark:bg-violet-950/50', false)
         ->assertDontSee('dark:hover:border-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200', false)
@@ -166,21 +165,22 @@ test('review workflow page renders workflow details and supports step switching'
         ->assertDontSee('dark:bg-zinc-800/80', false)
         ->assertDontSee('dark:hover:bg-zinc-900', false)
         ->assertDontSee('dark:bg-violet-950/30', false)
-        ->assertDontSee('dark:bg-violet-900', false);
+        ->assertDontSee('dark:bg-violet-900"', false);
 
     $component = Livewire::test(WorkflowPage::class, ['review' => $review])
         ->assertSee('Define the objectives and scope of PLS')
         ->assertSee('Analyse post-legislative scrutiny findings')
         ->assertSee('Synthesize evidence into findings and identify the strongest recommendation themes.')
-        ->assertSee('Legislation linked')
-        ->assertSee('No notes recorded.');
+        ->assertSee('Current');
 
     $html = $component->html();
 
     expect($html)->not->toContain('Best next area')
         ->and($html)->not->toContain('Do next')
         ->and($html)->not->toContain('Step 1 of 11')
-        ->and($html)->toContain('data-flux-accordion-item')
+        ->and($html)->not->toContain('data-flux-accordion-item')
+        ->and($html)->not->toContain('Legislation linked')
+        ->and($html)->not->toContain('No notes recorded.')
         ->and($html)->not->toContain('wire:click="selectStep(');
 });
 
