@@ -198,6 +198,8 @@ class DocumentsPage extends Workspace
             $this->fillDocumentState($document);
         }
 
+        $this->resetDocumentState();
+
         $this->dispatch('review-workspace-updated', status: __('Document updated.'));
     }
 

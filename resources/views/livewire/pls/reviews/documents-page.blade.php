@@ -96,45 +96,68 @@
                 {{ __('No documents linked to this review yet.') }}
             </flux:text>
         @else
-            <flux:table>
-                <flux:table.columns>
-                    <flux:table.column>{{ __('Title') }}</flux:table.column>
-                    <flux:table.column>{{ __('Type') }}</flux:table.column>
-                    <flux:table.column>{{ __('Status') }}</flux:table.column>
-                    <flux:table.column>{{ __('Updated') }}</flux:table.column>
-                    <flux:table.column align="end" class="w-44">{{ __('Actions') }}</flux:table.column>
-                </flux:table.columns>
-                <flux:table.rows>
-                    @foreach ($recordRows as $row)
-                        <flux:table.row :key="$row['id']">
-                            <flux:table.cell variant="strong">
-                                {{ $row['title'] }}
-                                @if ($row['summary'] !== '')
-                                    <flux:text class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                                        {{ \Illuminate\Support\Str::limit($row['summary'], 100) }}
-                                    </flux:text>
-                                @endif
-                            </flux:table.cell>
-                            <flux:table.cell>
-                                <flux:badge size="sm">{{ $row['document_type'] }}</flux:badge>
-                            </flux:table.cell>
-                            <flux:table.cell>
-                                <flux:badge size="sm" :color="$row['status_color']">{{ $row['status_label'] }}</flux:badge>
-                            </flux:table.cell>
-                            <flux:table.cell>{{ $row['updated_at'] }}</flux:table.cell>
-                            <flux:table.cell>
-                                <div class="flex min-w-40 items-center justify-end gap-1">
-                                    @can('update', $review)
-                                        @if ($row['status'] !== 'processing')
-                                            <flux:button
-                                                size="sm"
-                                                variant="subtle"
-                                                wire:click="startEditingDocument({{ $row['id'] }})"
-                                            >
-                                                {{ $row['status'] === 'saved' ? __('Inspect/Edit') : __('Inspect') }}
-                                            </flux:button>
-                                        @endif
+            <div class="space-y-3">
+                @foreach ($recordRows as $row)
+                    <div
+                        wire:key="document-record-{{ $row['id'] }}"
+                        class="rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm shadow-zinc-950/5 dark:border-zinc-800 dark:bg-zinc-950/40"
+                    >
+                        <div class="space-y-1">
+                            <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1">
+                                <flux:heading size="sm" class="break-words text-base/tight text-zinc-900 dark:text-white">
+                                    {{ $row['title'] }}
+                                </flux:heading>
 
+                                @can('update', $review)
+                                    <div class="flex items-center gap-2 self-center justify-self-end">
+                                        @if ($row['status'] !== 'processing')
+                                            <flux:button.group>
+                                                <flux:button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    icon="pencil-square"
+                                                    wire:click="startEditingDocument({{ $row['id'] }})"
+                                                />
+
+                                                <flux:modal.trigger name="confirm-document-delete">
+                                                    <flux:button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        icon="trash"
+                                                        x-on:click="setDeleteConfirmation({{ $row['id'] }}, @js($row['title']), @js(__('document')))"
+                                                    />
+                                                </flux:modal.trigger>
+                                            </flux:button.group>
+                                        @else
+                                            <flux:modal.trigger name="confirm-document-delete">
+                                                <flux:button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    icon="trash"
+                                                    x-on:click="setDeleteConfirmation({{ $row['id'] }}, @js($row['title']), @js(__('document')))"
+                                                />
+                                            </flux:modal.trigger>
+                                        @endif
+                                    </div>
+                                @endcan
+                            </div>
+
+                            @if ($row['summary'] !== '')
+                                <flux:text class="-mt-1 max-w-5xl text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                                    {{ \Illuminate\Support\Str::limit($row['summary'], 220) }}
+                                </flux:text>
+                            @endif
+
+                            <div class="mt-3 flex flex-col gap-3 border-t border-zinc-200/80 pt-3 dark:border-zinc-800/80 sm:flex-row sm:items-center sm:justify-between">
+                                <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
+                                    {{ __('Updated :date', ['date' => $row['updated_at']]) }}
+                                </flux:text>
+
+                                <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+                                    <flux:badge size="sm">{{ $row['document_type'] }}</flux:badge>
+                                    <flux:badge size="sm" :color="$row['status_color']">{{ $row['status_label'] }}</flux:badge>
+
+                                    @can('update', $review)
                                         @if ($row['status'] === 'needs_attention')
                                             <flux:button
                                                 size="sm"
@@ -144,39 +167,35 @@
                                                 {{ __('Retry') }}
                                             </flux:button>
                                         @endif
-
-                                        <flux:modal.trigger name="confirm-document-delete">
-                                            <flux:button
-                                                variant="ghost"
-                                                size="sm"
-                                                icon="trash"
-                                                x-on:click="setDeleteConfirmation({{ $row['id'] }}, @js($row['title']), @js(__('document')))"
-                                            />
-                                        </flux:modal.trigger>
                                     @endcan
                                 </div>
-                            </flux:table.cell>
-                        </flux:table.row>
-                    @endforeach
-                </flux:table.rows>
-            </flux:table>
+                            </div>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
         @endif
     </flux:card>
 
-    <flux:modal wire:model.self="showEditDocumentModal" class="!max-w-[52rem] w-[calc(100vw-2rem)] lg:!w-[52rem]">
+    <flux:modal wire:model.self="showEditDocumentModal" scroll="body" class="!max-w-[56rem] w-[calc(100vw-2rem)] lg:!w-[56rem]">
         <form wire:submit="saveDocumentEdits" class="space-y-6">
-            <div class="flex items-start justify-between gap-4">
+            <div class="space-y-3">
                 <div class="space-y-2">
-                    <flux:heading size="lg">{{ __('Inspect document record') }}</flux:heading>
+                    <flux:heading size="lg">{{ __('Review document details') }}</flux:heading>
                     <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                        {{ __('Correct the saved document fields while keeping the AI review details visible for reference.') }}
+                        {{ __('Adjust the saved title, type, or summary if anything needs cleanup.') }}
                     </flux:text>
                 </div>
 
                 @if ($analysisStatus !== '')
-                    <flux:badge size="sm" :color="$analysisStatus === 'needs_attention' ? 'rose' : ($analysisStatus === 'processing' ? 'sky' : 'emerald')">
-                        {{ $analysisStatus === 'needs_attention' ? __('Needs attention') : ($analysisStatus === 'processing' ? __('Processing') : __('Saved')) }}
-                    </flux:badge>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <flux:badge size="sm" :color="$analysisStatus === 'needs_attention' ? 'rose' : ($analysisStatus === 'processing' ? 'sky' : 'emerald')">
+                            {{ $analysisStatus === 'needs_attention' ? __('Needs attention') : ($analysisStatus === 'processing' ? __('Processing') : __('Saved')) }}
+                        </flux:badge>
+                        <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                            {{ __('AI notes are shown below for reference while you edit.') }}
+                        </flux:text>
+                    </div>
                 @endif
             </div>
 
@@ -202,18 +221,33 @@
 
             <flux:textarea wire:model="documentSummary" :invalid="$errors->has('documentSummary')" :label="__('Summary')" rows="4" />
 
-            <div class="grid gap-4 lg:grid-cols-3">
-                <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
-                    <flux:heading size="sm">{{ __('Themes') }}</flux:heading>
-                    @if ($analysisKeyThemes === [])
-                        <flux:text class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{{ __('No themes extracted.') }}</flux:text>
-                    @else
-                        <div class="mt-3 flex flex-wrap gap-2">
-                            @foreach ($analysisKeyThemes as $theme)
-                                <flux:badge size="sm">{{ $theme }}</flux:badge>
-                            @endforeach
-                        </div>
-                    @endif
+            <div class="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
+                <div class="space-y-4">
+                    <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+                        <flux:heading size="sm">{{ __('Themes') }}</flux:heading>
+                        @if ($analysisKeyThemes === [])
+                            <flux:text class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{{ __('No themes extracted.') }}</flux:text>
+                        @else
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                @foreach ($analysisKeyThemes as $theme)
+                                    <flux:badge size="sm">{{ $theme }}</flux:badge>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+
+                    <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+                        <flux:heading size="sm">{{ __('Dates mentioned') }}</flux:heading>
+                        @if ($analysisImportantDates === [])
+                            <flux:text class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{{ __('No dates extracted.') }}</flux:text>
+                        @else
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                @foreach ($analysisImportantDates as $date)
+                                    <flux:badge size="sm">{{ $date }}</flux:badge>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
                 </div>
 
                 <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
@@ -223,20 +257,9 @@
                     @else
                         <div class="mt-3 space-y-3">
                             @foreach ($analysisNotableExcerpts as $excerpt)
-                                <flux:text class="text-sm text-zinc-600 dark:text-zinc-300">“{{ $excerpt }}”</flux:text>
-                            @endforeach
-                        </div>
-                    @endif
-                </div>
-
-                <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
-                    <flux:heading size="sm">{{ __('Important dates') }}</flux:heading>
-                    @if ($analysisImportantDates === [])
-                        <flux:text class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{{ __('No dates extracted.') }}</flux:text>
-                    @else
-                        <div class="mt-3 space-y-2">
-                            @foreach ($analysisImportantDates as $date)
-                                <flux:text class="text-sm text-zinc-600 dark:text-zinc-300">{{ $date }}</flux:text>
+                                <div class="rounded-xl bg-white/80 p-3 dark:bg-zinc-950/50">
+                                    <flux:text class="text-sm leading-6 text-zinc-600 dark:text-zinc-300">“{{ $excerpt }}”</flux:text>
+                                </div>
                             @endforeach
                         </div>
                     @endif

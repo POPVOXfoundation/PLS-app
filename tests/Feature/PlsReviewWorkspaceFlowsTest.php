@@ -550,6 +550,7 @@ test('review documents can be uploaded in batches analyzed and saved from the re
         ->set('documentTitle', 'Implementation Brief Revised')
         ->set('documentSummary', 'Updated summary of implementation delays and timetable reform proposals.')
         ->call('saveDocumentEdits')
+        ->assertSet('showEditDocumentModal', false)
         ->assertHasNoErrors();
 
     $updatedDocument = $implementationBrief->fresh();
