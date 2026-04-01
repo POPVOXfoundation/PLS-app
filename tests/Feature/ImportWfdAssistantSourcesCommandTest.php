@@ -2,11 +2,17 @@
 
 use App\Domain\Documents\AssistantSourceDocument;
 use App\Domain\Documents\Enums\AssistantSourceScope;
-use App\Support\PlsAssistant\ReviewAssistantGroundingRepository;
+use App\Jobs\ExtractAssistantSourceText;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 
-test('it imports configured WFD PDFs into global assistant source documents', function () {
+test('it stages WFD PDFs into Laravel storage and queues extraction jobs', function () {
+    Queue::fake();
+    Storage::fake('assistant-sources');
+
+    config()->set('queue.default', 'redis');
+
     $directory = storage_path('framework/testing/wfd-import');
     File::ensureDirectoryExists($directory);
 
@@ -16,30 +22,38 @@ test('it imports configured WFD PDFs into global assistant source documents', fu
     File::put($guidePath, 'guide pdf placeholder');
     File::put($manualPath, 'manual pdf placeholder');
 
-    config()->set('pls_assistant.wfd_import.documents', [
-        [
+    config()->set('pls_assistant.assistant_sources.source_disk', 'assistant-sources');
+    config()->set('pls_assistant.assistant_sources.extractor', 'local');
+    config()->set('pls_assistant.assistant_sources.wfd_documents', [
+        'guide' => [
             'key' => 'guide-2017',
             'title' => 'Post-Legislative Scrutiny Guide for Parliaments',
             'summary' => 'Guide summary',
             'published_at' => '2017-11',
-            'path' => $guidePath,
+            'storage_path' => 'imports/wfd/guide.pdf',
         ],
-        [
+        'manual' => [
             'key' => 'manual-2023',
             'title' => 'Parliamentary Innovation through Post-Legislative Scrutiny: Manual for Parliaments',
             'summary' => 'Manual summary',
             'published_at' => '2023-07',
-            'path' => $manualPath,
+            'storage_path' => 'imports/wfd/manual.pdf',
         ],
     ]);
 
-    Process::fake([
-        "*pdftotext*{$guidePath}*" => Process::result(output: "Guide line 1\n\n12\n\nGuide line 2"),
-        "*pdftotext*{$manualPath}*" => Process::result(output: "Manual line 1\n\nManual line 2"),
-    ]);
-
-    $this->artisan('pls:assistant-sources:import-wfd')
+    $this->artisan('pls:assistant-sources:import-wfd', [
+        '--guide-path' => $guidePath,
+        '--manual-path' => $manualPath,
+    ])
+        ->expectsOutputToContain('[CREATED] Post-Legislative Scrutiny Guide for Parliaments')
+        ->expectsOutputToContain('Stored file: assistant-sources:imports/wfd/guide.pdf')
+        ->expectsOutputToContain('Extraction status: QUEUED')
         ->assertSuccessful();
+
+    Storage::disk('assistant-sources')->assertExists([
+        'imports/wfd/guide.pdf',
+        'imports/wfd/manual.pdf',
+    ]);
 
     expect(AssistantSourceDocument::query()
         ->where('scope', AssistantSourceScope::Global)
@@ -53,29 +67,20 @@ test('it imports configured WFD PDFs into global assistant source documents', fu
         ->where('title', 'Parliamentary Innovation through Post-Legislative Scrutiny: Manual for Parliaments')
         ->sole();
 
-    expect($guide->content)->toContain('Guide line 1')
-        ->toContain('Guide line 2')
-        ->not->toContain("\n12\n")
-        ->and($guide->storage_path)->toBe($guidePath)
-        ->and($guide->metadata['source_type'])->toBe('wfd_pdf')
-        ->and($manual->content)->toContain('Manual line 1')
-        ->toContain('Manual line 2');
+    expect($guide->storage_path)->toBe('imports/wfd/guide.pdf')
+        ->and($guide->mime_type)->toBe('application/pdf')
+        ->and($guide->metadata['disk'])->toBe('assistant-sources')
+        ->and(data_get($guide->metadata, 'extraction.status'))->toBe('pending')
+        ->and($manual->storage_path)->toBe('imports/wfd/manual.pdf')
+        ->and($manual->metadata['disk'])->toBe('assistant-sources');
 
-    $review = plsReview([
-        'title' => 'Grounding smoke review',
-    ]);
-
-    $globalGrounding = app(ReviewAssistantGroundingRepository::class)
-        ->forPrompt($review->fresh(), 'What are the main steps in a PLS inquiry?')['global'];
-
-    expect($globalGrounding)->toHaveCount(2)
-        ->and(collect($globalGrounding)->pluck('label')->all())->toContain(
-            'Post-Legislative Scrutiny Guide for Parliaments',
-            'Parliamentary Innovation through Post-Legislative Scrutiny: Manual for Parliaments',
-        );
+    Queue::assertPushed(ExtractAssistantSourceText::class, 2);
 });
 
-test('it updates existing WFD source records instead of duplicating them', function () {
+test('it updates existing WFD records in place and migrates them to canonical storage paths', function () {
+    Queue::fake();
+    Storage::fake('assistant-sources');
+
     $directory = storage_path('framework/testing/wfd-import');
     File::ensureDirectoryExists($directory);
 
@@ -88,41 +93,41 @@ test('it updates existing WFD source records instead of duplicating them', funct
     AssistantSourceDocument::factory()->create([
         'title' => 'Post-Legislative Scrutiny Guide for Parliaments',
         'scope' => AssistantSourceScope::Global,
-        'storage_path' => 'old-guide-path.pdf',
+        'storage_path' => '/Users/bryan/Downloads/guide.pdf',
         'content' => 'Old guide content',
+        'metadata' => [],
     ]);
 
     AssistantSourceDocument::factory()->create([
         'title' => 'Parliamentary Innovation through Post-Legislative Scrutiny: Manual for Parliaments',
         'scope' => AssistantSourceScope::Global,
-        'storage_path' => 'old-manual-path.pdf',
+        'storage_path' => '/Users/bryan/Downloads/manual.pdf',
         'content' => 'Old manual content',
+        'metadata' => [],
     ]);
 
-    config()->set('pls_assistant.wfd_import.documents', [
-        [
+    config()->set('pls_assistant.assistant_sources.source_disk', 'assistant-sources');
+    config()->set('pls_assistant.assistant_sources.wfd_documents', [
+        'guide' => [
             'key' => 'guide-2017',
             'title' => 'Post-Legislative Scrutiny Guide for Parliaments',
             'summary' => 'Guide summary',
             'published_at' => '2017-11',
-            'path' => $guidePath,
+            'storage_path' => 'imports/wfd/guide.pdf',
         ],
-        [
+        'manual' => [
             'key' => 'manual-2023',
             'title' => 'Parliamentary Innovation through Post-Legislative Scrutiny: Manual for Parliaments',
             'summary' => 'Manual summary',
             'published_at' => '2023-07',
-            'path' => $manualPath,
+            'storage_path' => 'imports/wfd/manual.pdf',
         ],
     ]);
 
-    Process::fake([
-        "*pdftotext*{$guidePath}*" => Process::result(output: 'Updated guide content'),
-        "*pdftotext*{$manualPath}*" => Process::result(output: 'Updated manual content'),
-    ]);
-
-    $this->artisan('pls:assistant-sources:import-wfd')
-        ->assertSuccessful();
+    $this->artisan('pls:assistant-sources:import-wfd', [
+        '--guide-path' => $guidePath,
+        '--manual-path' => $manualPath,
+    ])->assertSuccessful();
 
     expect(AssistantSourceDocument::query()
         ->where('scope', AssistantSourceScope::Global)
@@ -130,9 +135,44 @@ test('it updates existing WFD source records instead of duplicating them', funct
         ->and(AssistantSourceDocument::query()
             ->where('title', 'Post-Legislative Scrutiny Guide for Parliaments')
             ->sole()
-            ->content)->toBe('Updated guide content')
+            ->storage_path)->toBe('imports/wfd/guide.pdf')
         ->and(AssistantSourceDocument::query()
-            ->where('title', 'Parliamentary Innovation through Post-Legislative Scrutiny: Manual for Parliaments')
+            ->where('title', 'Post-Legislative Scrutiny Guide for Parliaments')
             ->sole()
-            ->content)->toBe('Updated manual content');
+            ->content)->toBe('Old guide content')
+        ->and(AssistantSourceDocument::query()
+            ->where('title', 'Post-Legislative Scrutiny Guide for Parliaments')
+            ->sole()
+            ->metadata['disk'])->toBe('assistant-sources');
+});
+
+test('it fails fast when neither a local bootstrap file nor a stored canonical file exists', function () {
+    Queue::fake();
+    Storage::fake('assistant-sources');
+
+    config()->set('pls_assistant.assistant_sources.source_disk', 'assistant-sources');
+    config()->set('pls_assistant.assistant_sources.wfd_documents', [
+        'guide' => [
+            'key' => 'guide-2017',
+            'title' => 'Post-Legislative Scrutiny Guide for Parliaments',
+            'summary' => 'Guide summary',
+            'published_at' => '2017-11',
+            'storage_path' => 'imports/wfd/guide.pdf',
+            'bootstrap_path' => '/missing/guide.pdf',
+        ],
+        'manual' => [
+            'key' => 'manual-2023',
+            'title' => 'Parliamentary Innovation through Post-Legislative Scrutiny: Manual for Parliaments',
+            'summary' => 'Manual summary',
+            'published_at' => '2023-07',
+            'storage_path' => 'imports/wfd/manual.pdf',
+            'bootstrap_path' => '/missing/manual.pdf',
+        ],
+    ]);
+
+    $this->artisan('pls:assistant-sources:import-wfd')
+        ->expectsOutputToContain('WFD assistant source file not found')
+        ->assertFailed();
+
+    Queue::assertNothingPushed();
 });

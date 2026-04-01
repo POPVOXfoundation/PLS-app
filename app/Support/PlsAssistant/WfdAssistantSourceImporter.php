@@ -4,35 +4,47 @@ namespace App\Support\PlsAssistant;
 
 use App\Domain\Documents\AssistantSourceDocument;
 use App\Domain\Documents\Enums\AssistantSourceScope;
+use App\Jobs\ExtractAssistantSourceText;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 class WfdAssistantSourceImporter
 {
+    public function __construct(
+        private readonly AssistantSourceTextExtractorFactory $extractorFactory,
+    ) {}
+
     /**
      * @return Collection<int, array{
      *     content_length: int,
+     *     disk: string,
      *     extraction_method: string,
+     *     extraction_status: string,
      *     status: string,
      *     storage_path: string,
      *     title: string
      * }>
      */
-    public function importConfiguredSources(): Collection
+    public function importConfiguredSources(array $sourceOverrides = []): Collection
     {
-        /** @var array<int, array<string, mixed>> $sources */
-        $sources = config('pls_assistant.wfd_import.documents', []);
+        /** @var array<string, array<string, mixed>> $sources */
+        $sources = config('pls_assistant.assistant_sources.wfd_documents', []);
 
         if ($sources === []) {
             throw new RuntimeException('No WFD assistant source documents are configured for import.');
         }
 
         return collect($sources)
-            ->map(function (array $source): array {
-                $path = $this->validatedPath($source);
-                $content = $this->extractText($path);
+            ->map(function (array $source, string $alias) use ($sourceOverrides): array {
+                $diskName = $this->configuredDisk();
+                $stagedSource = $this->stageSourceFile(
+                    source: $source,
+                    diskName: $diskName,
+                    overridePath: $sourceOverrides[$alias] ?? null,
+                );
 
                 $document = AssistantSourceDocument::query()->updateOrCreate(
                     [
@@ -41,109 +53,167 @@ class WfdAssistantSourceImporter
                     ],
                     [
                         'summary' => (string) $source['summary'],
-                        'storage_path' => $path,
-                        'mime_type' => File::mimeType($path) ?: 'application/pdf',
-                        'file_size' => File::size($path),
-                        'content' => $content,
+                        'storage_path' => $stagedSource['storage_path'],
+                        'mime_type' => 'application/pdf',
+                        'file_size' => $stagedSource['file_size'],
                         'metadata' => [
+                            'disk' => $diskName,
                             'document_key' => $source['key'] ?? null,
-                            'original_filename' => basename($path),
+                            'original_filename' => $stagedSource['original_filename'],
                             'published_at' => $source['published_at'] ?? null,
-                            'source_path' => $path,
+                            'source_path' => $stagedSource['source_path'],
                             'source_type' => 'wfd_pdf',
                             'import_command' => 'pls:assistant-sources:import-wfd',
-                            'import_version' => 1,
-                            'extraction_method' => $this->extractionMethod(),
+                            'import_version' => 2,
                         ],
                     ],
                 );
 
+                $status = $document->wasRecentlyCreated ? 'created' : 'updated';
+
+                $document->forceFill([
+                    'metadata' => $this->markExtractionPending($document, $source, $diskName),
+                ])->save();
+
+                ExtractAssistantSourceText::dispatch($document->getKey());
+
+                $document->refresh();
+
                 return [
                     'title' => $document->title,
-                    'status' => $document->wasRecentlyCreated ? 'created' : 'updated',
-                    'storage_path' => $path,
-                    'content_length' => mb_strlen($content),
-                    'extraction_method' => $this->extractionMethod(),
+                    'status' => $status,
+                    'disk' => $diskName,
+                    'storage_path' => $document->storage_path,
+                    'content_length' => mb_strlen((string) $document->content),
+                    'extraction_method' => $this->extractorFactory->configuredDriver(),
+                    'extraction_status' => $this->reportedExtractionStatus($document),
                 ];
             });
+    }
+
+    private function configuredDisk(): string
+    {
+        $diskName = trim((string) config('pls_assistant.assistant_sources.source_disk', ''));
+
+        if ($diskName === '') {
+            throw new RuntimeException('PLS assistant source disk is not configured.');
+        }
+
+        return $diskName;
+    }
+
+    /**
+     * @param  array<string, mixed>  $source
+     * @return array{file_size: int, original_filename: string, source_path: string|null, storage_path: string}
+     */
+    private function stageSourceFile(array $source, string $diskName, ?string $overridePath = null): array
+    {
+        $storagePath = $this->canonicalStoragePath($source);
+        $disk = Storage::disk($diskName);
+        $sourcePath = $this->firstValidPath([
+            $overridePath,
+            $disk->exists($storagePath) ? null : ($source['bootstrap_path'] ?? null),
+        ]);
+
+        if ($sourcePath !== null) {
+            $stream = fopen($sourcePath, 'r');
+
+            if ($stream === false) {
+                throw new RuntimeException(sprintf('Unable to open WFD assistant source [%s].', $sourcePath));
+            }
+
+            try {
+                $disk->put($storagePath, $stream);
+            } finally {
+                fclose($stream);
+            }
+        }
+
+        if (! $disk->exists($storagePath)) {
+            throw new RuntimeException(sprintf(
+                'WFD assistant source file not found for [%s]. Expected either a provided local path or stored file at [%s:%s].',
+                $source['title'] ?? 'unknown',
+                $diskName,
+                $storagePath,
+            ));
+        }
+
+        return [
+            'storage_path' => $storagePath,
+            'original_filename' => basename($sourcePath ?? $storagePath),
+            'source_path' => $sourcePath,
+            'file_size' => (int) $disk->size($storagePath),
+        ];
     }
 
     /**
      * @param  array<string, mixed>  $source
      */
-    private function validatedPath(array $source): string
+    private function canonicalStoragePath(array $source): string
     {
-        $path = trim((string) ($source['path'] ?? ''));
+        $configured = trim((string) ($source['storage_path'] ?? ''));
 
-        if ($path === '') {
-            throw new RuntimeException(sprintf('Missing path for WFD assistant source [%s].', $source['title'] ?? 'unknown'));
+        if ($configured !== '') {
+            return trim($configured, '/');
         }
 
-        if (! File::exists($path)) {
-            throw new RuntimeException(sprintf('WFD assistant source file not found: %s', $path));
+        $prefix = trim((string) config('pls_assistant.assistant_sources.source_prefix', ''), '/');
+        $filename = Str::slug((string) ($source['key'] ?? $source['title'] ?? 'assistant-source')).'.pdf';
+
+        return trim($prefix.'/'.$filename, '/');
+    }
+
+    /**
+     * @param  array<int, mixed>  $paths
+     */
+    private function firstValidPath(array $paths): ?string
+    {
+        foreach ($paths as $path) {
+            $normalized = trim((string) $path);
+
+            if ($normalized !== '' && File::exists($normalized)) {
+                return $normalized;
+            }
         }
 
-        return $path;
+        return null;
     }
 
-    private function extractText(string $path): string
+    /**
+     * @param  array<string, mixed>  $source
+     * @return array<string, mixed>
+     */
+    private function markExtractionPending(
+        AssistantSourceDocument $document,
+        array $source,
+        string $diskName,
+    ): array {
+        return [
+            ...($document->metadata ?? []),
+            'disk' => $diskName,
+            'document_key' => $source['key'] ?? null,
+            'original_filename' => data_get($document->metadata, 'original_filename', basename($document->storage_path)),
+            'published_at' => $source['published_at'] ?? null,
+            'source_type' => 'wfd_pdf',
+            'import_command' => 'pls:assistant-sources:import-wfd',
+            'import_version' => 2,
+            'extraction_method' => $this->extractorFactory->configuredDriver(),
+            'extraction' => [
+                'status' => 'pending',
+                'driver' => $this->extractorFactory->configuredDriver(),
+                'job_id' => (string) Str::uuid(),
+                'error' => null,
+                'queued_at' => now()->toIso8601String(),
+            ],
+        ];
+    }
+
+    private function reportedExtractionStatus(AssistantSourceDocument $document): string
     {
-        $binary = (string) config('pls_assistant.wfd_import.pdftotext_binary', 'pdftotext');
-        $command = sprintf(
-            '%s -layout -nopgbrk -enc UTF-8 %s -',
-            escapeshellarg($binary),
-            escapeshellarg($path),
-        );
-
-        $result = Process::timeout(120)->run($command);
-
-        if (! $result->successful()) {
-            throw new RuntimeException(sprintf(
-                'Failed to extract PDF text from [%s]: %s',
-                $path,
-                $this->errorMessage($result->errorOutput()),
-            ));
+        if ((string) config('queue.default') !== 'sync') {
+            return 'queued';
         }
 
-        $content = $this->cleanText($result->output());
-
-        if ($content === '') {
-            throw new RuntimeException(sprintf('No usable text was extracted from [%s].', $path));
-        }
-
-        return $content;
-    }
-
-    private function cleanText(string $text): string
-    {
-        $text = str_replace("\f", "\n", $text);
-        $text = preg_replace("/\r\n?/", "\n", $text) ?? $text;
-        $text = collect(explode("\n", $text))
-            ->map(function (string $line): string {
-                $line = rtrim($line);
-
-                if (preg_match('/^\s*\d+\s*$/', $line) === 1) {
-                    return '';
-                }
-
-                return $line;
-            })
-            ->implode("\n");
-
-        $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
-
-        return trim($text);
-    }
-
-    private function extractionMethod(): string
-    {
-        return 'pdftotext -layout -nopgbrk -enc UTF-8';
-    }
-
-    private function errorMessage(string $errorOutput): string
-    {
-        $message = trim($errorOutput);
-
-        return $message === '' ? 'Unknown extraction error.' : $message;
+        return (string) data_get($document->metadata, 'extraction.status', 'pending');
     }
 }

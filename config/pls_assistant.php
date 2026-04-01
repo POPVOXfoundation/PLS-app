@@ -283,22 +283,43 @@ return [
         'jurisdictions' => [],
     ],
 
-    'wfd_import' => [
+    'assistant_sources' => [
+        'source_disk' => env('PLS_ASSISTANT_SOURCE_DISK', env('FILESYSTEM_DISK', 'local')),
+        'source_prefix' => trim((string) env('PLS_ASSISTANT_SOURCE_PREFIX', 'assistant-sources/wfd'), '/'),
+        'extractor' => env('PLS_ASSISTANT_SOURCE_EXTRACTOR', 'local'),
         'pdftotext_binary' => env('PLS_ASSISTANT_PDFTOTEXT_BINARY', 'pdftotext'),
-        'documents' => [
-            [
+        'textract' => [
+            'region' => env('PLS_ASSISTANT_TEXTRACT_REGION', env('AWS_DEFAULT_REGION', 'us-east-1')),
+            'bucket' => env('PLS_ASSISTANT_TEXTRACT_BUCKET', env('AWS_BUCKET')),
+            'role_arn' => env('PLS_ASSISTANT_TEXTRACT_ROLE_ARN'),
+            'sns_topic_arn' => env('PLS_ASSISTANT_TEXTRACT_SNS_TOPIC_ARN'),
+            'endpoint' => env('PLS_ASSISTANT_TEXTRACT_ENDPOINT', env('AWS_ENDPOINT')),
+            'use_path_style_endpoint' => env('PLS_ASSISTANT_TEXTRACT_USE_PATH_STYLE_ENDPOINT', env('AWS_USE_PATH_STYLE_ENDPOINT', false)),
+            'poll_delay_seconds' => (int) env('PLS_ASSISTANT_TEXTRACT_POLL_DELAY_SECONDS', 15),
+            'max_poll_attempts' => (int) env('PLS_ASSISTANT_TEXTRACT_MAX_POLL_ATTEMPTS', 20),
+        ],
+        'wfd_documents' => [
+            'guide' => [
                 'key' => 'wfd-guide-for-parliaments-2017',
                 'title' => 'Post-Legislative Scrutiny Guide for Parliaments',
                 'summary' => 'WFD 2017 guide covering parliamentary post-legislative scrutiny concepts, principles, and operational approaches.',
                 'published_at' => '2017-11',
-                'path' => env('PLS_ASSISTANT_WFD_GUIDE_2017_PATH', env('HOME').'/Downloads/pls_source_docs/WFD_Manual-on-Post-Legislative-Scrutiny.pdf'),
+                'storage_path' => env(
+                    'PLS_ASSISTANT_WFD_GUIDE_STORAGE_PATH',
+                    trim((string) env('PLS_ASSISTANT_SOURCE_PREFIX', 'assistant-sources/wfd'), '/').'/wfd-guide-for-parliaments-2017.pdf',
+                ),
+                'bootstrap_path' => env('PLS_ASSISTANT_WFD_GUIDE_2017_PATH', env('HOME').'/Downloads/pls_source_docs/WFD_Manual-on-Post-Legislative-Scrutiny.pdf'),
             ],
-            [
+            'manual' => [
                 'key' => 'wfd-manual-for-parliaments-2023',
                 'title' => 'Parliamentary Innovation through Post-Legislative Scrutiny: Manual for Parliaments',
                 'summary' => 'WFD 2023 manual covering the principles, enabling factors, and step-by-step methodology for parliamentary PLS work.',
                 'published_at' => '2023-07',
-                'path' => env('PLS_ASSISTANT_WFD_MANUAL_2023_PATH', env('HOME').'/Downloads/pls_source_docs/wfd_pls_guide_pls_series_4_new (2).pdf'),
+                'storage_path' => env(
+                    'PLS_ASSISTANT_WFD_MANUAL_STORAGE_PATH',
+                    trim((string) env('PLS_ASSISTANT_SOURCE_PREFIX', 'assistant-sources/wfd'), '/').'/wfd-manual-for-parliaments-2023.pdf',
+                ),
+                'bootstrap_path' => env('PLS_ASSISTANT_WFD_MANUAL_2023_PATH', env('HOME').'/Downloads/pls_source_docs/wfd_pls_guide_pls_series_4_new (2).pdf'),
             ],
         ],
     ],
