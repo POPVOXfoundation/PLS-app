@@ -24,6 +24,12 @@ class ReportsPage extends Workspace
 
     protected string $workspace = 'reports';
 
+    public bool $showAddReportModal = false;
+
+    public bool $showEditReportModal = false;
+
+    public bool $showAddGovernmentResponseModal = false;
+
     public string $reportTitle = '';
 
     public string $reportType = ReportType::DraftReport->value;
@@ -91,6 +97,7 @@ class ReportsPage extends Workspace
         $this->authorizeReviewMutation();
 
         $this->resetReportForm();
+        $this->showAddReportModal = true;
 
         if (($resolvedReportType = ReportType::tryFrom((string) $reportType)) !== null) {
             $this->reportType = $resolvedReportType->value;
@@ -123,11 +130,15 @@ class ReportsPage extends Workspace
         $this->authorizeReviewMutation();
 
         try {
+            $status = $this->blankToNull($this->reportPublishedAt) !== null
+                ? ReportStatus::Published->value
+                : ReportStatus::Draft->value;
+
             $this->review = $action->store([
                 'pls_review_id' => $this->review->id,
                 'title' => $this->reportTitle,
                 'report_type' => $this->reportType,
-                'status' => $this->reportStatus,
+                'status' => $status,
                 'document_id' => $this->blankToNull($this->reportDocumentId) === null ? null : (int) $this->reportDocumentId,
                 'published_at' => $this->blankToNull($this->reportPublishedAt),
             ])->fresh();
@@ -144,6 +155,7 @@ class ReportsPage extends Workspace
         }
 
         $this->resetReportForm();
+        $this->showAddReportModal = false;
 
         $this->dispatch('review-workspace-updated', status: __('Report record added to the review.'));
     }
@@ -175,6 +187,8 @@ class ReportsPage extends Workspace
             'reportDocumentId',
             'reportPublishedAt',
         ]);
+
+        $this->showEditReportModal = true;
     }
 
     public function updateReport(UpdateReport $action): void
@@ -205,6 +219,7 @@ class ReportsPage extends Workspace
         }
 
         $this->resetReportForm();
+        $this->showEditReportModal = false;
 
         $this->dispatch('review-workspace-updated', status: __('Report updated.'));
     }
@@ -224,6 +239,7 @@ class ReportsPage extends Workspace
         $this->authorizeReviewMutation();
 
         $this->resetGovernmentResponseForm();
+        $this->showAddGovernmentResponseModal = true;
 
         $preferredReportId = $reportId;
 
@@ -276,6 +292,7 @@ class ReportsPage extends Workspace
         }
 
         $this->resetGovernmentResponseForm();
+        $this->showAddGovernmentResponseModal = false;
 
         $this->dispatch('review-workspace-updated', status: __('Government response recorded for this review.'));
     }
@@ -459,6 +476,7 @@ class ReportsPage extends Workspace
 
         if ($this->reportEditingId === (string) $reportId) {
             $this->resetReportForm();
+            $this->showEditReportModal = false;
         }
 
         $this->dispatch('review-workspace-updated', status: __('Report removed from the review.'));
@@ -537,7 +555,8 @@ class ReportsPage extends Workspace
     private function otherReportDocuments(PlsReview $review): EloquentCollection
     {
         return $review->documents->reject(
-            fn (Document $document): bool => in_array($document->document_type, $this->reportDocumentTypes(), true),
+            fn (Document $document): bool => in_array($document->document_type, $this->reportDocumentTypes(), true)
+                || $document->document_type === DocumentType::LegislationText,
         );
     }
 
@@ -557,7 +576,8 @@ class ReportsPage extends Workspace
     private function otherResponseDocuments(PlsReview $review): EloquentCollection
     {
         return $review->documents->reject(
-            fn (Document $document): bool => $document->document_type === DocumentType::GovernmentResponse,
+            fn (Document $document): bool => $document->document_type === DocumentType::GovernmentResponse
+                || $document->document_type === DocumentType::LegislationText,
         );
     }
 

@@ -126,15 +126,13 @@
                                 <div class="flex min-w-40 items-center justify-end gap-1">
                                     @can('update', $review)
                                         @if ($row['status'] !== 'processing')
-                                            <flux:modal.trigger name="edit-document">
-                                                <flux:button
-                                                    size="sm"
-                                                    variant="subtle"
-                                                    wire:click="startEditingDocument({{ $row['id'] }})"
-                                                >
-                                                    {{ $row['status'] === 'saved' ? __('Inspect/Edit') : __('Inspect') }}
-                                                </flux:button>
-                                            </flux:modal.trigger>
+                                            <flux:button
+                                                size="sm"
+                                                variant="subtle"
+                                                wire:click="startEditingDocument({{ $row['id'] }})"
+                                            >
+                                                {{ $row['status'] === 'saved' ? __('Inspect/Edit') : __('Inspect') }}
+                                            </flux:button>
                                         @endif
 
                                         @if ($row['status'] === 'needs_attention')
@@ -165,7 +163,7 @@
         @endif
     </flux:card>
 
-    <flux:modal name="edit-document" class="!max-w-[52rem] w-[calc(100vw-2rem)] lg:!w-[52rem]">
+    <flux:modal wire:model.self="showEditDocumentModal" class="!max-w-[52rem] w-[calc(100vw-2rem)] lg:!w-[52rem]">
         <form wire:submit="saveDocumentEdits" class="space-y-6">
             <div class="flex items-start justify-between gap-4">
                 <div class="space-y-2">

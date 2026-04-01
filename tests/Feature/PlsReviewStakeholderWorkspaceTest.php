@@ -23,12 +23,18 @@ test('stakeholders can be added and filtered from the review workspace', functio
     ]);
 
     Livewire::test(StakeholdersPage::class, ['review' => $review])
+        ->assertSeeHtml('wire:model.self="showAddStakeholderModal"', false)
+        ->assertSeeHtml('wire:model.self="showEditStakeholderModal"', false)
+        ->assertSeeHtml('wire:model.self="showAddImplementingAgencyModal"', false)
+        ->call('prepareStakeholderCreate')
+        ->assertSet('showAddStakeholderModal', true)
         ->set('stakeholderName', 'Open Budget Coalition')
         ->set('stakeholderType', StakeholderType::Ngo->value)
         ->set('stakeholderOrganization', 'Open Budget Coalition')
         ->set('stakeholderEmail', 'info@laravel.com')
         ->set('stakeholderPhone', '+1-202-555-0113')
         ->call('storeStakeholder')
+        ->assertSet('showAddStakeholderModal', false)
         ->assertHasNoErrors()
         ->assertSee('Open Budget Coalition')
         ->set('stakeholderTypeFilter', StakeholderType::Ngo->value)
@@ -57,11 +63,13 @@ test('stakeholders can be edited from the stakeholder workspace', function () {
     Livewire::test(StakeholdersPage::class, ['review' => $review])
         ->assertSee('Stakeholder directory')
         ->call('startEditingStakeholder', $stakeholder->id)
+        ->assertSet('showEditStakeholderModal', true)
         ->set('stakeholderName', 'National Audit Office and Inspectorate')
         ->set('stakeholderType', StakeholderType::Expert->value)
         ->set('stakeholderOrganization', 'National Audit Office')
         ->set('stakeholderEmail', 'audit@laravel.com')
         ->call('updateStakeholder')
+        ->assertSet('showEditStakeholderModal', false)
         ->assertHasNoErrors()
         ->assertSee('National Audit Office and Inspectorate');
 
@@ -78,9 +86,12 @@ test('implementing agencies can be added from the review workspace', function ()
     ]);
 
     Livewire::test(StakeholdersPage::class, ['review' => $review])
+        ->call('prepareImplementingAgencyCreate')
+        ->assertSet('showAddImplementingAgencyModal', true)
         ->set('implementingAgencyName', 'Public Service Commission')
         ->set('implementingAgencyType', ImplementingAgencyType::Agency->value)
         ->call('storeImplementingAgency')
+        ->assertSet('showAddImplementingAgencyModal', false)
         ->assertHasNoErrors()
         ->assertSee('Public Service Commission');
 

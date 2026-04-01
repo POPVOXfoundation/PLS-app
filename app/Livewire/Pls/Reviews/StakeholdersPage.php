@@ -20,6 +20,12 @@ class StakeholdersPage extends Workspace
 
     protected string $workspace = 'stakeholders';
 
+    public bool $showAddStakeholderModal = false;
+
+    public bool $showEditStakeholderModal = false;
+
+    public bool $showAddImplementingAgencyModal = false;
+
     public string $stakeholderTypeFilter = 'all';
 
     public string $stakeholderEditingId = '';
@@ -63,11 +69,13 @@ class StakeholdersPage extends Workspace
     public function prepareStakeholderCreate(): void
     {
         $this->resetStakeholderForm();
+        $this->showAddStakeholderModal = true;
     }
 
     public function prepareImplementingAgencyCreate(): void
     {
         $this->resetImplementingAgencyForm();
+        $this->showAddImplementingAgencyModal = true;
     }
 
     public function prepareSubmissionCreate(?int $stakeholderId = null): void
@@ -112,6 +120,8 @@ class StakeholdersPage extends Workspace
             'stakeholderEmail',
             'stakeholderPhone',
         ]);
+
+        $this->showEditStakeholderModal = true;
     }
 
     public function updateStakeholder(UpdateStakeholder $action): void
@@ -144,6 +154,7 @@ class StakeholdersPage extends Workspace
         }
 
         $this->resetStakeholderForm();
+        $this->showEditStakeholderModal = false;
 
         $this->dispatch('review-workspace-updated', status: __('Stakeholder updated.'));
     }
@@ -176,6 +187,7 @@ class StakeholdersPage extends Workspace
         }
 
         $this->resetStakeholderForm();
+        $this->showAddStakeholderModal = false;
 
         $this->dispatch('review-workspace-updated', status: __('Stakeholder added to the review.'));
     }
@@ -200,6 +212,7 @@ class StakeholdersPage extends Workspace
         }
 
         $this->resetImplementingAgencyForm();
+        $this->showAddImplementingAgencyModal = false;
 
         $this->dispatch('review-workspace-updated', status: __('Implementing agency added to the review.'));
     }

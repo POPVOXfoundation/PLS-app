@@ -31,6 +31,8 @@ class DocumentsPage extends Workspace
      */
     public array $documentUploads = [];
 
+    public bool $showEditDocumentModal = false;
+
     public string $documentEditingId = '';
 
     public string $documentTitle = '';
@@ -156,6 +158,7 @@ class DocumentsPage extends Workspace
         }
 
         $this->fillDocumentState($document);
+        $this->showEditDocumentModal = true;
     }
 
     public function saveDocumentEdits(UpdateReviewDocument $action): void
@@ -614,6 +617,7 @@ class DocumentsPage extends Workspace
             'analysisWarnings',
         ]);
 
+        $this->showEditDocumentModal = false;
         $this->documentType = DocumentType::GroupReport->value;
     }
 

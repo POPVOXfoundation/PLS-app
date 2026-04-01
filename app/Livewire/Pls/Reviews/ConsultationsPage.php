@@ -5,12 +5,14 @@ namespace App\Livewire\Pls\Reviews;
 use App\Domain\Consultations\Actions\StoreConsultation;
 use App\Domain\Consultations\Actions\StoreSubmission;
 use App\Domain\Consultations\Actions\UpdateConsultation;
+use App\Domain\Consultations\Consultation;
 use App\Domain\Consultations\Enums\ConsultationType;
+use App\Domain\Documents\Document;
+use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Reviews\PlsReview;
-use App\Domain\Stakeholders\Stakeholder;
 use Illuminate\Contracts\View\View;
-use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
@@ -42,6 +44,14 @@ class ConsultationsPage extends Workspace
 
     public string $submissionSummary = '';
 
+    public string $submissionAutoFilledSummary = '';
+
+    public bool $showAddConsultationModal = false;
+
+    public bool $showEditConsultationModal = false;
+
+    public bool $showAddSubmissionModal = false;
+
     public function mount(PlsReview $review): void
     {
         parent::mount($review);
@@ -53,11 +63,9 @@ class ConsultationsPage extends Workspace
 
         return $this->renderWorkspaceView('livewire.pls.reviews.consultations-page', [
             'review' => $review,
+            'availableDocuments' => $this->availableDocuments($review),
             'consultationTypes' => ConsultationType::cases(),
-            'completedConsultations' => $this->completedConsultations($review),
-            'plannedConsultations' => $this->plannedConsultations($review),
-            'stakeholdersWithSubmissions' => $this->stakeholdersWithSubmissions($review),
-            'stakeholdersAwaitingEvidence' => $this->stakeholdersAwaitingEvidence($review),
+            'consultations' => $this->consultations($review),
             'consultationStep' => $review->steps->firstWhere('step_key', 'consultations'),
             'selectedSubmissionStakeholder' => $review->stakeholders->firstWhere('id', (int) $this->submissionStakeholderId),
         ], $review);
@@ -66,6 +74,8 @@ class ConsultationsPage extends Workspace
     public function prepareConsultationCreate(): void
     {
         $this->resetConsultationForm();
+        $this->showEditConsultationModal = false;
+        $this->showAddConsultationModal = true;
     }
 
     #[On('prepare-consultation-submission-create')]
@@ -79,6 +89,42 @@ class ConsultationsPage extends Workspace
         ) {
             $this->submissionStakeholderId = (string) $stakeholderId;
         }
+
+        $this->showAddSubmissionModal = true;
+    }
+
+    public function updatedSubmissionDocumentId(string $value): void
+    {
+        $currentSummary = trim($this->submissionSummary);
+        $autoFilledSummary = trim($this->submissionAutoFilledSummary);
+        $shouldReplaceSummary = $currentSummary === ''
+            || ($autoFilledSummary !== '' && $currentSummary === $autoFilledSummary);
+
+        if (! $shouldReplaceSummary) {
+            return;
+        }
+
+        $selectedDocument = $this->availableDocuments($this->loadReview())
+            ->firstWhere('id', (int) $value);
+
+        if (! $selectedDocument instanceof Document) {
+            $this->submissionSummary = '';
+            $this->submissionAutoFilledSummary = '';
+
+            return;
+        }
+
+        $documentSummary = trim((string) ($selectedDocument->summary ?? ''));
+
+        if ($documentSummary === '') {
+            $this->submissionSummary = '';
+            $this->submissionAutoFilledSummary = '';
+
+            return;
+        }
+
+        $this->submissionSummary = $selectedDocument->summary ?? '';
+        $this->submissionAutoFilledSummary = $this->submissionSummary;
     }
 
     public function storeConsultation(StoreConsultation $action): void
@@ -107,6 +153,7 @@ class ConsultationsPage extends Workspace
         }
 
         $this->resetConsultationForm();
+        $this->showAddConsultationModal = false;
 
         $this->dispatch('review-workspace-updated', status: __('Consultation activity added to the review.'));
     }
@@ -138,6 +185,9 @@ class ConsultationsPage extends Workspace
             'consultationSummary',
             'consultationDocumentId',
         ]);
+
+        $this->showAddConsultationModal = false;
+        $this->showEditConsultationModal = true;
     }
 
     public function updateConsultation(UpdateConsultation $action): void
@@ -168,6 +218,7 @@ class ConsultationsPage extends Workspace
         }
 
         $this->resetConsultationForm();
+        $this->showEditConsultationModal = false;
 
         $this->dispatch('review-workspace-updated', status: __('Consultation activity updated.'));
     }
@@ -196,6 +247,7 @@ class ConsultationsPage extends Workspace
         }
 
         $this->resetSubmissionForm();
+        $this->showAddSubmissionModal = false;
 
         $this->dispatch('review-workspace-updated', status: __('Submission logged for this review.'));
     }
@@ -234,7 +286,7 @@ class ConsultationsPage extends Workspace
             ->with([
                 'steps',
                 'documents',
-                'stakeholders.submissions',
+                'stakeholders',
                 'consultations.document',
                 'submissions.stakeholder',
                 'submissions.document',
@@ -243,42 +295,30 @@ class ConsultationsPage extends Workspace
     }
 
     /**
-     * @return EloquentCollection<int, \App\Domain\Consultations\Consultation>
+     * @return Collection<int, Consultation>
      */
-    private function completedConsultations(PlsReview $review): EloquentCollection
+    private function consultations(PlsReview $review): Collection
     {
-        return $review->consultations
+        $completedConsultations = $review->consultations
             ->filter(fn ($consultation): bool => $consultation->held_at !== null)
             ->sortByDesc('held_at');
-    }
 
-    /**
-     * @return EloquentCollection<int, \App\Domain\Consultations\Consultation>
-     */
-    private function plannedConsultations(PlsReview $review): EloquentCollection
-    {
-        return $review->consultations
+        $plannedConsultations = $review->consultations
             ->filter(fn ($consultation): bool => $consultation->held_at === null)
             ->sortBy('title');
-    }
 
-    /**
-     * @return EloquentCollection<int, Stakeholder>
-     */
-    private function stakeholdersWithSubmissions(PlsReview $review): EloquentCollection
-    {
-        return $review->stakeholders
-            ->filter(fn (Stakeholder $stakeholder): bool => $stakeholder->submissions->isNotEmpty())
+        return $completedConsultations
+            ->concat($plannedConsultations)
             ->values();
     }
 
     /**
-     * @return EloquentCollection<int, Stakeholder>
+     * @return Collection<int, Document>
      */
-    private function stakeholdersAwaitingEvidence(PlsReview $review): EloquentCollection
+    private function availableDocuments(PlsReview $review): Collection
     {
-        return $review->stakeholders
-            ->filter(fn (Stakeholder $stakeholder): bool => $stakeholder->submissions->isEmpty())
+        return $review->documents
+            ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
             ->values();
     }
 
@@ -311,6 +351,7 @@ class ConsultationsPage extends Workspace
             'submissionDocumentId',
             'submissionSubmittedAt',
             'submissionSummary',
+            'submissionAutoFilledSummary',
         ]);
 
         $this->resetValidation([

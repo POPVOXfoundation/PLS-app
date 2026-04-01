@@ -197,7 +197,7 @@ test('all review section routes render inside the shared workspace shell', funct
         'pls.reviews.stakeholders' => 'Stakeholder directory',
         'pls.reviews.consultations' => 'Consultation activity',
         'pls.reviews.analysis' => 'Findings & recommendations',
-        'pls.reviews.reports' => 'Reporting workspace',
+        'pls.reviews.reports' => 'Government responses',
     ];
 
     foreach ($routes as $route => $expectedText) {
@@ -249,7 +249,21 @@ test('consultations page does not render the intake summary box', function () {
     $this->get(route('pls.reviews.consultations', ['review' => $review->id]))
         ->assertOk()
         ->assertSee('Consultation activity')
-        ->assertSee('Submissions and evidence')
+        ->assertSee('Written submissions')
         ->assertDontSee('Consultation and evidence intake')
         ->assertDontSee('Keep planned engagement, completed activity, and written evidence in one workspace so the review team can trace participation back to the workflow.');
+});
+
+test('consultations page hides removed dashboard cues', function () {
+    $review = plsReview([
+        'title' => 'Consultations workspace simplification',
+    ]);
+
+    $this->get(route('pls.reviews.consultations', ['review' => $review->id]))
+        ->assertOk()
+        ->assertDontSee('Awaiting written evidence')
+        ->assertDontSee('Records 0')
+        ->assertDontSee('No completed consultation activity recorded yet.')
+        ->assertDontSee('No planned consultation work queued yet.')
+        ->assertDontSee('Submission handoff prepared for');
 });

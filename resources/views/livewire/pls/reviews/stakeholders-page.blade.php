@@ -24,9 +24,7 @@
                     </flux:select>
                 @endif
 
-                <flux:modal.trigger name="add-stakeholder">
-                    <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareStakeholderCreate">{{ __('Add') }}</flux:button>
-                </flux:modal.trigger>
+                <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareStakeholderCreate">{{ __('Add') }}</flux:button>
             </div>
         </div>
 
@@ -76,9 +74,7 @@
                             </flux:table.cell>
                             <flux:table.cell>
                                 <div class="flex justify-end gap-1">
-                                    <flux:modal.trigger name="edit-stakeholder">
-                                        <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingStakeholder({{ $stakeholder->id }})" />
-                                    </flux:modal.trigger>
+                                    <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingStakeholder({{ $stakeholder->id }})" />
 
                                     <flux:modal.trigger name="confirm-stakeholder-delete">
                                         <flux:button
@@ -101,9 +97,7 @@
         <div class="flex items-center justify-between gap-4">
             <flux:heading size="lg">{{ __('Implementing agencies') }}</flux:heading>
 
-            <flux:modal.trigger name="add-implementing-agency">
-                <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareImplementingAgencyCreate">{{ __('Add') }}</flux:button>
-            </flux:modal.trigger>
+            <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareImplementingAgencyCreate">{{ __('Add') }}</flux:button>
         </div>
 
         @if ($review->implementingAgencies->isEmpty())
@@ -131,7 +125,7 @@
         @endif
     </flux:card>
 
-    <flux:modal name="add-stakeholder" class="md:w-[36rem]">
+    <flux:modal wire:model.self="showAddStakeholderModal" class="md:w-[36rem]">
         <form wire:submit="storeStakeholder" class="space-y-6">
             <div>
                 <flux:heading size="lg">{{ __('Add stakeholder') }}</flux:heading>
@@ -161,7 +155,7 @@
         </form>
     </flux:modal>
 
-    <flux:modal name="edit-stakeholder" class="md:w-[36rem]">
+    <flux:modal wire:model.self="showEditStakeholderModal" class="md:w-[36rem]">
         <form wire:submit="updateStakeholder" class="space-y-6">
             <div>
                 <flux:heading size="lg">{{ __('Edit stakeholder') }}</flux:heading>
@@ -191,7 +185,7 @@
         </form>
     </flux:modal>
 
-    <flux:modal name="add-implementing-agency" class="md:w-[30rem]">
+    <flux:modal wire:model.self="showAddImplementingAgencyModal" class="md:w-[30rem]">
         <form wire:submit="storeImplementingAgency" class="space-y-6">
             <div>
                 <flux:heading size="lg">{{ __('Add implementing agency') }}</flux:heading>

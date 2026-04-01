@@ -4,118 +4,62 @@
             <div class="flex items-center justify-between gap-4">
                 <flux:heading size="lg">{{ __('Consultation activity') }}</flux:heading>
 
-                <flux:modal.trigger name="add-consultation">
-                    <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareConsultationCreate">{{ __('Add') }}</flux:button>
-                </flux:modal.trigger>
+                <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareConsultationCreate">{{ __('Add') }}</flux:button>
             </div>
 
             <div class="space-y-5">
-                @if ($review->consultations->isEmpty())
+                @if ($consultations->isEmpty())
                     <div class="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/70 p-6 dark:border-zinc-700 dark:bg-zinc-900/40">
                         <flux:heading size="base">{{ __('No consultation activity recorded yet') }}</flux:heading>
                         <flux:text class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
                             {{ __('Use this area for both planned outreach and completed hearings, interviews, roundtables, or public consultations.') }}
                         </flux:text>
                         <div class="mt-4">
-                            <flux:modal.trigger name="add-consultation">
-                                <flux:button variant="primary" icon="plus" wire:click="prepareConsultationCreate">{{ __('Add the first consultation') }}</flux:button>
-                            </flux:modal.trigger>
+                            <flux:button variant="primary" icon="plus" wire:click="prepareConsultationCreate">{{ __('Add the first consultation') }}</flux:button>
                         </div>
+                    </div>
+                @else
+                    <div class="flex items-center justify-between">
+                        <flux:heading size="sm">{{ __('Records') }}</flux:heading>
+                        <span class="text-xs tabular-nums text-zinc-400 dark:text-zinc-500">{{ $consultations->count() }}</span>
+                    </div>
+
+                    <div class="space-y-3">
+                        @foreach ($consultations as $consultation)
+                            @php($consultationCompleted = $consultation->held_at !== null)
+
+                            <div wire:key="consultation-{{ $consultation->id }}" class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0 space-y-2">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $consultation->title }}</p>
+                                            <flux:badge size="sm" color="zinc">{{ \Illuminate\Support\Str::headline($consultation->consultation_type->value) }}</flux:badge>
+                                            <flux:badge size="sm" :color="$consultationCompleted ? 'emerald' : 'amber'">
+                                                {{ $consultationCompleted ? __('Completed') : __('Planned') }}
+                                            </flux:badge>
+                                        </div>
+
+                                        <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                                            {{ $consultationCompleted ? $consultation->held_at?->toFormattedDateString() : __('Not scheduled') }}
+                                        </flux:text>
+                                    </div>
+
+                                    <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingConsultation({{ $consultation->id }})">
+                                        {{ __('Edit') }}
+                                    </flux:button>
+                                </div>
+                            </div>
+                        @endforeach
                     </div>
                 @endif
-
-                <div class="space-y-3">
-                    <div class="flex items-center justify-between">
-                        <flux:heading size="sm">{{ __('Completed') }}</flux:heading>
-                        <span class="text-xs tabular-nums text-zinc-400 dark:text-zinc-500">{{ $completedConsultations->count() }}</span>
-                    </div>
-
-                    @if ($completedConsultations->isEmpty())
-                        <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                            {{ __('No completed consultation activity recorded yet.') }}
-                        </flux:text>
-                    @else
-                        <div class="space-y-3">
-                            @foreach ($completedConsultations as $consultation)
-                                <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-                                    <div class="flex items-start justify-between gap-3">
-                                        <div class="min-w-0 space-y-2">
-                                            <div class="flex flex-wrap items-center gap-2">
-                                                <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $consultation->title }}</p>
-                                                <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($consultation->consultation_type->value) }}</flux:badge>
-                                                <flux:badge size="sm" color="emerald">{{ __('Completed') }}</flux:badge>
-                                            </div>
-                                            <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-400 dark:text-zinc-500">
-                                                <span>{{ $consultation->held_at?->toFormattedDateString() }}</span>
-                                                @if ($consultation->document)
-                                                    <span>{{ $consultation->document->title }}</span>
-                                                @endif
-                                            </div>
-                                        </div>
-
-                                        <flux:modal.trigger name="edit-consultation">
-                                            <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingConsultation({{ $consultation->id }})">
-                                                {{ __('Edit') }}
-                                            </flux:button>
-                                        </flux:modal.trigger>
-                                    </div>
-
-                                    <flux:text class="mt-3 text-sm text-zinc-600 dark:text-zinc-400">{{ $consultation->summary }}</flux:text>
-                                </div>
-                            @endforeach
-                        </div>
-                    @endif
-                </div>
-
-                <div class="space-y-3 border-t border-zinc-100 pt-5 dark:border-zinc-800/60">
-                    <div class="flex items-center justify-between">
-                        <flux:heading size="sm">{{ __('Planned') }}</flux:heading>
-                        <span class="text-xs tabular-nums text-zinc-400 dark:text-zinc-500">{{ $plannedConsultations->count() }}</span>
-                    </div>
-
-                    @if ($plannedConsultations->isEmpty())
-                        <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                            {{ __('No planned consultation work queued yet.') }}
-                        </flux:text>
-                    @else
-                        <div class="space-y-3">
-                            @foreach ($plannedConsultations as $consultation)
-                                <div class="rounded-xl border border-dashed border-zinc-200 p-4 dark:border-zinc-800">
-                                    <div class="flex items-start justify-between gap-3">
-                                        <div class="min-w-0 space-y-2">
-                                            <div class="flex flex-wrap items-center gap-2">
-                                                <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $consultation->title }}</p>
-                                                <flux:badge size="sm" color="zinc">{{ \Illuminate\Support\Str::headline($consultation->consultation_type->value) }}</flux:badge>
-                                                <flux:badge size="sm" color="amber">{{ __('Planned') }}</flux:badge>
-                                            </div>
-                                            <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                                                {{ __('Planned engagement activity') }}
-                                            </flux:text>
-                                        </div>
-
-                                        <flux:modal.trigger name="edit-consultation">
-                                            <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingConsultation({{ $consultation->id }})">
-                                                {{ __('Edit') }}
-                                            </flux:button>
-                                        </flux:modal.trigger>
-                                    </div>
-
-                                    <flux:text class="mt-3 text-sm text-zinc-600 dark:text-zinc-400">{{ $consultation->summary }}</flux:text>
-                                </div>
-                            @endforeach
-                        </div>
-                    @endif
-                </div>
             </div>
         </flux:card>
 
         <flux:card class="space-y-6">
             <div class="flex items-center justify-between gap-4">
-                <flux:heading size="lg">{{ __('Submissions and evidence') }}</flux:heading>
+                <flux:heading size="lg">{{ __('Written submissions') }}</flux:heading>
 
-                <flux:modal.trigger name="add-submission">
-                    <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareSubmissionCreate" :disabled="$review->stakeholders->isEmpty()">{{ __('Add') }}</flux:button>
-                </flux:modal.trigger>
+                <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareSubmissionCreate" :disabled="$review->stakeholders->isEmpty()">{{ __('Add') }}</flux:button>
             </div>
 
             @if ($review->stakeholders->isEmpty())
@@ -127,50 +71,7 @@
                 </div>
             @else
                 <div class="space-y-5">
-                    @if ($selectedSubmissionStakeholder)
-                        <div class="rounded-xl border border-violet-200 bg-violet-50/70 px-4 py-3 text-sm text-violet-900 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-100">
-                            {{ __('Submission handoff prepared for :name. Use “Add submission” to log evidence with this stakeholder preselected.', ['name' => $selectedSubmissionStakeholder->name]) }}
-                        </div>
-                    @endif
-
-                    <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
-                        <div class="flex items-center justify-between gap-3">
-                            <flux:heading size="base">{{ __('Awaiting written evidence') }}</flux:heading>
-                            <span class="text-sm font-medium tabular-nums text-zinc-500 dark:text-zinc-400">{{ $stakeholdersAwaitingEvidence->count() }}</span>
-                        </div>
-
-                        @if ($stakeholdersAwaitingEvidence->isEmpty())
-                            <flux:text class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                                {{ __('Every stakeholder already has at least one linked submission.') }}
-                            </flux:text>
-                        @else
-                            <div class="mt-3 space-y-2">
-                                @foreach ($stakeholdersAwaitingEvidence->take(5) as $stakeholder)
-                                    <div class="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 dark:bg-zinc-950/60">
-                                        <div class="min-w-0">
-                                            <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $stakeholder->name }}</p>
-                                            <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
-                                                {{ __('No submission linked yet.') }}
-                                            </flux:text>
-                                        </div>
-
-                                        <flux:modal.trigger name="add-submission">
-                                            <flux:button variant="ghost" size="sm" icon="document-plus" wire:click="prepareSubmissionCreate({{ $stakeholder->id }})">
-                                                {{ __('Add') }}
-                                            </flux:button>
-                                        </flux:modal.trigger>
-                                    </div>
-                                @endforeach
-                            </div>
-                        @endif
-                    </div>
-
                     <div class="space-y-3">
-                        <div class="flex items-center justify-between">
-                            <flux:heading size="sm">{{ __('Received submissions') }}</flux:heading>
-                            <span class="text-xs tabular-nums text-zinc-400 dark:text-zinc-500">{{ $review->submissions->count() }}</span>
-                        </div>
-
                         @if ($review->submissions->isEmpty())
                             <div class="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/70 p-6 dark:border-zinc-700 dark:bg-zinc-900/40">
                                 <flux:heading size="base">{{ __('No submissions logged yet') }}</flux:heading>
@@ -178,23 +79,21 @@
                                     {{ __('Once written evidence starts arriving, log it here and keep it tied to the stakeholder record that supplied it.') }}
                                 </flux:text>
                                 <div class="mt-4">
-                                    <flux:modal.trigger name="add-submission">
-                                        <flux:button variant="primary" icon="plus" wire:click="prepareSubmissionCreate">{{ __('Add the first submission') }}</flux:button>
-                                    </flux:modal.trigger>
+                                    <flux:button variant="primary" icon="plus" wire:click="prepareSubmissionCreate">{{ __('Add the first submission') }}</flux:button>
                                 </div>
                             </div>
                         @else
+                            <div class="flex items-center justify-between">
+                                <flux:heading size="sm">{{ __('Records') }}</flux:heading>
+                                <span class="text-xs tabular-nums text-zinc-400 dark:text-zinc-500">{{ $review->submissions->count() }}</span>
+                            </div>
+
                             <div class="space-y-3">
                                 @foreach ($review->submissions->sortByDesc(fn ($submission) => $submission->submitted_at?->timestamp ?? $submission->created_at?->timestamp ?? 0) as $submission)
-                                    <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                                    <div wire:key="submission-{{ $submission->id }}" class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
                                         <div class="flex items-start justify-between gap-3">
                                             <div class="min-w-0 space-y-2">
-                                                <div class="flex flex-wrap items-center gap-2">
-                                                    <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $submission->stakeholder?->name ?? __('Unknown stakeholder') }}</p>
-                                                    @if ($submission->stakeholder)
-                                                        <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($submission->stakeholder->stakeholder_type->value) }}</flux:badge>
-                                                    @endif
-                                                </div>
+                                                <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $submission->stakeholder?->name ?? __('Unknown stakeholder') }}</p>
                                                 <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-400 dark:text-zinc-500">
                                                     <span>{{ $submission->submitted_at?->toFormattedDateString() ?? __('Undated') }}</span>
                                                     @if ($submission->document)
@@ -215,7 +114,7 @@
         </flux:card>
     </div>
 
-    <flux:modal name="add-consultation" class="md:w-[34rem]">
+    <flux:modal wire:model.self="showAddConsultationModal" class="md:w-[34rem]">
         <form wire:submit="storeConsultation" class="space-y-6">
             <div>
                 <flux:heading size="lg">{{ __('Add consultation') }}</flux:heading>
@@ -234,13 +133,24 @@
                 <flux:input wire:model="consultationHeldAt" :invalid="$errors->has('consultationHeldAt')" :label="__('Date held')" type="date" />
             </div>
 
-            <flux:select wire:model="consultationDocumentId" :invalid="$errors->has('consultationDocumentId')" :label="__('Linked document')" :placeholder="__('None')">
-                @foreach ($review->documents as $documentOption)
+            <flux:select
+                wire:model="consultationDocumentId"
+                :invalid="$errors->has('consultationDocumentId')"
+                :label="__('Linked document')"
+                :placeholder="__('None')"
+            >
+                @foreach ($availableDocuments as $documentOption)
                     <flux:select.option :value="$documentOption->id">{{ $documentOption->title }}</flux:select.option>
                 @endforeach
             </flux:select>
 
-            <flux:textarea wire:model="consultationSummary" :invalid="$errors->has('consultationSummary')" :label="__('Summary')" rows="4" />
+            <flux:textarea
+                wire:model="consultationSummary"
+                :invalid="$errors->has('consultationSummary')"
+                :label="__('Consultation note')"
+                :placeholder="__('What happened in this consultation, and why does it matter for the review?')"
+                rows="4"
+            />
 
             <div class="flex justify-end">
                 <flux:button variant="primary" type="submit">{{ __('Add consultation') }}</flux:button>
@@ -248,7 +158,7 @@
         </form>
     </flux:modal>
 
-    <flux:modal name="edit-consultation" class="md:w-[34rem]">
+    <flux:modal wire:model.self="showEditConsultationModal" class="md:w-[34rem]">
         <form wire:submit="updateConsultation" class="space-y-6">
             <div>
                 <flux:heading size="lg">{{ __('Edit consultation') }}</flux:heading>
@@ -267,13 +177,24 @@
                 <flux:input wire:model="consultationHeldAt" :invalid="$errors->has('consultationHeldAt')" :label="__('Date held')" type="date" />
             </div>
 
-            <flux:select wire:model="consultationDocumentId" :invalid="$errors->has('consultationDocumentId')" :label="__('Linked document')" :placeholder="__('None')">
-                @foreach ($review->documents as $documentOption)
+            <flux:select
+                wire:model="consultationDocumentId"
+                :invalid="$errors->has('consultationDocumentId')"
+                :label="__('Linked document')"
+                :placeholder="__('None')"
+            >
+                @foreach ($availableDocuments as $documentOption)
                     <flux:select.option :value="$documentOption->id">{{ $documentOption->title }}</flux:select.option>
                 @endforeach
             </flux:select>
 
-            <flux:textarea wire:model="consultationSummary" :invalid="$errors->has('consultationSummary')" :label="__('Summary')" rows="4" />
+            <flux:textarea
+                wire:model="consultationSummary"
+                :invalid="$errors->has('consultationSummary')"
+                :label="__('Consultation note')"
+                :placeholder="__('What happened in this consultation, and why does it matter for the review?')"
+                rows="4"
+            />
 
             <div class="flex justify-end">
                 <flux:button variant="primary" type="submit">{{ __('Save changes') }}</flux:button>
@@ -281,7 +202,7 @@
         </form>
     </flux:modal>
 
-    <flux:modal name="add-submission" class="md:w-[34rem]">
+    <flux:modal wire:model.self="showAddSubmissionModal" class="md:w-[34rem]">
         <form wire:submit="storeSubmission" class="space-y-6">
             <div>
                 <flux:heading size="lg">{{ __('Add submission') }}</flux:heading>
@@ -308,14 +229,25 @@
 
             <div class="grid gap-4 sm:grid-cols-2">
                 <flux:input wire:model="submissionSubmittedAt" :invalid="$errors->has('submissionSubmittedAt')" :label="__('Submitted at')" type="date" />
-                <flux:select wire:model="submissionDocumentId" :invalid="$errors->has('submissionDocumentId')" :label="__('Linked document')" :placeholder="__('None')">
-                    @foreach ($review->documents as $documentOption)
+                <flux:select
+                    wire:model.live="submissionDocumentId"
+                    :invalid="$errors->has('submissionDocumentId')"
+                    :label="__('Linked document')"
+                    :placeholder="__('None')"
+                >
+                    @foreach ($availableDocuments as $documentOption)
                         <flux:select.option :value="$documentOption->id">{{ $documentOption->title }}</flux:select.option>
                     @endforeach
                 </flux:select>
             </div>
 
-            <flux:textarea wire:model="submissionSummary" :invalid="$errors->has('submissionSummary')" :label="__('Summary')" rows="4" />
+            <flux:textarea
+                wire:model="submissionSummary"
+                :invalid="$errors->has('submissionSummary')"
+                :label="__('Review note')"
+                :placeholder="__('Why does this submission matter for the review?')"
+                rows="4"
+            />
 
             <div class="flex justify-end">
                 <flux:button variant="primary" type="submit">{{ __('Add submission') }}</flux:button>

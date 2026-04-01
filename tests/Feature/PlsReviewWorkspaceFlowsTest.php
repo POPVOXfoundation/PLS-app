@@ -517,6 +517,7 @@ test('review documents can be uploaded in batches analyzed and saved from the re
     ]);
 
     $component = Livewire::test(DocumentsPage::class, ['review' => $review])
+        ->assertSeeHtml('wire:model.self="showEditDocumentModal"', false)
         ->set('documentUploads', [
             UploadedFile::fake()->create('implementation-brief.pdf', 256, 'application/pdf'),
             UploadedFile::fake()->create('consultation-digest.txt', 16, 'text/plain'),
@@ -545,6 +546,7 @@ test('review documents can be uploaded in batches analyzed and saved from the re
 
     $component
         ->call('startEditingDocument', $implementationBrief->id)
+        ->assertSet('showEditDocumentModal', true)
         ->set('documentTitle', 'Implementation Brief Revised')
         ->set('documentSummary', 'Updated summary of implementation delays and timetable reform proposals.')
         ->call('saveDocumentEdits')
@@ -958,19 +960,28 @@ test('findings and recommendations can be added from the review workspace', func
     ]);
 
     $component = Livewire::test(AnalysisPage::class, ['review' => $review])
+        ->assertSeeHtml('wire:model.self="showAddFindingModal"', false)
+        ->assertSeeHtml('wire:model.self="showEditFindingModal"', false)
+        ->assertSeeHtml('wire:model.self="showEditRecommendationModal"', false)
+        ->call('prepareFindingCreate')
+        ->assertSet('showAddFindingModal', true)
         ->set('findingTitle', 'Agency reporting remains inconsistent')
         ->set('findingSummary', 'Quarterly implementation reports are incomplete across multiple agencies.')
         ->call('storeFinding')
+        ->assertSet('showAddFindingModal', false)
         ->assertHasNoErrors()
         ->assertSee('Agency reporting remains inconsistent');
 
     $findingId = (string) $review->fresh()->findings()->where('title', 'Agency reporting remains inconsistent')->value('id');
 
     $component
-        ->set('recommendationFindingId', $findingId)
+        ->call('prepareRecommendationCreate', (int) $findingId)
+        ->assertJs("window.Flux.modal('add-analysis-recommendation').show()")
+        ->assertSet('recommendationFindingId', $findingId)
         ->set('recommendationTitle', 'Mandate a standard reporting template')
         ->set('recommendationDescription', 'Require a common quarterly template and review-group compliance review.')
         ->call('storeRecommendation')
+        ->assertJs("window.Flux.modal('add-analysis-recommendation').close()")
         ->assertHasNoErrors()
         ->assertSee('Mandate a standard reporting template');
 
@@ -1002,17 +1013,21 @@ test('findings and recommendations can be edited and deleted from the review wor
 
     $component = Livewire::test(AnalysisPage::class, ['review' => $review])
         ->call('startEditingFinding', $finding->id)
+        ->assertSet('showEditFindingModal', true)
         ->set('findingTitle', 'Agency reporting standards remain inconsistent')
         ->set('findingSummary', 'Reporting formats still vary significantly across implementing agencies.')
         ->call('updateFinding')
+        ->assertSet('showEditFindingModal', false)
         ->assertHasNoErrors()
         ->assertSee('Agency reporting standards remain inconsistent');
 
     $component
         ->call('startEditingRecommendation', $recommendation->id)
+        ->assertSet('showEditRecommendationModal', true)
         ->set('recommendationTitle', 'Adopt a common quarterly reporting template')
         ->set('recommendationDescription', 'Issue a single template and require review-group compliance tracking.')
         ->call('updateRecommendation')
+        ->assertSet('showEditRecommendationModal', false)
         ->assertHasNoErrors()
         ->assertSee('Adopt a common quarterly reporting template');
 
@@ -1035,6 +1050,36 @@ test('findings and recommendations can be edited and deleted from the review wor
     ]);
 });
 
+test('analysis workspace renders findings in a compact table layout', function () {
+    $review = plsReview([
+        'title' => 'Review of compact analysis layout',
+    ]);
+
+    $finding = $review->findings()->create([
+        'title' => 'Delegated regulations were not updated in line with reporting reforms',
+        'finding_type' => \App\Domain\Analysis\Enums\FindingType::ImplementationGap,
+        'summary' => 'This finding summary is intentionally long so the workspace shows a compact preview instead of rendering a large narrative block for every analytical record in the list, while still letting the reviewer expand it in place to read the complete wording when they need the full context.',
+        'detail' => null,
+    ]);
+
+    $review->recommendations()->create([
+        'finding_id' => $finding->id,
+        'title' => 'Update delegated regulations',
+        'description' => 'Align delegated regulations with the reporting reforms, publish a short implementation note for stakeholders, issue updated guidance for agencies, and confirm the revised reporting obligations in the next quarterly compliance cycle.',
+        'recommendation_type' => \App\Domain\Analysis\Enums\RecommendationType::ImproveImplementation,
+    ]);
+
+    Livewire::test(AnalysisPage::class, ['review' => $review])
+        ->assertSee('Add finding')
+        ->assertSee('Add recommendation')
+        ->assertSee('Show more')
+        ->assertSee('Recommendations')
+        ->assertSee('Update delegated regulations')
+        ->assertDontSee('Record')
+        ->assertDontSee('Gov. responses')
+        ->assertDontSee('No findings or recommendations recorded yet.');
+});
+
 test('reports can be created from the review workspace and linked to a review document', function () {
     $review = plsReview([
         'title' => 'Review of publication and dissemination obligations',
@@ -1047,12 +1092,18 @@ test('reports can be created from the review workspace and linked to a review do
     ]);
 
     Livewire::test(ReportsPage::class, ['review' => $review])
+        ->assertSeeHtml('wire:model.self="showAddReportModal"', false)
+        ->assertSeeHtml('wire:model.self="showEditReportModal"', false)
+        ->assertSeeHtml('wire:model.self="showAddGovernmentResponseModal"', false)
+        ->call('prepareReportCreate', ReportType::DraftReport->value, ReportStatus::Published->value)
+        ->assertSet('showAddReportModal', true)
         ->set('reportTitle', 'Draft PLS Report on Dissemination Obligations')
         ->set('reportType', ReportType::DraftReport->value)
         ->set('reportStatus', ReportStatus::Published->value)
         ->set('reportDocumentId', (string) $document->id)
         ->set('reportPublishedAt', '2026-03-10')
         ->call('storeReport')
+        ->assertSet('showAddReportModal', false)
         ->assertHasNoErrors()
         ->assertSee('Draft PLS Report on Dissemination Obligations')
         ->assertSee('Draft dissemination report');
@@ -1088,12 +1139,14 @@ test('reports can be edited and deleted from the review workspace', function () 
 
     $component = Livewire::test(ReportsPage::class, ['review' => $review])
         ->call('startEditingReport', $report->id)
+        ->assertSet('showEditReportModal', true)
         ->set('reportTitle', 'Final dissemination report record')
         ->set('reportType', ReportType::FinalReport->value)
         ->set('reportStatus', ReportStatus::Published->value)
         ->set('reportDocumentId', (string) $document->id)
         ->set('reportPublishedAt', '2026-03-11')
         ->call('updateReport')
+        ->assertSet('showEditReportModal', false)
         ->assertHasNoErrors()
         ->assertSee('Final dissemination report record');
 
@@ -1132,10 +1185,12 @@ test('reporting quick actions prefill report and government response forms', fun
 
         Livewire::test(ReportsPage::class, ['review' => $review])
             ->call('prepareReportCreate', ReportType::FinalReport->value, ReportStatus::Published->value)
+            ->assertSet('showAddReportModal', true)
             ->assertSet('reportType', ReportType::FinalReport->value)
             ->assertSet('reportStatus', ReportStatus::Published->value)
             ->assertSet('reportPublishedAt', '2026-03-18')
             ->call('prepareGovernmentResponseCreate', null, GovernmentResponseStatus::Received->value)
+            ->assertSet('showAddGovernmentResponseModal', true)
             ->assertSet('governmentResponseReportId', (string) $awaitingResponseReport->id)
             ->assertSet('governmentResponseStatus', GovernmentResponseStatus::Received->value)
             ->assertSet('governmentResponseReceivedAt', '2026-03-18');
@@ -1164,12 +1219,15 @@ test('government responses can be recorded from the review workspace', function 
     ]);
 
     Livewire::test(ReportsPage::class, ['review' => $review])
+        ->call('prepareGovernmentResponseCreate', $report->id)
+        ->assertSet('showAddGovernmentResponseModal', true)
         ->set('governmentResponseReportId', (string) $report->id)
         ->set('governmentResponseDocumentId', (string) $document->id)
         ->set('governmentResponseStatus', GovernmentResponseStatus::Received->value)
         ->set('governmentResponseReceivedAt', '2026-03-11')
         ->set('governmentResponseSummary', 'Cabinet accepted the primary recommendation and requested a six-month implementation update.')
         ->call('storeGovernmentResponse')
+        ->assertSet('showAddGovernmentResponseModal', false)
         ->assertHasNoErrors()
         ->assertDispatched('review-workspace-updated', status: 'Government response recorded for this review.')
         ->assertSee('Response received')
@@ -1212,9 +1270,8 @@ test('reporting workspace surfaces analysis inputs and awaiting response work', 
     ]);
 
     Livewire::test(ReportsPage::class, ['review' => $review])
-        ->assertSee('Reporting workspace')
-        ->assertSee('Drafting inputs from analysis')
-        ->assertSee('Mandate a standard reporting template')
+        ->assertSee('Reports')
+        ->assertSee('1 findings and 1 recommendations available')
         ->assertSee('Awaiting response on published final reports')
         ->assertSee('Final Report on Implementation Reporting');
 });

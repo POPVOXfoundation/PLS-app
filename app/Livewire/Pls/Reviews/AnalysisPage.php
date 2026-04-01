@@ -19,6 +19,12 @@ class AnalysisPage extends Workspace
 
     protected string $workspace = 'analysis';
 
+    public bool $showAddFindingModal = false;
+
+    public bool $showEditFindingModal = false;
+
+    public bool $showEditRecommendationModal = false;
+
     public string $findingTitle = '';
 
     public string $findingType = FindingType::ImplementationGap->value;
@@ -42,6 +48,26 @@ class AnalysisPage extends Workspace
     public function mount(PlsReview $review): void
     {
         parent::mount($review);
+    }
+
+    public function prepareFindingCreate(): void
+    {
+        $this->resetFindingForm();
+        $this->showAddFindingModal = true;
+    }
+
+    public function prepareRecommendationCreate(?int $findingId = null): void
+    {
+        $this->resetRecommendationForm();
+
+        if (
+            $findingId !== null
+            && $this->review->findings()->whereKey($findingId)->exists()
+        ) {
+            $this->recommendationFindingId = (string) $findingId;
+        }
+
+        $this->js("window.Flux.modal('add-analysis-recommendation').show()");
     }
 
     public function render(): View
@@ -79,6 +105,7 @@ class AnalysisPage extends Workspace
         }
 
         $this->resetFindingForm();
+        $this->showAddFindingModal = false;
 
         $this->dispatch('review-workspace-updated', status: __('Finding added to the review.'));
     }
@@ -108,6 +135,8 @@ class AnalysisPage extends Workspace
             'findingSummary',
             'findingDetail',
         ]);
+
+        $this->showEditFindingModal = true;
     }
 
     public function updateFinding(UpdateFinding $action): void
@@ -136,6 +165,7 @@ class AnalysisPage extends Workspace
         }
 
         $this->resetFindingForm();
+        $this->showEditFindingModal = false;
 
         $this->dispatch('review-workspace-updated', status: __('Finding updated.'));
     }
@@ -164,6 +194,7 @@ class AnalysisPage extends Workspace
         }
 
         $this->resetRecommendationForm();
+        $this->js("window.Flux.modal('add-analysis-recommendation').close()");
 
         $this->dispatch('review-workspace-updated', status: __('Recommendation added to the review.'));
     }
@@ -193,6 +224,8 @@ class AnalysisPage extends Workspace
             'recommendationDescription',
             'recommendationType',
         ]);
+
+        $this->showEditRecommendationModal = true;
     }
 
     public function updateRecommendation(UpdateRecommendation $action): void
@@ -221,6 +254,7 @@ class AnalysisPage extends Workspace
         }
 
         $this->resetRecommendationForm();
+        $this->showEditRecommendationModal = false;
 
         $this->dispatch('review-workspace-updated', status: __('Recommendation updated.'));
     }
@@ -263,7 +297,6 @@ class AnalysisPage extends Workspace
             ->with([
                 'findings',
                 'recommendations.finding',
-                'governmentResponses',
             ])
             ->findOrFail($this->review->getKey());
     }
@@ -283,6 +316,7 @@ class AnalysisPage extends Workspace
 
         if ($this->findingEditingId === (string) $findingId) {
             $this->resetFindingForm();
+            $this->showEditFindingModal = false;
         }
 
         $this->dispatch('review-workspace-updated', status: __('Finding removed from the review.'));
@@ -303,6 +337,7 @@ class AnalysisPage extends Workspace
 
         if ($this->recommendationEditingId === (string) $recommendationId) {
             $this->resetRecommendationForm();
+            $this->showEditRecommendationModal = false;
         }
 
         $this->dispatch('review-workspace-updated', status: __('Recommendation removed from the review.'));
