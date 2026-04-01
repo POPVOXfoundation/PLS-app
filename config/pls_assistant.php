@@ -282,4 +282,24 @@ return [
         'global' => [],
         'jurisdictions' => [],
     ],
+
+    'wfd_import' => [
+        'pdftotext_binary' => env('PLS_ASSISTANT_PDFTOTEXT_BINARY', 'pdftotext'),
+        'documents' => [
+            [
+                'key' => 'wfd-guide-for-parliaments-2017',
+                'title' => 'Post-Legislative Scrutiny Guide for Parliaments',
+                'summary' => 'WFD 2017 guide covering parliamentary post-legislative scrutiny concepts, principles, and operational approaches.',
+                'published_at' => '2017-11',
+                'path' => env('PLS_ASSISTANT_WFD_GUIDE_2017_PATH', env('HOME').'/Downloads/pls_source_docs/WFD_Manual-on-Post-Legislative-Scrutiny.pdf'),
+            ],
+            [
+                'key' => 'wfd-manual-for-parliaments-2023',
+                'title' => 'Parliamentary Innovation through Post-Legislative Scrutiny: Manual for Parliaments',
+                'summary' => 'WFD 2023 manual covering the principles, enabling factors, and step-by-step methodology for parliamentary PLS work.',
+                'published_at' => '2023-07',
+                'path' => env('PLS_ASSISTANT_WFD_MANUAL_2023_PATH', env('HOME').'/Downloads/pls_source_docs/wfd_pls_guide_pls_series_4_new (2).pdf'),
+            ],
+        ],
+    ],
 ];
