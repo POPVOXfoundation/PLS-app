@@ -4,6 +4,7 @@ namespace App\Livewire\Pls\Reviews;
 
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Reviews\PlsReviewStep;
+use App\Domain\Reviews\Support\PlsReviewStepGuidance;
 use Illuminate\Contracts\View\View;
 
 class WorkflowPage extends Workspace
@@ -19,20 +20,7 @@ class WorkflowPage extends Workspace
 
     public function stepContext(PlsReviewStep $step): string
     {
-        return match ($step->step_key) {
-            'define_scope' => __('Confirm the legislation under review, the institutional context, and the boundaries of the inquiry.'),
-            'background_data_plan' => __('Assemble source material, implementation records, and baseline evidence to guide the review.'),
-            'stakeholder_plan' => __('Map the institutions and external actors that should inform the scrutiny process.'),
-            'implementation_review' => __('Examine delivery agencies, delegated powers, and operational bottlenecks in implementation.'),
-            'consultations' => __('Capture written and oral input from the public, experts, and implementing institutions.'),
-            'analysis' => __('Synthesize evidence into findings and identify the strongest recommendation themes.'),
-            'draft_report' => __('Translate the inquiry record into a review report with clear conclusions and actions.'),
-            'dissemination' => __('Track publication readiness, accessibility, and the materials needed for public release.'),
-            'government_response' => __('Monitor whether the executive has responded and whether commitments are on record.'),
-            'follow_up' => __('Keep sight of implementation progress after the report phase concludes.'),
-            'evaluation' => __('Assess whether the review process produced usable lessons, evidence, and institutional value.'),
-            default => __('Review the current materials attached to this workflow step.'),
-        };
+        return app(PlsReviewStepGuidance::class)->contextForStep($step);
     }
 
     /**

@@ -17,11 +17,13 @@ class ReviewAssistantAgent implements Agent, Conversational
      * @param  list<string>  $systemRules
      * @param  array{
      *     role: string,
+     *     intro: string,
      *     objectives: list<string>,
      *     suggested_prompts: list<string>,
      *     rules: list<string>,
      *     guardrails: list<string>,
-     *     allowed_capabilities: list<string>
+     *     allowed_capabilities: list<string>,
+     *     response_style: list<string>
      * }  $playbook
      */
     public function __construct(
@@ -44,14 +46,15 @@ class ReviewAssistantAgent implements Agent, Conversational
             'Allowed capabilities:'.PHP_EOL.$this->bullets($this->playbook['allowed_capabilities']),
             'Tab rules:'.PHP_EOL.$this->bullets($this->playbook['rules']),
             'Guardrails:'.PHP_EOL.$this->bullets($this->playbook['guardrails']),
+            'Response style:'.PHP_EOL.$this->bullets($this->playbook['response_style']),
             'Behavior requirements:'.PHP_EOL.$this->bullets([
                 'Stay within the active tab scope.',
                 'If the user asks for something outside this tab, refuse briefly and redirect them to the appropriate tab.',
                 'If the available record is insufficient, say "I do not have sufficient information to answer this from the current review record."',
                 'When drafting analytical or report text, keep it explicitly provisional unless the record shows a final published outcome.',
-                'Keep most answers to 2-4 short sentences unless the user explicitly asks for more detail.',
-                'Prefer plain sentences or a very short list.',
-                'Do not use markdown emphasis, markdown headings, or long sectioned writeups unless the user asks for them.',
+                'Do not blur source layers. Distinguish global guidance, jurisdiction guidance, and current review facts in plain language.',
+                'Use phrases like "According to the WFD manual...", "In this jurisdiction\'s guidance...", or "In this review, the current record shows..." when those layers are present.',
+                'Do not use markdown emphasis or markdown headings unless the user explicitly asks for them.',
             ]),
             'Dynamic inquiry context:'.PHP_EOL.$this->context,
         ]);

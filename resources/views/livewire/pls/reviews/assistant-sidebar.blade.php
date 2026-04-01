@@ -34,10 +34,10 @@
                         </div>
                         <div class="min-w-0">
                             <flux:text class="text-sm font-semibold text-zinc-900 dark:text-zinc-900">
-                                {{ __('How can I help?') }}
+                                {{ __('How this assistant can help here') }}
                             </flux:text>
                             <flux:text class="mt-0.5 text-[13px] leading-5 text-zinc-600 dark:text-zinc-500">
-                                {{ __('Try one of these or type your own question.') }}
+                                {{ $assistantContext['intro'] }}
                             </flux:text>
 
                             <div class="mt-2.5 flex flex-wrap gap-1.5">

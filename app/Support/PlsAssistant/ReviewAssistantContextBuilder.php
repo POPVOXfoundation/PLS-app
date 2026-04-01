@@ -12,44 +12,75 @@ use App\Domain\Reporting\Report;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Reviews\PlsReviewMembership;
 use App\Domain\Reviews\PlsReviewStep;
+use App\Domain\Reviews\Support\PlsReviewStepGuidance;
 use App\Domain\Stakeholders\Stakeholder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 class ReviewAssistantContextBuilder
 {
+    public function __construct(
+        protected PlaybookRepository $playbooks,
+        protected PlsReviewStepGuidance $stepGuidance,
+        protected ReviewAssistantGroundingRepository $grounding,
+    ) {}
+
     /**
      * @return array{
+     *     context: string,
      *     intro: string,
      *     playbook: array{
-     *         role: string,
-     *         objectives: list<string>,
-     *         suggested_prompts: list<string>,
-     *         rules: list<string>,
+     *         allowed_capabilities: list<string>,
      *         guardrails: list<string>,
-     *         allowed_capabilities: list<string>
+     *         intro: string,
+     *         objectives: list<string>,
+     *         response_style: list<string>,
+     *         role: string,
+     *         rules: list<string>,
+     *         suggested_prompts: list<string>
      *     },
      *     playbook_version: string,
+     *     structured_context: array{
+     *         evidence_warnings: list<string>,
+     *         grounding: array{
+     *             global: list<array{excerpt: string, label: string, source: string}>,
+     *             jurisdiction: list<array{excerpt: string, label: string, source: string}>,
+     *             review: list<array{excerpt: string, label: string, source: string}>
+     *         },
+     *         known_gaps: list<string>,
+     *         record_readiness: list<string>,
+     *         review: array{assignment: string, description: string|null, owner: string, status: string, title: string},
+     *         tab_facts: list<string>,
+     *         workflow: array{
+     *             current_step: string,
+     *             current_step_status: string|null,
+     *             guidance: array{action: string, summary: string, tab: string, title: string}|null,
+     *             progress: string,
+     *             step_list: list<string>,
+     *             step_purpose: string|null
+     *         }
+     *     },
      *     system_rules: list<string>,
      *     workspace_key: string,
-     *     workspace_label: string,
-     *     context: string
+     *     workspace_label: string
      * }
      */
-    public function build(PlsReview $review, string $workspaceKey): array
+    public function build(PlsReview $review, string $workspaceKey, string $prompt = ''): array
     {
         $workspaceKey = $this->resolveWorkspaceKey($workspaceKey);
         $review = $this->hydrateReview($review);
-        $playbook = $this->playbook($workspaceKey);
+        $playbook = $this->playbooks->tab($workspaceKey);
+        $structuredContext = $this->structuredContext($review, $workspaceKey, $prompt);
 
         return [
-            'intro' => $playbook['objectives'][0] ?? '',
+            'intro' => $this->introFor($playbook, $structuredContext),
             'playbook' => $playbook,
-            'playbook_version' => $this->playbookVersion(),
-            'system_rules' => config('pls_assistant.system_rules', []),
+            'playbook_version' => $this->playbooks->versionForTab($workspaceKey),
+            'structured_context' => $structuredContext,
+            'system_rules' => $this->playbooks->systemRules(),
             'workspace_key' => $workspaceKey,
             'workspace_label' => $this->workspaceLabel($workspaceKey),
-            'context' => $this->contextString($review, $workspaceKey),
+            'context' => $this->contextString($structuredContext, $workspaceKey, $prompt),
         ];
     }
 
@@ -57,13 +88,15 @@ class ReviewAssistantContextBuilder
     {
         return $review->loadMissing([
             'owner',
+            'country',
             'reviewGroup.legislature.jurisdiction.country',
             'legislature.jurisdiction.country',
+            'jurisdiction.country',
             'memberships.user',
             'steps',
             'legislation',
             'legislationObjectives',
-            'documents',
+            'documents.chunks',
             'stakeholders.submissions',
             'implementingAgencies',
             'consultations.document',
@@ -76,27 +109,26 @@ class ReviewAssistantContextBuilder
         ]);
     }
 
+    /**
+     * @return array{
+     *     allowed_capabilities: list<string>,
+     *     guardrails: list<string>,
+     *     intro: string,
+     *     objectives: list<string>,
+     *     response_style: list<string>,
+     *     role: string,
+     *     rules: list<string>,
+     *     suggested_prompts: list<string>
+     * }
+     */
     public function playbook(string $workspaceKey): array
     {
-        $workspaceKey = $this->resolveWorkspaceKey($workspaceKey);
-
-        /** @var array{
-         *     role: string,
-         *     objectives: list<string>,
-         *     suggested_prompts: list<string>,
-         *     rules: list<string>,
-         *     guardrails: list<string>,
-         *     allowed_capabilities: list<string>
-         * } $playbook
-         */
-        $playbook = config("pls_assistant.tabs.{$workspaceKey}");
-
-        return $playbook;
+        return $this->playbooks->tab($workspaceKey);
     }
 
-    public function playbookVersion(): string
+    public function playbookVersion(string $workspaceKey): string
     {
-        return (string) config('pls_assistant.version', 'v1');
+        return $this->playbooks->versionForTab($workspaceKey);
     }
 
     public function workspaceLabel(string $workspaceKey): string
@@ -116,20 +148,180 @@ class ReviewAssistantContextBuilder
 
     public function resolveWorkspaceKey(string $workspaceKey): string
     {
-        return config()->has("pls_assistant.tabs.{$workspaceKey}")
-            ? $workspaceKey
-            : 'workflow';
+        return $this->playbooks->resolveWorkspaceKey($workspaceKey);
     }
 
-    private function contextString(PlsReview $review, string $workspaceKey): string
+    /**
+     * @return array{
+     *     evidence_warnings: list<string>,
+     *     grounding: array{
+     *         global: list<array{excerpt: string, label: string, source: string}>,
+     *         jurisdiction: list<array{excerpt: string, label: string, source: string}>,
+     *         review: list<array{excerpt: string, label: string, source: string}>
+     *     },
+     *     known_gaps: list<string>,
+     *     record_readiness: list<string>,
+     *     review: array{assignment: string, description: string|null, owner: string, status: string, title: string},
+     *     tab_facts: list<string>,
+     *     workflow: array{
+     *         current_step: string,
+     *         current_step_status: string|null,
+     *         guidance: array{action: string, summary: string, tab: string, title: string}|null,
+     *         progress: string,
+     *         step_list: list<string>,
+     *         step_purpose: string|null
+     *     }
+     * }
+     */
+    private function structuredContext(PlsReview $review, string $workspaceKey, string $prompt): array
     {
+        $currentStep = $review->currentStep();
+
+        return [
+            'review' => [
+                'title' => $review->title,
+                'description' => $review->description,
+                'status' => $review->statusLabel(),
+                'owner' => $review->owner?->name ?? 'No owner recorded',
+                'assignment' => $review->assignmentLabel(),
+            ],
+            'workflow' => [
+                'progress' => sprintf(
+                    'Step %d of %d (%d%%)',
+                    $review->current_step_number,
+                    max($review->steps->count(), 1),
+                    $review->progressPercentage(),
+                ),
+                'current_step' => $review->currentStepTitle(),
+                'current_step_status' => $currentStep?->statusLabel(),
+                'step_purpose' => $currentStep ? $this->stepGuidance->contextForStep($currentStep) : null,
+                'guidance' => $this->stepGuidance->guidanceForStep($currentStep),
+                'step_list' => $review->steps
+                    ->map(fn (PlsReviewStep $step): string => sprintf(
+                        'Step %d: %s [%s]',
+                        $step->step_number,
+                        $step->title,
+                        $step->statusLabel(),
+                    ))
+                    ->values()
+                    ->all(),
+            ],
+            'tab_facts' => $this->workspaceFacts($review, $workspaceKey),
+            'known_gaps' => $this->knownGaps($review),
+            'evidence_warnings' => $this->evidenceWarnings($review),
+            'record_readiness' => $this->recordReadiness($review),
+            'grounding' => $this->grounding->forPrompt($review, $prompt),
+        ];
+    }
+
+    /**
+     * @param  array{
+     *     evidence_warnings: list<string>,
+     *     grounding: array{
+     *         global: list<array{excerpt: string, label: string, source: string}>,
+     *         jurisdiction: list<array{excerpt: string, label: string, source: string}>,
+     *         review: list<array{excerpt: string, label: string, source: string}>
+     *     },
+     *     known_gaps: list<string>,
+     *     record_readiness: list<string>,
+     *     review: array{assignment: string, description: string|null, owner: string, status: string, title: string},
+     *     tab_facts: list<string>,
+     *     workflow: array{
+     *         current_step: string,
+     *         current_step_status: string|null,
+     *         guidance: array{action: string, summary: string, tab: string, title: string}|null,
+     *         progress: string,
+     *         step_list: list<string>,
+     *         step_purpose: string|null
+     *     }
+     * } $structuredContext
+     * @param  array{
+     *     intro: string
+     * } $playbook
+     */
+    private function introFor(array $playbook, array $structuredContext): string
+    {
+        $sources = [];
+
+        if ($structuredContext['grounding']['review'] !== []) {
+            $sources[] = 'the current review record';
+        }
+
+        if ($structuredContext['grounding']['jurisdiction'] !== []) {
+            $sources[] = 'jurisdiction guidance';
+        }
+
+        if ($structuredContext['grounding']['global'] !== []) {
+            $sources[] = 'global reference guidance';
+        }
+
+        if ($sources === []) {
+            return $playbook['intro'];
+        }
+
+        return $playbook['intro'].' I will distinguish between '.implode(', ', $sources).'.';
+    }
+
+    /**
+     * @param  array{
+     *     evidence_warnings: list<string>,
+     *     grounding: array{
+     *         global: list<array{excerpt: string, label: string, source: string}>,
+     *         jurisdiction: list<array{excerpt: string, label: string, source: string}>,
+     *         review: list<array{excerpt: string, label: string, source: string}>
+     *     },
+     *     known_gaps: list<string>,
+     *     record_readiness: list<string>,
+     *     review: array{assignment: string, description: string|null, owner: string, status: string, title: string},
+     *     tab_facts: list<string>,
+     *     workflow: array{
+     *         current_step: string,
+     *         current_step_status: string|null,
+     *         guidance: array{action: string, summary: string, tab: string, title: string}|null,
+     *         progress: string,
+     *         step_list: list<string>,
+     *         step_purpose: string|null
+     *     }
+     * } $structuredContext
+     */
+    private function contextString(array $structuredContext, string $workspaceKey, string $prompt): string
+    {
+        $workflowGuidance = $structuredContext['workflow']['guidance'];
+
         return implode(PHP_EOL.PHP_EOL, array_filter([
-            'Playbook version: '.$this->playbookVersion(),
+            'Playbook version: '.$this->playbookVersion($workspaceKey),
             'Active tab: '.$this->workspaceLabel($workspaceKey),
-            'Review summary:'.PHP_EOL.$this->reviewSummary($review),
-            'Workflow summary:'.PHP_EOL.$this->workflowSummary($review),
-            'Current step guidance:'.PHP_EOL.$this->currentStepGuidance($review),
-            'Tab facts:'.PHP_EOL.$this->workspaceFacts($review, $workspaceKey),
+            'Grounding priority: '.$this->groundingPriority($prompt),
+            'Review summary:'.PHP_EOL.implode(PHP_EOL, array_filter([
+                'Review title: '.$structuredContext['review']['title'],
+                $structuredContext['review']['description'] ? 'Review description: '.$structuredContext['review']['description'] : null,
+                'Review status: '.$structuredContext['review']['status'],
+                'Owner: '.$structuredContext['review']['owner'],
+                'Assignment: '.$structuredContext['review']['assignment'],
+            ])),
+            'Workflow summary:'.PHP_EOL.implode(PHP_EOL, array_filter([
+                'Progress: '.$structuredContext['workflow']['progress'],
+                'Current step: '.$structuredContext['workflow']['current_step'],
+                $structuredContext['workflow']['current_step_status'] ? 'Current step status: '.$structuredContext['workflow']['current_step_status'] : null,
+                $structuredContext['workflow']['step_purpose'] ? 'Current step purpose: '.$structuredContext['workflow']['step_purpose'] : null,
+                'Step list:',
+                ...$structuredContext['workflow']['step_list'],
+            ])),
+            'Current step guidance:'.PHP_EOL.implode(PHP_EOL, array_filter([
+                $workflowGuidance ? 'Focus: '.$workflowGuidance['title'] : null,
+                $workflowGuidance ? 'Best tab: '.$workflowGuidance['tab'] : null,
+                $workflowGuidance ? 'Suggested action: '.$workflowGuidance['action'] : null,
+                $workflowGuidance ? 'Why: '.$workflowGuidance['summary'] : 'No additional step guidance is available from the current review step.',
+            ])),
+            'Known gaps:'.PHP_EOL.$this->bulletSection($structuredContext['known_gaps']),
+            'Evidence warnings:'.PHP_EOL.$this->bulletSection($structuredContext['evidence_warnings']),
+            'Record readiness:'.PHP_EOL.$this->bulletSection($structuredContext['record_readiness']),
+            'Grounding layers:'.PHP_EOL.implode(PHP_EOL, [
+                'Global reference guidance: '.$this->groundingSection($structuredContext['grounding']['global']),
+                'Jurisdiction guidance: '.$this->groundingSection($structuredContext['grounding']['jurisdiction']),
+                'Review record and documents: '.$this->groundingSection($structuredContext['grounding']['review']),
+            ]),
+            'Tab facts:'.PHP_EOL.$this->bulletSection($structuredContext['tab_facts']),
         ]));
     }
 
@@ -144,49 +336,10 @@ class ReviewAssistantContextBuilder
         ]));
     }
 
-    private function workflowSummary(PlsReview $review): string
-    {
-        $steps = $review->steps
-            ->map(fn (PlsReviewStep $step): string => sprintf(
-                '- Step %d: %s [%s]',
-                $step->step_number,
-                $step->title,
-                $step->statusLabel(),
-            ))
-            ->implode(PHP_EOL);
-
-        return implode(PHP_EOL, array_filter([
-            sprintf(
-                'Progress: Step %d of %d (%d%%)',
-                $review->current_step_number,
-                max($review->steps->count(), 1),
-                $review->progressPercentage(),
-            ),
-            'Current step: '.$review->currentStepTitle(),
-            $review->currentStep() ? 'Current step status: '.$review->currentStep()->statusLabel() : null,
-            $review->currentStep() ? 'Current step purpose: '.$this->stepContext($review->currentStep()) : null,
-            'Step list:',
-            $steps,
-        ]));
-    }
-
-    private function currentStepGuidance(PlsReview $review): string
-    {
-        $guidance = $this->workflowGuidance($review);
-
-        if ($guidance === null) {
-            return 'No additional step guidance is available from the current review step.';
-        }
-
-        return implode(PHP_EOL, [
-            'Focus: '.$guidance['title'],
-            'Best tab: '.$guidance['tab'],
-            'Suggested action: '.$guidance['action'],
-            'Why: '.$guidance['summary'],
-        ]);
-    }
-
-    private function workspaceFacts(PlsReview $review, string $workspaceKey): string
+    /**
+     * @return list<string>
+     */
+    private function workspaceFacts(PlsReview $review, string $workspaceKey): array
     {
         return match ($workspaceKey) {
             'workflow' => $this->workflowFacts($review),
@@ -197,13 +350,16 @@ class ReviewAssistantContextBuilder
             'consultations' => $this->consultationFacts($review),
             'analysis' => $this->analysisFacts($review),
             'reports' => $this->reportFacts($review),
-            default => 'No tab facts are available.',
+            default => ['No tab facts are available.'],
         };
     }
 
-    private function workflowFacts(PlsReview $review): string
+    /**
+     * @return list<string>
+     */
+    private function workflowFacts(PlsReview $review): array
     {
-        return implode(PHP_EOL, [
+        return array_values(array_filter([
             sprintf(
                 'Current record counts: legislation=%d; documents=%d; stakeholders=%d; consultations=%d; submissions=%d; findings=%d; recommendations=%d; reports=%d; government_responses=%d',
                 $review->legislation->count(),
@@ -219,92 +375,107 @@ class ReviewAssistantContextBuilder
             $review->firstOpenStepAfter($review->current_step_number) !== null
                 ? 'Next open step: '.$review->firstOpenStepAfter($review->current_step_number)->title
                 : 'Next open step: none recorded',
-        ]);
+        ]));
     }
 
-    private function documentsFacts(PlsReview $review): string
+    /**
+     * @return list<string>
+     */
+    private function documentsFacts(PlsReview $review): array
     {
         if ($review->documents->isEmpty()) {
-            return 'No documents are attached to this review yet.';
+            return ['No documents are attached to this review yet.'];
         }
 
-        return implode(PHP_EOL, [
+        return [
             'Documents attached: '.$review->documents->count(),
-            $this->formatList($review->documents, fn (Document $document): string => sprintf(
-                '- %s [%s]%s',
+            ...$this->formatList($review->documents, fn (Document $document): string => sprintf(
+                '%s [%s]%s',
                 $document->title,
                 Str::headline($document->document_type->value),
                 $document->summary ? ' Summary: '.$document->summary : '',
             )),
-        ]);
+        ];
     }
 
-    private function legislationFacts(PlsReview $review): string
+    /**
+     * @return list<string>
+     */
+    private function legislationFacts(PlsReview $review): array
     {
         if ($review->legislation->isEmpty()) {
-            return 'No legislation is linked to this review yet.';
+            return ['No legislation is linked to this review yet.'];
         }
 
-        return implode(PHP_EOL, [
+        return [
             'Linked legislation: '.$review->legislation->count(),
-            $this->formatList($review->legislation, fn (Legislation $legislation): string => sprintf(
-                '- %s [%s]%s%s',
+            ...$this->formatList($review->legislation, fn (Legislation $legislation): string => sprintf(
+                '%s [%s]%s%s',
                 $legislation->title,
                 Str::headline($legislation->legislation_type->value),
                 $legislation->pivot?->relationship_type ? ' Relationship: '.Str::headline((string) $legislation->pivot->relationship_type) : '',
                 $legislation->summary ? ' Summary: '.$legislation->summary : '',
             )),
-        ]);
+        ];
     }
 
-    private function collaboratorFacts(PlsReview $review): string
+    /**
+     * @return list<string>
+     */
+    private function collaboratorFacts(PlsReview $review): array
     {
         if ($review->memberships->isEmpty()) {
-            return 'No collaborators are attached to this review yet.';
+            return ['No collaborators are attached to this review yet.'];
         }
 
-        return implode(PHP_EOL, [
+        return [
             'Collaborators: '.$review->memberships->count(),
-            $this->formatList($review->memberships, fn (PlsReviewMembership $membership): string => sprintf(
-                '- %s [%s]',
+            ...$this->formatList($review->memberships, fn (PlsReviewMembership $membership): string => sprintf(
+                '%s [%s]',
                 $membership->user?->name ?? 'Unknown user',
                 Str::headline($membership->role->value),
             )),
-        ]);
+        ];
     }
 
-    private function stakeholderFacts(PlsReview $review): string
+    /**
+     * @return list<string>
+     */
+    private function stakeholderFacts(PlsReview $review): array
     {
         if ($review->stakeholders->isEmpty()) {
-            return 'No stakeholders are recorded yet.';
+            return ['No stakeholders are recorded yet.'];
         }
 
         $missingContacts = $review->stakeholders
             ->filter(fn (Stakeholder $stakeholder): bool => blank($stakeholder->contact_details['email'] ?? null) && blank($stakeholder->contact_details['phone'] ?? null));
 
-        return implode(PHP_EOL, [
+        return [
             'Stakeholders: '.$review->stakeholders->count(),
             'Implementing agencies: '.$review->implementingAgencies->count(),
             'Stakeholders missing direct contact detail: '.$missingContacts->count(),
-            $this->formatList($review->stakeholders, fn (Stakeholder $stakeholder): string => sprintf(
-                '- %s [%s]%s',
+            ...$this->formatList($review->stakeholders, fn (Stakeholder $stakeholder): string => sprintf(
+                '%s [%s]%s',
                 $stakeholder->name,
                 Str::headline($stakeholder->stakeholder_type->value),
                 $stakeholder->submissions->isNotEmpty() ? ' Submissions: '.$stakeholder->submissions->count() : '',
             )),
-        ]);
+        ];
     }
 
-    private function consultationFacts(PlsReview $review): string
+    /**
+     * @return list<string>
+     */
+    private function consultationFacts(PlsReview $review): array
     {
         if ($review->consultations->isEmpty() && $review->submissions->isEmpty()) {
-            return 'No consultations or submissions are recorded yet.';
+            return ['No consultations or submissions are recorded yet.'];
         }
 
         $plannedCount = $review->consultations->filter(fn (Consultation $consultation): bool => $consultation->held_at === null)->count();
         $completedCount = $review->consultations->count() - $plannedCount;
 
-        return implode(PHP_EOL, [
+        return [
             sprintf(
                 'Consultations: total=%d; completed=%d; planned=%d',
                 $review->consultations->count(),
@@ -312,169 +483,191 @@ class ReviewAssistantContextBuilder
                 $plannedCount,
             ),
             'Submissions: '.$review->submissions->count(),
-            $this->formatList($review->consultations, fn (Consultation $consultation): string => sprintf(
-                '- %s [%s]%s%s',
+            ...$this->formatList($review->consultations, fn (Consultation $consultation): string => sprintf(
+                '%s [%s]%s%s',
                 $consultation->title,
                 Str::headline($consultation->consultation_type->value),
                 $consultation->held_at ? ' Held: '.$consultation->held_at->toDateString() : ' Planned',
                 $consultation->summary ? ' Summary: '.$consultation->summary : '',
             )),
-            $review->submissions->isEmpty()
-                ? 'No submissions are logged yet.'
+            ...($review->submissions->isEmpty()
+                ? ['No submissions are logged yet.']
                 : $this->formatList($review->submissions, fn (Submission $submission): string => sprintf(
-                    '- Submission from %s%s',
+                    'Submission from %s%s',
                     $submission->stakeholder?->name ?? 'Unknown stakeholder',
                     $submission->summary ? ': '.$submission->summary : '',
-                )),
-        ]);
+                ))),
+        ];
     }
 
-    private function analysisFacts(PlsReview $review): string
+    /**
+     * @return list<string>
+     */
+    private function analysisFacts(PlsReview $review): array
     {
         if ($review->findings->isEmpty() && $review->recommendations->isEmpty()) {
-            return 'No findings or recommendations are recorded yet.';
+            return ['No findings or recommendations are recorded yet.'];
         }
 
-        return implode(PHP_EOL, [
+        return [
             'Findings: '.$review->findings->count(),
             'Recommendations: '.$review->recommendations->count(),
-            $review->findings->isEmpty()
-                ? 'No findings are recorded yet.'
+            ...($review->findings->isEmpty()
+                ? ['No findings are recorded yet.']
                 : $this->formatList($review->findings, fn (Finding $finding): string => sprintf(
-                    '- %s [%s]%s',
+                    '%s [%s]%s',
                     $finding->title,
                     Str::headline($finding->finding_type->value),
                     $finding->summary ? ' Summary: '.$finding->summary : '',
-                )),
-            $review->recommendations->isEmpty()
-                ? 'No recommendations are recorded yet.'
+                ))),
+            ...($review->recommendations->isEmpty()
+                ? ['No recommendations are recorded yet.']
                 : $this->formatList($review->recommendations, fn ($recommendation): string => sprintf(
-                    '- %s%s',
+                    '%s%s',
                     $recommendation->title,
                     $recommendation->description ? ': '.$recommendation->description : '',
-                )),
-        ]);
+                ))),
+        ];
     }
 
-    private function reportFacts(PlsReview $review): string
+    /**
+     * @return list<string>
+     */
+    private function reportFacts(PlsReview $review): array
     {
         if ($review->reports->isEmpty() && $review->governmentResponses->isEmpty()) {
-            return 'No reports or government responses are recorded yet.';
+            return ['No reports or government responses are recorded yet.'];
         }
 
-        return implode(PHP_EOL, [
+        return [
             'Reports: '.$review->reports->count(),
             'Government responses: '.$review->governmentResponses->count(),
-            $review->reports->isEmpty()
-                ? 'No reports are recorded yet.'
+            ...($review->reports->isEmpty()
+                ? ['No reports are recorded yet.']
                 : $this->formatList($review->reports, fn (Report $report): string => sprintf(
-                    '- %s [%s | %s]%s',
+                    '%s [%s | %s]%s',
                     $report->title,
                     Str::headline($report->report_type->value),
                     Str::headline($report->status->value),
                     $report->published_at ? ' Published: '.$report->published_at->toDateString() : '',
-                )),
-            $review->governmentResponses->isEmpty()
-                ? 'No government responses are recorded yet.'
+                ))),
+            ...($review->governmentResponses->isEmpty()
+                ? ['No government responses are recorded yet.']
                 : $this->formatList($review->governmentResponses, fn (GovernmentResponse $response): string => sprintf(
-                    '- %s%s%s',
+                    '%s [%s]%s',
                     $response->report?->title ?? 'Unlinked report',
-                    ' ['.Str::headline($response->response_status->value).']',
+                    Str::headline($response->response_status->value),
                     $response->summary ? ' '.$response->summary : '',
-                )),
-        ]);
+                ))),
+        ];
     }
 
     /**
      * @param  Collection<int, mixed>  $items
+     * @return list<string>
      */
-    private function formatList(Collection $items, callable $formatter, int $limit = 6): string
+    private function formatList(Collection $items, callable $formatter, int $limit = 6): array
     {
         return $items
             ->take($limit)
             ->map($formatter)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function knownGaps(PlsReview $review): array
+    {
+        return array_values(array_filter([
+            $review->legislation->isEmpty() ? 'No legislation is linked to this review.' : null,
+            $review->documents->isEmpty() ? 'No documents are uploaded for this review yet.' : null,
+            $review->stakeholders->isEmpty() ? 'No stakeholders are recorded yet.' : null,
+            ($review->consultations->isEmpty() && $review->submissions->isEmpty()) ? 'No consultations or submissions are recorded yet.' : null,
+            ($review->findings->isEmpty() && $review->current_step_number >= 6) ? 'No findings are recorded even though the review is in or beyond the analysis stage.' : null,
+            ($review->reports->isEmpty() && $review->current_step_number >= 7) ? 'No reports are recorded even though the review is in or beyond the reporting stage.' : null,
+            ($review->governmentResponses->isEmpty() && $review->current_step_number >= 9) ? 'No government responses are recorded even though the review is in or beyond the response stage.' : null,
+        ]));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function evidenceWarnings(PlsReview $review): array
+    {
+        return array_values(array_filter([
+            $review->documents->isEmpty() ? 'Document-grounded answers will be limited because there are no review documents yet.' : null,
+            $review->findings->isEmpty() ? 'Any analytical conclusions would be weak because the findings record is still empty.' : null,
+            $review->recommendations->isEmpty() ? 'Recommendation support is limited because no recommendations are recorded yet.' : null,
+            ($review->consultations->isEmpty() && $review->submissions->isEmpty()) ? 'Consultation analysis is unsupported because there are no consultation records or submissions.' : null,
+        ]));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function recordReadiness(PlsReview $review): array
+    {
+        return array_values(array_filter([
+            $review->legislation->isNotEmpty() ? 'Legislation record present.' : 'Legislation record missing.',
+            $review->documents->isNotEmpty() ? 'Document record present.' : 'Document record missing.',
+            $review->stakeholders->isNotEmpty() ? 'Stakeholder record present.' : 'Stakeholder record missing.',
+            $review->consultations->isNotEmpty() || $review->submissions->isNotEmpty() ? 'Consultation evidence present.' : 'Consultation evidence missing.',
+            $review->findings->isNotEmpty() ? 'Analysis record present.' : null,
+            $review->reports->isNotEmpty() ? 'Reporting record present.' : null,
+        ]));
+    }
+
+    /**
+     * @param  list<string>  $items
+     */
+    private function bulletSection(array $items): string
+    {
+        if ($items === []) {
+            return '- None recorded.';
+        }
+
+        return collect($items)
+            ->map(fn (string $item): string => '- '.$item)
             ->implode(PHP_EOL);
     }
 
-    private function stepContext(PlsReviewStep $step): string
+    /**
+     * @param  list<array{excerpt: string, label: string, source: string}>  $references
+     */
+    private function groundingSection(array $references): string
     {
-        return match ($step->step_key) {
-            'define_scope' => 'Confirm the legislation under review, the institutional context, and the boundaries of the inquiry.',
-            'background_data_plan' => 'Assemble source material, implementation records, and baseline evidence to guide the review.',
-            'stakeholder_plan' => 'Map the institutions and external actors that should inform the scrutiny process.',
-            'implementation_review' => 'Examine delivery agencies, delegated powers, and operational bottlenecks in implementation.',
-            'consultations' => 'Capture written and oral input from the public, experts, and implementing institutions.',
-            'analysis' => 'Synthesize evidence into findings and identify the strongest recommendation themes.',
-            'draft_report' => 'Translate the inquiry record into a review report with clear conclusions and actions.',
-            'dissemination' => 'Track publication readiness, accessibility, and the materials needed for public release.',
-            'government_response' => 'Monitor whether the executive has responded and whether commitments are on record.',
-            'follow_up' => 'Keep sight of implementation progress after the report phase concludes.',
-            'evaluation' => 'Assess whether the review process produced usable lessons, evidence, and institutional value.',
-            default => 'Review the current materials attached to this workflow step.',
+        if ($references === []) {
+            return 'none available';
+        }
+
+        return collect($references)
+            ->map(fn (array $reference): string => sprintf(
+                '%s: %s',
+                $reference['label'],
+                Str::limit($reference['excerpt'], 180),
+            ))
+            ->implode(' | ');
+    }
+
+    private function groundingPriority(string $prompt): string
+    {
+        $normalizedPrompt = Str::lower($prompt);
+
+        return match (true) {
+            $this->containsAny($normalizedPrompt, ['jurisdiction', 'country', 'legislature', 'parliament', 'local practice', 'standing order', 'template', 'government response norm']) => 'Jurisdiction guidance first, then global reference guidance, then review-specific material only if needed.',
+            $this->containsAny($normalizedPrompt, ['workflow', 'process', 'method', 'methodology', 'next step', 'stage']) => 'Jurisdiction guidance where available, then global reference guidance, then review-specific material only when directly relevant.',
+            $this->containsAny($normalizedPrompt, ['this review', 'current record', 'uploaded', 'document', 'finding', 'report', 'recommendation']) => 'Review record first, then jurisdiction guidance, then global reference guidance for framing only.',
+            default => 'Use and distinguish global guidance, jurisdiction guidance, and the current review record where each is helpful.',
         };
     }
 
     /**
-     * @return array{title: string, summary: string, tab: string, action: string}|null
+     * @param  list<string>  $needles
      */
-    private function workflowGuidance(PlsReview $review): ?array
+    private function containsAny(string $haystack, array $needles): bool
     {
-        $currentStep = $review->steps->firstWhere('step_number', $review->current_step_number);
-
-        if ($currentStep === null) {
-            return null;
-        }
-
-        return match ($currentStep->step_key) {
-            'define_scope' => [
-                'title' => 'Define the review scope',
-                'summary' => 'Start by linking the legislation under review and adding the first working papers or briefing documents for the inquiry team.',
-                'tab' => 'Legislation and documents',
-                'action' => 'Link the governing law and upload the initial briefing, bill text, or background pack.',
-            ],
-            'background_data_plan' => [
-                'title' => 'Build the evidence base',
-                'summary' => 'Use the documents area to collect background papers, implementation records, and supporting material before consultations begin.',
-                'tab' => 'Documents',
-                'action' => 'Upload implementation reports, audits, and background research notes.',
-            ],
-            'stakeholder_plan' => [
-                'title' => 'Map the people and institutions to involve',
-                'summary' => 'The workspace is ready for stakeholder records and the documents that explain why each voice matters to the review.',
-                'tab' => 'Stakeholders',
-                'action' => 'Add priority stakeholders and capture any supporting briefing documents.',
-            ],
-            'implementation_review' => [
-                'title' => 'Assess implementation delivery',
-                'summary' => 'Keep agencies, supporting documents, and early findings in sync while the review examines how the law is working in practice.',
-                'tab' => 'Stakeholders and analysis',
-                'action' => 'Record implementing agencies, then capture the first findings that emerge from implementation evidence.',
-            ],
-            'consultations' => [
-                'title' => 'Run consultation and evidence intake',
-                'summary' => 'This is the point to log hearings, submissions, and the documents that came in through consultation activity.',
-                'tab' => 'Consultations',
-                'action' => 'Add consultation events and log written submissions as they arrive.',
-            ],
-            'analysis' => [
-                'title' => 'Turn evidence into conclusions',
-                'summary' => 'The analysis area should now capture the strongest findings and the recommendations tied to them.',
-                'tab' => 'Analysis',
-                'action' => 'Draft findings first, then attach recommendations to the relevant finding.',
-            ],
-            'draft_report', 'dissemination' => [
-                'title' => 'Prepare the report record',
-                'summary' => 'Reports and linked publication documents should now become the source of truth for what this inquiry is releasing.',
-                'tab' => 'Reports',
-                'action' => 'Create the report record, link the published file, and keep status up to date.',
-            ],
-            'government_response', 'follow_up', 'evaluation' => [
-                'title' => 'Track what happens after publication',
-                'summary' => 'Focus on the reports tab so government responses, linked documents, and follow-up signals stay attached to the final report.',
-                'tab' => 'Reports',
-                'action' => 'Keep the report record current and log any response request, reply, or overdue follow-up.',
-            ],
-            default => null,
-        };
+        return collect($needles)->contains(fn (string $needle): bool => Str::contains($haystack, $needle));
     }
 }

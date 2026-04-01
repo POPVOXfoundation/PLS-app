@@ -5,6 +5,7 @@ namespace App\Livewire\Pls\Reviews;
 use App\Ai\Agents\ReviewAssistantAgent;
 use App\Domain\Reviews\PlsReview;
 use App\Support\PlsAssistant\ReviewAssistantContextBuilder;
+use App\Support\PlsAssistant\ReviewAssistantRefusalGuard;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +15,8 @@ use Laravel\Ai\Contracts\ConversationStore;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\Usage;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Throwable;
@@ -67,14 +70,23 @@ class AssistantSidebar extends Component
         $this->appendLocalUserMessage($prompt);
         $this->dispatch('assistant-message-added');
 
-        $context = $this->contextBuilder()->build($this->review, $this->workspaceKey);
-        $agent = new ReviewAssistantAgent(
-            systemRules: $context['system_rules'],
-            playbook: $context['playbook'],
-            context: $context['context'],
-            workspaceLabel: $context['workspace_label'],
-            playbookVersion: $context['playbook_version'],
+        $context = $this->contextBuilder()->build($this->review, $this->workspaceKey, $prompt);
+        $agent = $this->assistantAgent($context);
+
+        $refusal = $this->refusalGuard()->refuseOrAllow(
+            $this->review,
+            $this->workspaceKey,
+            $prompt,
+            $context['structured_context'],
         );
+
+        if ($refusal !== null) {
+            $this->persistSyntheticAssistantExchange($agent, $prompt, $refusal, $context['playbook_version']);
+            $this->assistantMessages = $this->conversationMessagesForDisplay();
+            $this->dispatch('assistant-message-added');
+
+            return;
+        }
 
         if ($this->assistantConversationId !== null) {
             $agent->continue($this->assistantConversationId, auth()->user());
@@ -340,8 +352,81 @@ class AssistantSidebar extends Component
         $this->assistantConversationId = $conversationId;
     }
 
+    private function persistSyntheticAssistantExchange(
+        ReviewAssistantAgent $agent,
+        string $prompt,
+        string $assistantReply,
+        string $playbookVersion,
+    ): void {
+        $store = resolve(ConversationStore::class);
+        $provider = Ai::textProviderFor($agent, config('ai.default'));
+        $agentPrompt = new AgentPrompt(
+            $agent,
+            $prompt,
+            [],
+            $provider,
+            $provider->defaultTextModel(),
+        );
+
+        $conversationId = $this->assistantConversationId
+            ?? $store->storeConversation(
+                auth()->id(),
+                Str::limit($prompt, 100, preserveWords: true),
+            );
+
+        $store->storeUserMessage($conversationId, auth()->id(), $agentPrompt);
+        $store->storeAssistantMessage(
+            $conversationId,
+            auth()->id(),
+            $agentPrompt,
+            new AgentResponse(
+                (string) Str::uuid(),
+                $assistantReply,
+                new Usage,
+                new Meta($provider->name(), $provider->defaultTextModel()),
+            ),
+        );
+
+        $this->assistantConversationId = $conversationId;
+        $this->persistConversation($conversationId, $playbookVersion);
+    }
+
+    /**
+     * @param  array{
+     *     context: string,
+     *     playbook: array{
+     *         allowed_capabilities: list<string>,
+     *         guardrails: list<string>,
+     *         intro: string,
+     *         objectives: list<string>,
+     *         response_style: list<string>,
+     *         role: string,
+     *         rules: list<string>,
+     *         suggested_prompts: list<string>
+     *     },
+     *     playbook_version: string,
+     *     system_rules: list<string>,
+     *     workspace_label: string
+     * } $context
+     */
+    private function assistantAgent(array $context): ReviewAssistantAgent
+    {
+        return new ReviewAssistantAgent(
+            systemRules: $context['system_rules'],
+            playbook: $context['playbook'],
+            context: $context['context'],
+            workspaceLabel: $context['workspace_label'],
+            playbookVersion: $context['playbook_version'],
+        );
+    }
+
     private function contextBuilder(): ReviewAssistantContextBuilder
     {
         return app(ReviewAssistantContextBuilder::class);
+    }
+
+    private function refusalGuard(): ReviewAssistantRefusalGuard
+    {
+        return app(ReviewAssistantRefusalGuard::class);
     }
 }

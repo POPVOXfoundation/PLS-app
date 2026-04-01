@@ -2,9 +2,11 @@
 
 use App\Ai\Agents\ReviewAssistantAgent;
 use App\Domain\Documents\Document;
+use App\Domain\Documents\DocumentChunk;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Livewire\Pls\Reviews\AssistantSidebar;
 use App\Models\User;
+use App\Support\PlsAssistant\PlaybookRepository;
 use Illuminate\Support\Facades\DB;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Livewire\Livewire;
@@ -47,7 +49,7 @@ it('shows the configured role and prompts for the current tab', function (string
     ],
     'reports' => [
         'reports',
-        'Analytical Support Assistant',
+        'Report Drafting Assistant',
         [
             'Summarize the current report status.',
             'Explain the current government response status.',
@@ -55,6 +57,22 @@ it('shows the configured role and prompts for the current tab', function (string
         ],
     ],
 ]);
+
+test('assistant intro changes by tab', function () {
+    $review = plsReview([
+        'title' => 'Assistant intro review',
+    ]);
+
+    Livewire::test(AssistantSidebar::class, [
+        'review' => $review,
+        'workspaceKey' => 'workflow',
+    ])->assertSee('Ask about the current workflow stage');
+
+    Livewire::test(AssistantSidebar::class, [
+        'review' => $review,
+        'workspaceKey' => 'documents',
+    ])->assertSee('Ask about uploaded materials');
+});
 
 test('assistant composer submits on enter while preserving shift enter for new lines', function () {
     $review = plsReview([
@@ -69,37 +87,54 @@ test('assistant composer submits on enter while preserving shift enter for new l
         ->assertDontSeeHtml('x-on:keydown=');
 });
 
-test('assistant can reset the saved conversation for the current review', function () {
-    $review = plsReview([
-        'title' => 'Resettable assistant conversation',
+test('assistant can reset only the saved conversation for the current review', function () {
+    $firstReview = plsReview([
+        'title' => 'First resettable review',
+    ]);
+    $secondReview = plsReview([
+        'title' => 'Second resettable review',
     ]);
 
     ReviewAssistantAgent::fake([
-        'Workflow response',
+        'First workflow response',
+        'Second workflow response',
     ]);
 
-    $component = Livewire::test(AssistantSidebar::class, [
-        'review' => $review,
+    $firstComponent = Livewire::test(AssistantSidebar::class, [
+        'review' => $firstReview,
         'workspaceKey' => 'workflow',
     ])->call('sendPrompt', 'Summarize the current step.');
 
-    $conversationId = DB::table('agent_conversations')->value('id');
+    Livewire::test(AssistantSidebar::class, [
+        'review' => $secondReview,
+        'workspaceKey' => 'workflow',
+    ])->call('sendPrompt', 'Summarize the current step.');
 
-    expect($conversationId)->not->toBeNull()
-        ->and(DB::table('agent_conversation_messages')->where('conversation_id', $conversationId)->count())->toBe(2);
+    expect(DB::table('agent_conversations')->count())->toBe(2)
+        ->and(DB::table('agent_conversation_messages')->count())->toBe(4);
 
-    $component->call('resetAssistantConversation')
+    $firstConversationId = DB::table('agent_conversations')
+        ->where('pls_review_id', $firstReview->id)
+        ->value('id');
+
+    $secondConversationId = DB::table('agent_conversations')
+        ->where('pls_review_id', $secondReview->id)
+        ->value('id');
+
+    $firstComponent->call('resetAssistantConversation')
         ->assertSet('assistantConversationId', null)
         ->assertSet('assistantMessages', [])
         ->assertSet('assistantInput', '')
         ->assertSet('assistantError', null)
-        ->assertSee('How can I help?');
+        ->assertSee('How this assistant can help here');
 
-    expect(DB::table('agent_conversations')->count())->toBe(0)
-        ->and(DB::table('agent_conversation_messages')->count())->toBe(0);
+    expect(DB::table('agent_conversations')->count())->toBe(1)
+        ->and(DB::table('agent_conversation_messages')->count())->toBe(2)
+        ->and(DB::table('agent_conversations')->where('id', $firstConversationId)->exists())->toBeFalse()
+        ->and(DB::table('agent_conversations')->where('id', $secondConversationId)->exists())->toBeTrue();
 });
 
-test('workflow prompts compile current step progress and guidance into the agent instructions', function () {
+test('workflow prompts compile current step progress and shared guidance into the agent instructions', function () {
     $review = plsReview([
         'title' => 'Review of access to information compliance',
         'description' => 'Examines disclosure timeliness and implementation bottlenecks.',
@@ -133,6 +168,7 @@ test('workflow prompts compile current step progress and guidance into the agent
             ->toContain('You are the PLS Bot assistant.')
             ->toContain('Active tab: Workflow')
             ->toContain('Tab role: Process Guide')
+            ->toContain('Playbook version: '.app(PlaybookRepository::class)->versionForTab('workflow'))
             ->toContain('Review title: '.$review->title)
             ->toContain('Progress: Step 1 of 11')
             ->toContain('Current step: Define the objectives and scope of PLS')
@@ -187,6 +223,101 @@ test('documents prompts are grounded in the current review record', function () 
     });
 });
 
+test('workflow tab refuses finding generation before the llm call', function () {
+    $review = plsReview([
+        'title' => 'Workflow boundary review',
+    ]);
+
+    ReviewAssistantAgent::fake();
+
+    Livewire::test(AssistantSidebar::class, [
+        'review' => $review,
+        'workspaceKey' => 'workflow',
+    ])
+        ->call('sendPrompt', 'Draft findings from this workflow stage.')
+        ->assertSee('I can help with workflow stages and next steps in this tab, but I cannot generate findings, recommendations, or conclusions from the Workflow tab.');
+
+    ReviewAssistantAgent::assertNeverPrompted();
+
+    expect(DB::table('agent_conversations')->count())->toBe(1)
+        ->and(DB::table('agent_conversation_messages')->count())->toBe(2);
+});
+
+test('documents tab refuses unsupported claims about missing documents without support', function () {
+    $review = plsReview([
+        'title' => 'Sparse document review',
+    ]);
+
+    ReviewAssistantAgent::fake();
+
+    Livewire::test(AssistantSidebar::class, [
+        'review' => $review,
+        'workspaceKey' => 'documents',
+    ])
+        ->call('sendPrompt', 'What missing regulations are definitely required here?')
+        ->assertSee('I can only make claims about document contents or missing materials here when the current review has supporting uploads or approved reference sources.');
+
+    ReviewAssistantAgent::assertNeverPrompted();
+});
+
+test('legislation tab refuses impact evaluation without evidence', function () {
+    $review = plsReview([
+        'title' => 'Legislation impact boundary review',
+    ]);
+
+    ReviewAssistantAgent::fake();
+
+    Livewire::test(AssistantSidebar::class, [
+        'review' => $review,
+        'workspaceKey' => 'legislation',
+    ])
+        ->call('sendPrompt', 'Evaluate the impact of this law.')
+        ->assertSee('I can explain the structure of the legislation in this tab, but I cannot evaluate impact or give final conclusions without supporting evidence.');
+
+    ReviewAssistantAgent::assertNeverPrompted();
+});
+
+test('consultations tab refuses result analysis when no records exist', function () {
+    $review = plsReview([
+        'title' => 'Consultation boundary review',
+    ]);
+
+    ReviewAssistantAgent::fake();
+
+    Livewire::test(AssistantSidebar::class, [
+        'review' => $review,
+        'workspaceKey' => 'consultations',
+    ])
+        ->call('sendPrompt', 'Analyze the consultation results.')
+        ->assertSee('I can help design consultation activity in this tab, but I cannot analyze consultation results because no consultations or submissions are recorded yet.');
+
+    ReviewAssistantAgent::assertNeverPrompted();
+});
+
+test('analysis tab instructions keep outputs provisional', function () {
+    $review = plsReview([
+        'title' => 'Analysis proviso review',
+    ]);
+
+    ReviewAssistantAgent::fake([
+        'Potential themes are emerging, but they should still be treated as provisional.',
+    ]);
+
+    Livewire::test(AssistantSidebar::class, [
+        'review' => $review,
+        'workspaceKey' => 'analysis',
+    ])->call('sendPrompt', 'Group the current analysis into themes.');
+
+    ReviewAssistantAgent::assertPrompted(function (AgentPrompt $prompt) {
+        expect((string) $prompt->agent->instructions())
+            ->toContain('Tab role: Analytical Support Assistant')
+            ->toContain('Response style:')
+            ->toContain('Keep findings and recommendation options explicitly provisional.');
+
+        return $prompt->contains('Group the current analysis into themes.');
+    });
+});
+
 test('the same review keeps one assistant conversation across tab changes for the same user', function () {
     $review = plsReview([
         'title' => 'Conversation continuity review',
@@ -210,7 +341,7 @@ test('the same review keeps one assistant conversation across tab changes for th
 
     expect($record->pls_review_id)->toBe($review->id)
         ->and($record->user_id)->toBe(auth()->id())
-        ->and($record->playbook_version)->toBe(config('pls_assistant.version'));
+        ->and($record->playbook_version)->toBe(app(PlaybookRepository::class)->versionForTab('workflow'));
 
     $documents = Livewire::test(AssistantSidebar::class, [
         'review' => $review->fresh(),
@@ -274,23 +405,6 @@ test('different reviews keep separate assistant conversations', function () {
 
     expect($records)->toHaveCount(2)
         ->and($records[0]->id)->not->toBe($records[1]->id);
-});
-
-test('assistant can show a scoped refusal returned for an out of scope request', function () {
-    $review = plsReview([
-        'title' => 'Workflow boundary review',
-    ]);
-
-    ReviewAssistantAgent::fake([
-        'I can help with workflow stages and next steps in this tab, but I cannot draft final recommendations from the Workflow tab.',
-    ]);
-
-    Livewire::test(AssistantSidebar::class, [
-        'review' => $review,
-        'workspaceKey' => 'workflow',
-    ])
-        ->call('sendPrompt', 'Draft a final recommendation from the current review.')
-        ->assertSee('I can help with workflow stages and next steps in this tab, but I cannot draft final recommendations from the Workflow tab.');
 });
 
 test('assistant can show explicit uncertainty when the current record is insufficient', function () {
@@ -369,4 +483,125 @@ test('assistant shows an inline error state when the sdk call fails', function (
     $component
         ->assertSet('assistantError', 'The assistant is unavailable right now. Check the AI provider configuration or try again.')
         ->assertSee('The assistant is unavailable right now. Check the AI provider configuration or try again.');
+});
+
+test('global reference docs are included for process questions', function () {
+    config()->set('pls_assistant.reference_documents.global', [
+        [
+            'label' => 'WFD Manual',
+            'content' => 'Use a documented workflow for post-legislative scrutiny and make each step explicit.',
+        ],
+    ]);
+
+    $review = plsReview([
+        'title' => 'Global reference review',
+    ]);
+
+    ReviewAssistantAgent::fake([
+        'According to the WFD manual, the workflow should stay explicit and documented.',
+    ]);
+
+    Livewire::test(AssistantSidebar::class, [
+        'review' => $review,
+        'workspaceKey' => 'workflow',
+    ])->call('sendPrompt', 'What does the WFD manual say about this workflow stage?');
+
+    ReviewAssistantAgent::assertPrompted(function (AgentPrompt $prompt) {
+        expect((string) $prompt->agent->instructions())
+            ->toContain('Grounding priority: Jurisdiction guidance where available, then global reference guidance, then review-specific material only when directly relevant.')
+            ->toContain('Global reference guidance: WFD Manual: Use a documented workflow for post-legislative scrutiny and make each step explicit.');
+
+        return $prompt->contains('What does the WFD manual say about this workflow stage?');
+    });
+});
+
+test('jurisdiction guidance is preferred for local practice questions', function () {
+    $review = plsReview([
+        'title' => 'Jurisdiction guidance review',
+    ]);
+
+    config()->set('pls_assistant.reference_documents.global', [
+        [
+            'label' => 'WFD Manual',
+            'content' => 'Government response tracking should be tied to the report record.',
+        ],
+    ]);
+
+    config()->set('pls_assistant.reference_documents.jurisdictions', [
+        [
+            'label' => 'Local Standing Orders',
+            'scope' => [$review->jurisdiction->name, $review->legislature->name],
+            'content' => 'In this jurisdiction, government responses are ordinarily logged against the report and follow-up calendar.',
+        ],
+    ]);
+
+    ReviewAssistantAgent::fake([
+        'In this jurisdiction’s guidance, government responses are logged against the report and follow-up calendar.',
+    ]);
+
+    Livewire::test(AssistantSidebar::class, [
+        'review' => $review,
+        'workspaceKey' => 'reports',
+    ])->call('sendPrompt', 'What is the local practice for government responses in this parliament?');
+
+    ReviewAssistantAgent::assertPrompted(function (AgentPrompt $prompt) {
+        expect((string) $prompt->agent->instructions())
+            ->toContain('Grounding priority: Jurisdiction guidance first, then global reference guidance, then review-specific material only if needed.')
+            ->toContain('Jurisdiction guidance: Local Standing Orders: In this jurisdiction, government responses are ordinarily logged against the report and follow-up calendar.')
+            ->toContain('Global reference guidance: WFD Manual: Government response tracking should be tied to the report record.');
+
+        return $prompt->contains('What is the local practice for government responses in this parliament?');
+    });
+});
+
+test('mixed grounding keeps global jurisdiction and review layers distinct', function () {
+    $review = plsReview([
+        'title' => 'Mixed grounding review',
+    ]);
+
+    $document = Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Implementation Memo',
+        'summary' => 'The current review record shows one ministry has delayed implementation by six months.',
+    ]);
+
+    DocumentChunk::factory()->create([
+        'document_id' => $document->id,
+        'chunk_index' => 0,
+        'content' => 'The current review record shows one ministry has delayed implementation by six months.',
+        'token_count' => 14,
+    ]);
+
+    config()->set('pls_assistant.reference_documents.global', [
+        [
+            'label' => 'WFD Manual',
+            'content' => 'Use post-legislative scrutiny to connect evidence, findings, and follow-up.',
+        ],
+    ]);
+
+    config()->set('pls_assistant.reference_documents.jurisdictions', [
+        [
+            'label' => 'Local PLS Guidance',
+            'scope' => [$review->jurisdiction->name],
+            'content' => 'In this jurisdiction, implementation delays should be tied to agency accountability and reporting timelines.',
+        ],
+    ]);
+
+    ReviewAssistantAgent::fake([
+        'According to the WFD manual, this should stay evidence-led. In this jurisdiction’s guidance, implementation delays should be tied to accountability timelines. In this review, the current record shows one ministry has delayed implementation by six months.',
+    ]);
+
+    Livewire::test(AssistantSidebar::class, [
+        'review' => $review,
+        'workspaceKey' => 'analysis',
+    ])->call('sendPrompt', 'Combine the process guidance, local practice, and current review evidence on implementation delays.');
+
+    ReviewAssistantAgent::assertPrompted(function (AgentPrompt $prompt) {
+        expect((string) $prompt->agent->instructions())
+            ->toContain('Global reference guidance: WFD Manual: Use post-legislative scrutiny to connect evidence, findings, and follow-up.')
+            ->toContain('Jurisdiction guidance: Local PLS Guidance: In this jurisdiction, implementation delays should be tied to agency accountability and reporting timelines.')
+            ->toContain('Review record and documents: Implementation Memo: The current review record shows one ministry has delayed implementation by six months.');
+
+        return $prompt->contains('Combine the process guidance, local practice, and current review evidence on implementation delays.');
+    });
 });
