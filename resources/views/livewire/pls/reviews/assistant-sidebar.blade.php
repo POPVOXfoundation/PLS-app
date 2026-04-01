@@ -1,4 +1,4 @@
-<div class="flex max-h-[calc(100vh-10rem)] min-h-0 flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_18px_45px_-28px_rgba(15,23,42,0.16)] dark:border-zinc-200 dark:bg-white">
+<div class="flex max-h-[calc(100vh-16rem)] min-h-0 flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_18px_45px_-28px_rgba(15,23,42,0.16)] dark:border-zinc-200 dark:bg-white">
     <div class="border-b border-violet-300/30 bg-gradient-to-r from-slate-500 via-indigo-500 to-violet-500 px-4 py-2.5">
         <div class="flex items-center gap-2">
             <flux:heading size="base" class="!text-white">{{ __('PLS Assistant') }}</flux:heading>
@@ -12,9 +12,22 @@
     <div
         x-data="{
             scrollToBottom() { $nextTick(() => this.$el.scrollTo({ top: this.$el.scrollHeight, behavior: 'smooth' })) },
+            scrollToLastMessage() {
+                $nextTick(() => {
+                    const messages = this.$el.querySelectorAll('[data-message]');
+                    const last = messages[messages.length - 1];
+                    if (last) {
+                        const containerTop = this.$el.getBoundingClientRect().top;
+                        const messageTop = last.getBoundingClientRect().top;
+                        this.$el.scrollTo({ top: this.$el.scrollTop + (messageTop - containerTop), behavior: 'smooth' });
+                    } else {
+                        this.scrollToBottom();
+                    }
+                });
+            },
         }"
         x-init="
-            scrollToBottom();
+            requestAnimationFrame(() => { $el.scrollTop = $el.scrollHeight });
             const thinkingEl = $el.querySelector('[data-thinking]');
             if (thinkingEl) {
                 new MutationObserver(() => {
@@ -22,7 +35,7 @@
                 }).observe(thinkingEl, { attributes: true, attributeFilter: ['style'] });
             }
         "
-        @assistant-message-added.window="scrollToBottom()"
+        @assistant-message-added.window="scrollToLastMessage()"
         class="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(250,250,252,0.9)_0%,rgba(255,255,255,1)_18%)] px-4 py-3.5"
     >
         <div class="space-y-2.5">
@@ -59,7 +72,7 @@
             @endif
 
             @foreach ($assistantMessages as $message)
-                <div @class([
+                <div data-message @class([
                     'flex justify-end pl-10' => $message['role'] === 'user',
                     'flex items-start gap-2 pr-2' => $message['role'] === 'assistant',
                 ])>
