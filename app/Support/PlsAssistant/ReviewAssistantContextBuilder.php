@@ -6,6 +6,7 @@ use App\Domain\Analysis\Finding;
 use App\Domain\Consultations\Consultation;
 use App\Domain\Consultations\Submission;
 use App\Domain\Documents\Document;
+use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Legislation\Legislation;
 use App\Domain\Reporting\GovernmentResponse;
 use App\Domain\Reporting\Report;
@@ -210,7 +211,7 @@ class ReviewAssistantContextBuilder
             'known_gaps' => $this->knownGaps($review),
             'evidence_warnings' => $this->evidenceWarnings($review),
             'record_readiness' => $this->recordReadiness($review),
-            'grounding' => $this->grounding->forPrompt($review, $prompt),
+            'grounding' => $this->grounding->forPrompt($review, $prompt, $workspaceKey),
         ];
     }
 
@@ -359,11 +360,13 @@ class ReviewAssistantContextBuilder
      */
     private function workflowFacts(PlsReview $review): array
     {
+        $documents = $this->documentsForWorkspace($review);
+
         return array_values(array_filter([
             sprintf(
                 'Current record counts: legislation=%d; documents=%d; stakeholders=%d; consultations=%d; submissions=%d; findings=%d; recommendations=%d; reports=%d; government_responses=%d',
                 $review->legislation->count(),
-                $review->documents->count(),
+                $documents->count(),
                 $review->stakeholders->count(),
                 $review->consultations->count(),
                 $review->submissions->count(),
@@ -383,13 +386,15 @@ class ReviewAssistantContextBuilder
      */
     private function documentsFacts(PlsReview $review): array
     {
-        if ($review->documents->isEmpty()) {
+        $documents = $this->documentsForWorkspace($review);
+
+        if ($documents->isEmpty()) {
             return ['No documents are attached to this review yet.'];
         }
 
         return [
-            'Documents attached: '.$review->documents->count(),
-            ...$this->formatList($review->documents, fn (Document $document): string => sprintf(
+            'Documents attached: '.$documents->count(),
+            ...$this->formatList($documents, fn (Document $document): string => sprintf(
                 '%s [%s]%s',
                 $document->title,
                 Str::headline($document->document_type->value),
@@ -580,9 +585,11 @@ class ReviewAssistantContextBuilder
      */
     private function knownGaps(PlsReview $review): array
     {
+        $documents = $this->documentsForWorkspace($review);
+
         return array_values(array_filter([
             $review->legislation->isEmpty() ? 'No legislation is linked to this review.' : null,
-            $review->documents->isEmpty() ? 'No documents are uploaded for this review yet.' : null,
+            $documents->isEmpty() ? 'No documents are uploaded for this review yet.' : null,
             $review->stakeholders->isEmpty() ? 'No stakeholders are recorded yet.' : null,
             ($review->consultations->isEmpty() && $review->submissions->isEmpty()) ? 'No consultations or submissions are recorded yet.' : null,
             ($review->findings->isEmpty() && $review->current_step_number >= 6) ? 'No findings are recorded even though the review is in or beyond the analysis stage.' : null,
@@ -596,8 +603,10 @@ class ReviewAssistantContextBuilder
      */
     private function evidenceWarnings(PlsReview $review): array
     {
+        $documents = $this->documentsForWorkspace($review);
+
         return array_values(array_filter([
-            $review->documents->isEmpty() ? 'Document-grounded answers will be limited because there are no review documents yet.' : null,
+            $documents->isEmpty() ? 'Document-grounded answers will be limited because there are no review documents yet.' : null,
             $review->findings->isEmpty() ? 'Any analytical conclusions would be weak because the findings record is still empty.' : null,
             $review->recommendations->isEmpty() ? 'Recommendation support is limited because no recommendations are recorded yet.' : null,
             ($review->consultations->isEmpty() && $review->submissions->isEmpty()) ? 'Consultation analysis is unsupported because there are no consultation records or submissions.' : null,
@@ -609,14 +618,26 @@ class ReviewAssistantContextBuilder
      */
     private function recordReadiness(PlsReview $review): array
     {
+        $documents = $this->documentsForWorkspace($review);
+
         return array_values(array_filter([
             $review->legislation->isNotEmpty() ? 'Legislation record present.' : 'Legislation record missing.',
-            $review->documents->isNotEmpty() ? 'Document record present.' : 'Document record missing.',
+            $documents->isNotEmpty() ? 'Document record present.' : 'Document record missing.',
             $review->stakeholders->isNotEmpty() ? 'Stakeholder record present.' : 'Stakeholder record missing.',
             $review->consultations->isNotEmpty() || $review->submissions->isNotEmpty() ? 'Consultation evidence present.' : 'Consultation evidence missing.',
             $review->findings->isNotEmpty() ? 'Analysis record present.' : null,
             $review->reports->isNotEmpty() ? 'Reporting record present.' : null,
         ]));
+    }
+
+    /**
+     * @return Collection<int, Document>
+     */
+    private function documentsForWorkspace(PlsReview $review): Collection
+    {
+        return $review->documents->reject(
+            fn (Document $document): bool => $document->document_type === DocumentType::LegislationText,
+        )->values();
     }
 
     /**

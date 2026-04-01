@@ -52,9 +52,6 @@ class StakeholdersPage extends Workspace
             'stakeholderTypes' => StakeholderType::cases(),
             'filteredStakeholders' => $this->filteredStakeholders($review),
             'implementingAgencyTypes' => ImplementingAgencyType::cases(),
-            'stakeholdersWithSubmissions' => $this->stakeholdersWithSubmissions($review),
-            'stakeholdersAwaitingEvidence' => $this->stakeholdersAwaitingEvidence($review),
-            'stakeholdersMissingContacts' => $this->stakeholdersMissingContacts($review),
         ], $review);
     }
 
@@ -207,6 +204,22 @@ class StakeholdersPage extends Workspace
         $this->dispatch('review-workspace-updated', status: __('Implementing agency added to the review.'));
     }
 
+    public function removeStakeholder(int $stakeholderId): void
+    {
+        $this->authorizeReviewMutation();
+
+        $stakeholder = $this->review->stakeholders()->whereKey($stakeholderId)->first();
+
+        if ($stakeholder === null) {
+            return;
+        }
+
+        $stakeholder->delete();
+        $this->review = $this->loadReview();
+
+        $this->dispatch('review-workspace-updated', status: __('Stakeholder removed from the review.'));
+    }
+
     /**
      * @param  array<string, string>  $mapping
      */
@@ -232,7 +245,7 @@ class StakeholdersPage extends Workspace
     {
         return PlsReview::query()
             ->with([
-                'stakeholders.submissions.document',
+                'stakeholders',
                 'implementingAgencies',
             ])
             ->findOrFail($this->review->getKey());

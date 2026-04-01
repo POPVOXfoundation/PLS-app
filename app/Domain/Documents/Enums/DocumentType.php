@@ -13,4 +13,15 @@ enum DocumentType: string
     case GovernmentResponse = 'government_response';
     case DraftReport = 'draft_report';
     case FinalReport = 'final_report';
+
+    /**
+     * @return list<self>
+     */
+    public static function reviewWorkspaceCases(): array
+    {
+        return array_values(array_filter(
+            self::cases(),
+            static fn (self $type): bool => $type !== self::LegislationText,
+        ));
+    }
 }

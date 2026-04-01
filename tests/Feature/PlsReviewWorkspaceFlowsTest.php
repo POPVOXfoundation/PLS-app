@@ -1,6 +1,7 @@
 <?php
 
 use App\Ai\Agents\LegislationSourceExtractorAgent;
+use App\Ai\Agents\ReviewDocumentExtractorAgent;
 use App\Domain\Analysis\Enums\FindingType;
 use App\Domain\Analysis\Enums\RecommendationType;
 use App\Domain\Documents\Document;
@@ -466,91 +467,229 @@ test('ai extraction failures do not fall back to heuristic legislation parsing',
         ->and(data_get($document->metadata, 'legislation_analysis.title'))->toBe('Southern Deep Port Development Facility Bill 2024');
 });
 
-test('document metadata can be added from the review workspace', function () {
-    $review = plsReview([
-        'title' => 'Review of delegated powers reporting',
-    ]);
-
-    Livewire::test(DocumentsPage::class, ['review' => $review])
-        ->set('documentTitle', 'Review Group Briefing Pack')
-        ->set('documentType', DocumentType::GroupReport->value)
-        ->set('documentStoragePath', 'documents/review-group-briefing-pack.pdf')
-        ->set('documentMimeType', 'application/pdf')
-        ->set('documentFileSize', '120000')
-        ->set('documentSummary', 'Working pack covering delegated powers, reporting delays, and evidence priorities.')
-        ->call('storeDocument')
-        ->assertHasNoErrors()
-        ->assertSee('Review Group Briefing Pack');
-
-    $this->assertDatabaseHas('documents', [
-        'pls_review_id' => $review->id,
-        'title' => 'Review Group Briefing Pack',
-        'document_type' => DocumentType::GroupReport->value,
-        'storage_path' => 'documents/review-group-briefing-pack.pdf',
-    ]);
-});
-
-test('review documents can be uploaded, edited, and deleted from the review workspace', function () {
+test('review documents can be uploaded in batches analyzed and saved from the review workspace', function () {
     Storage::fake(config('filesystems.default'));
+    config()->set('pls_assistant.assistant_sources.extractor', 'local');
+    config()->set('pls_assistant.assistant_sources.source_disk', config('filesystems.default'));
 
     $review = plsReview([
         'title' => 'Review of implementation reporting files',
     ]);
 
-    $uploadedFile = UploadedFile::fake()->create('implementation-brief.pdf', 256, 'application/pdf');
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: <<<'TEXT'
+                Implementation progress has stalled in three agencies.
+                The document recommends revising reporting timetables and restoring funding certainty.
+                Dated 15 January 2025.
+                TEXT,
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->twice()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    ReviewDocumentExtractorAgent::fake([
+        [
+            'title' => 'Implementation Brief',
+            'document_type' => DocumentType::ImplementationReport->value,
+            'summary' => 'Summarizes stalled implementation across three agencies and recommends timetable changes.',
+            'key_themes' => ['implementation delays', 'reporting timetable changes'],
+            'notable_excerpts' => ['Implementation progress has stalled in three agencies.'],
+            'important_dates' => ['2025-01-15'],
+            'warnings' => [],
+        ],
+        [
+            'title' => 'Consultation Digest',
+            'document_type' => DocumentType::ConsultationSubmission->value,
+            'summary' => 'Captures consultation concerns about reporting delays and weak implementation follow-through.',
+            'key_themes' => ['consultation concerns', 'implementation follow-through'],
+            'notable_excerpts' => ['The document recommends revising reporting timetables and restoring funding certainty.'],
+            'important_dates' => ['2025-01-15'],
+            'warnings' => [],
+        ],
+    ]);
 
     $component = Livewire::test(DocumentsPage::class, ['review' => $review])
-        ->set('documentTitle', 'Implementation brief')
-        ->set('documentType', DocumentType::GroupReport->value)
-        ->set('documentUpload', $uploadedFile)
-        ->set('documentSummary', 'Initial evidence pack for the review team.')
-        ->call('storeDocument')
+        ->set('documentUploads', [
+            UploadedFile::fake()->create('implementation-brief.pdf', 256, 'application/pdf'),
+            UploadedFile::fake()->create('consultation-digest.txt', 16, 'text/plain'),
+        ])
         ->assertHasNoErrors()
-        ->assertSee('Implementation brief');
+        ->assertSee('Implementation Brief')
+        ->assertSee('Consultation Digest');
 
-    /** @var Document $document */
-    $document = $review->fresh()->documents()->firstOrFail();
+    $implementationBrief = $review->fresh()->documents()
+        ->where('title', 'Implementation Brief')
+        ->firstOrFail();
 
-    expect($document->storage_path)->toStartWith(sprintf('pls/reviews/%d/documents/', $review->id))
-        ->and($document->mime_type)->toBe('application/pdf')
-        ->and($document->file_size)->toBeGreaterThan(0);
+    $consultationDigest = $review->fresh()->documents()
+        ->where('title', 'Consultation Digest')
+        ->firstOrFail();
 
-    Storage::disk(config('filesystems.default'))->assertExists($document->storage_path);
+    expect(data_get($implementationBrief->metadata, 'document_analysis.status'))->toBe('saved')
+        ->and(data_get($implementationBrief->metadata, 'document_analysis.key_themes'))->toBe(['implementation delays', 'reporting timetable changes'])
+        ->and($implementationBrief->document_type)->toBe(DocumentType::ImplementationReport);
 
-    $replacementFile = UploadedFile::fake()->create('implementation-brief-v2.pdf', 128, 'application/pdf');
+    expect(data_get($consultationDigest->metadata, 'document_analysis.status'))->toBe('saved')
+        ->and($consultationDigest->document_type)->toBe(DocumentType::ConsultationSubmission);
+
+    Storage::disk(config('filesystems.default'))->assertExists($implementationBrief->storage_path);
+    Storage::disk(config('filesystems.default'))->assertExists($consultationDigest->storage_path);
 
     $component
-        ->call('startEditingDocument', $document->id)
-        ->set('documentTitle', 'Implementation brief v2')
-        ->set('documentUpload', $replacementFile)
-        ->set('documentSummary', 'Updated evidence pack with agency annexes.')
-        ->call('updateDocument')
-        ->assertHasNoErrors()
-        ->assertSee('Implementation brief v2');
+        ->call('startEditingDocument', $implementationBrief->id)
+        ->set('documentTitle', 'Implementation Brief Revised')
+        ->set('documentSummary', 'Updated summary of implementation delays and timetable reform proposals.')
+        ->call('saveDocumentEdits')
+        ->assertHasNoErrors();
 
-    $updatedDocument = $document->fresh();
+    $updatedDocument = $implementationBrief->fresh();
 
-    expect($updatedDocument->title)->toBe('Implementation brief v2')
-        ->and($updatedDocument->summary)->toBe('Updated evidence pack with agency annexes.')
-        ->and($updatedDocument->storage_path)->not->toBe($document->storage_path);
-
-    Storage::disk(config('filesystems.default'))->assertMissing($document->storage_path);
-    Storage::disk(config('filesystems.default'))->assertExists($updatedDocument->storage_path);
-
-    $this->assertDatabaseHas('documents', [
-        'id' => $updatedDocument->id,
-    ]);
+    expect($updatedDocument->title)->toBe('Implementation Brief Revised')
+        ->and($updatedDocument->summary)->toBe('Updated summary of implementation delays and timetable reform proposals.')
+        ->and(data_get($updatedDocument->metadata, 'document_analysis.key_themes'))->toBe(['implementation delays', 'reporting timetable changes']);
 
     $component
         ->call('confirmDeletion', $updatedDocument->id)
         ->assertHasNoErrors()
-        ->assertDontSee('Implementation brief v2');
+        ->assertDontSee('Implementation Brief Revised');
 
     $this->assertDatabaseMissing('documents', [
         'id' => $updatedDocument->id,
     ]);
 
     Storage::disk(config('filesystems.default'))->assertMissing($updatedDocument->storage_path);
+});
+
+test('failed document analysis can be retried on the same review document row', function () {
+    Storage::fake(config('filesystems.default'));
+    config()->set('pls_assistant.assistant_sources.extractor', 'local');
+    config()->set('pls_assistant.assistant_sources.source_disk', config('filesystems.default'));
+
+    $review = plsReview([
+        'title' => 'Review of implementation reporting failures',
+    ]);
+
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: <<<'TEXT'
+                The implementation report records missed statutory deadlines.
+                Published on 2 February 2025.
+                TEXT,
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    ReviewDocumentExtractorAgent::fake(function () {
+        throw new \RuntimeException('AI extraction failed');
+    });
+
+    $component = Livewire::test(DocumentsPage::class, ['review' => $review])
+        ->set('documentUploads', [
+            UploadedFile::fake()->create('implementation-report.pdf', 256, 'application/pdf'),
+        ])
+        ->assertSee('Needs attention');
+
+    $document = $review->fresh()->documents()->firstOrFail();
+
+    expect(data_get($document->metadata, 'document_analysis.status'))->toBe('needs_attention');
+
+    ReviewDocumentExtractorAgent::fake([[
+        'title' => 'Implementation Report',
+        'document_type' => DocumentType::ImplementationReport->value,
+        'summary' => 'Records missed statutory deadlines and implementation slippage.',
+        'key_themes' => ['missed deadlines'],
+        'notable_excerpts' => ['The implementation report records missed statutory deadlines.'],
+        'important_dates' => ['2025-02-02'],
+        'warnings' => [],
+    ]]);
+
+    $component
+        ->call('retryDocumentAnalysis', $document->id)
+        ->assertHasNoErrors()
+        ->assertSee('Implementation Report')
+        ->assertSee('Saved');
+
+    expect($document->fresh()->id)->toBe($document->id)
+        ->and(data_get($document->fresh()->metadata, 'document_analysis.status'))->toBe('saved')
+        ->and($document->fresh()->title)->toBe('Implementation Report');
+});
+
+test('legislation source documents do not appear in the documents workspace', function () {
+    $review = plsReview([
+        'title' => 'Review of separated workspaces',
+    ]);
+
+    Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Legislation upload',
+        'document_type' => DocumentType::LegislationText,
+    ]);
+
+    Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Implementation memo',
+        'document_type' => DocumentType::ImplementationReport,
+    ]);
+
+    Livewire::test(DocumentsPage::class, ['review' => $review])
+        ->assertSee('Implementation memo')
+        ->assertDontSee('Legislation upload');
+});
+
+test('workflow document metrics exclude legislation source uploads', function () {
+    $review = plsReview([
+        'title' => 'Workflow document counts',
+    ]);
+
+    Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Legislation upload',
+        'document_type' => DocumentType::LegislationText,
+    ]);
+
+    Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Working note',
+        'document_type' => DocumentType::GroupReport,
+    ]);
+
+    $loadedReview = $review->fresh()->load([
+        'steps',
+        'legislation',
+        'legislationObjectives',
+        'documents',
+        'evidenceItems',
+        'implementingAgencies',
+        'stakeholders',
+        'consultations',
+        'submissions',
+        'findings',
+        'recommendations',
+        'reports',
+        'governmentResponses',
+    ]);
+
+    $cards = Livewire::test(WorkflowPage::class, ['review' => $review])
+        ->instance()
+        ->stepMetricCards($loadedReview, $loadedReview->currentStep());
+
+    expect(collect($cards)->firstWhere('label', 'Working documents')['value'])->toBe('1');
 });
 
 test('uploaded legislation can infer delegated relationship details', function () {

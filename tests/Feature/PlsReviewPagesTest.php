@@ -193,7 +193,7 @@ test('all review section routes render inside the shared workspace shell', funct
         'pls.reviews.workflow' => 'Define the objectives and scope of PLS',
         'pls.reviews.collaborators' => 'Collaborators',
         'pls.reviews.legislation' => 'No records saved for this review yet.',
-        'pls.reviews.documents' => 'No documents linked to this review yet.',
+        'pls.reviews.documents' => 'Document file',
         'pls.reviews.stakeholders' => 'Stakeholder directory',
         'pls.reviews.consultations' => 'Consultation activity',
         'pls.reviews.analysis' => 'Findings & recommendations',
@@ -225,6 +225,20 @@ test('legislation page uses inline source analysis instead of attach and create 
         ->assertSee('Records')
         ->assertDontSee('Attach legislation')
         ->assertDontSee('Create legislation');
+});
+
+test('documents page uses inline upload analysis instead of metadata-first add and edit modals', function () {
+    $review = plsReview([
+        'title' => 'Inline documents flow',
+    ]);
+
+    $this->get(route('pls.reviews.documents', ['review' => $review->id]))
+        ->assertOk()
+        ->assertSee('Document file')
+        ->assertSee('Choose files')
+        ->assertSee('Records')
+        ->assertDontSee('Storage path')
+        ->assertDontSee('File size (bytes)');
 });
 
 test('consultations page does not render the intake summary box', function () {

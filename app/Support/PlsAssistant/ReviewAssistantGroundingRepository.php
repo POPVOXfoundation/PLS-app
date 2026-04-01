@@ -4,6 +4,7 @@ namespace App\Support\PlsAssistant;
 
 use App\Domain\Documents\AssistantSourceDocument;
 use App\Domain\Documents\Document;
+use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Reviews\PlsReview;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -17,12 +18,16 @@ class ReviewAssistantGroundingRepository
      *     review: list<array{excerpt: string, label: string, source: string}>
      * }
      */
-    public function forPrompt(PlsReview $review, string $prompt): array
+    public function forPrompt(PlsReview $review, string $prompt, ?string $workspaceKey = null): array
     {
         return [
             'global' => $this->globalReferences($prompt),
             'jurisdiction' => $this->jurisdictionReferences($review, $prompt),
-            'review' => $this->reviewReferences($review, $prompt),
+            'review' => $this->reviewReferences(
+                review: $review,
+                prompt: $prompt,
+                excludeLegislationSources: $workspaceKey === 'documents',
+            ),
         ];
     }
 
@@ -148,11 +153,12 @@ class ReviewAssistantGroundingRepository
     /**
      * @return list<array{excerpt: string, label: string, source: string}>
      */
-    private function reviewReferences(PlsReview $review, string $prompt): array
+    private function reviewReferences(PlsReview $review, string $prompt, bool $excludeLegislationSources = false): array
     {
         $tokens = $this->promptTokens($prompt);
 
         return $review->documents
+            ->reject(fn (Document $document): bool => $excludeLegislationSources && $document->document_type === DocumentType::LegislationText)
             ->map(function (Document $document) use ($tokens): array {
                 $chunk = $document->relationLoaded('chunks')
                     ? $document->chunks

@@ -2,6 +2,8 @@
 
 namespace App\Livewire\Pls\Reviews;
 
+use App\Domain\Documents\Document;
+use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Reviews\PlsReviewStep;
 use App\Domain\Reviews\Support\PlsReviewStepGuidance;
@@ -28,14 +30,16 @@ class WorkflowPage extends Workspace
      */
     public function stepMetricCards(PlsReview $review, PlsReviewStep $step): array
     {
+        $documentCount = $this->documentCount($review);
+
         return match ($step->step_key) {
             'define_scope' => [
                 ['label' => __('Legislation linked'), 'value' => (string) $review->legislation->count()],
                 ['label' => __('Objectives captured'), 'value' => (string) $review->legislationObjectives->count()],
-                ['label' => __('Working documents'), 'value' => (string) $review->documents->count()],
+                ['label' => __('Working documents'), 'value' => (string) $documentCount],
             ],
             'background_data_plan', 'implementation_review' => [
-                ['label' => __('Documents'), 'value' => (string) $review->documents->count()],
+                ['label' => __('Documents'), 'value' => (string) $documentCount],
                 ['label' => __('Evidence items'), 'value' => (string) $review->evidenceItems->count()],
                 ['label' => __('Agencies reviewed'), 'value' => (string) $review->implementingAgencies->count()],
             ],
@@ -51,7 +55,7 @@ class WorkflowPage extends Workspace
             ],
             'draft_report', 'dissemination' => [
                 ['label' => __('Reports'), 'value' => (string) $review->reports->count()],
-                ['label' => __('Final documents'), 'value' => (string) $review->documents->count()],
+                ['label' => __('Final documents'), 'value' => (string) $documentCount],
                 ['label' => __('Recommendations'), 'value' => (string) $review->recommendations->count()],
             ],
             'government_response', 'follow_up', 'evaluation' => [
@@ -60,7 +64,7 @@ class WorkflowPage extends Workspace
                 ['label' => __('Recommendations'), 'value' => (string) $review->recommendations->count()],
             ],
             default => [
-                ['label' => __('Documents'), 'value' => (string) $review->documents->count()],
+                ['label' => __('Documents'), 'value' => (string) $documentCount],
                 ['label' => __('Findings'), 'value' => (string) $review->findings->count()],
                 ['label' => __('Recommendations'), 'value' => (string) $review->recommendations->count()],
             ],
@@ -89,5 +93,12 @@ class WorkflowPage extends Workspace
             'reports',
             'governmentResponses',
         ]);
+    }
+
+    private function documentCount(PlsReview $review): int
+    {
+        return $review->documents
+            ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
+            ->count();
     }
 }

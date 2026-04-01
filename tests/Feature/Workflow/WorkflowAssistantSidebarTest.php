@@ -225,6 +225,50 @@ test('documents prompts are grounded in the current review record', function () 
     });
 });
 
+test('documents prompts exclude legislation source documents from document facts and review grounding', function () {
+    $review = plsReview([
+        'title' => 'Separated grounding review',
+    ]);
+
+    Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Legislation source upload',
+        'document_type' => DocumentType::LegislationText,
+        'summary' => 'This should stay on the legislation side only.',
+    ]);
+
+    $document = Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Implementation Memo',
+        'document_type' => DocumentType::ImplementationReport,
+        'summary' => 'Documents side should only mention this memo.',
+    ]);
+
+    DocumentChunk::factory()->create([
+        'document_id' => $document->id,
+        'chunk_index' => 0,
+        'content' => 'Documents side should only mention this memo.',
+        'token_count' => 8,
+    ]);
+
+    ReviewAssistantAgent::fake([
+        'Only the implementation memo is part of the current document record for this tab.',
+    ]);
+
+    Livewire::test(AssistantSidebar::class, [
+        'review' => $review->fresh(),
+        'workspaceKey' => 'documents',
+    ])->call('sendPrompt', 'Summarize the uploaded documents.');
+
+    ReviewAssistantAgent::assertPrompted(function (AgentPrompt $prompt) {
+        expect((string) $prompt->agent->instructions())
+            ->toContain('Implementation Memo')
+            ->not->toContain('Legislation source upload');
+
+        return $prompt->contains('Summarize the uploaded documents.');
+    });
+});
+
 test('workflow tab refuses finding generation before the llm call', function () {
     $review = plsReview([
         'title' => 'Workflow boundary review',
