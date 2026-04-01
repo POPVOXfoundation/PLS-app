@@ -277,6 +277,7 @@ return [
         ],
     ],
 
+    // Transitional fallback only. Real assistant grounding should come from stored source documents.
     'reference_documents' => [
         'global' => [],
         'jurisdictions' => [],

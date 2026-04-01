@@ -3,8 +3,10 @@
 use App\Domain\Consultations\Consultation;
 use App\Domain\Consultations\Enums\ConsultationType;
 use App\Domain\Consultations\Submission;
+use App\Domain\Documents\AssistantSourceDocument;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\DocumentChunk;
+use App\Domain\Documents\Enums\AssistantSourceScope;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Institutions\Country;
 use App\Domain\Institutions\Enums\JurisdictionType;
@@ -31,6 +33,7 @@ use App\Domain\Stakeholders\Enums\ImplementingAgencyType;
 use App\Domain\Stakeholders\Enums\StakeholderType;
 use App\Domain\Stakeholders\ImplementingAgency;
 use App\Domain\Stakeholders\Stakeholder;
+use Database\Factories\Domain\Documents\AssistantSourceDocumentFactory;
 use Database\Factories\Domain\Documents\DocumentFactory;
 use Database\Factories\Domain\Institutions\CountryFactory;
 use Database\Factories\Domain\Reviews\PlsReviewFactory;
@@ -46,6 +49,7 @@ it('defines the prompt one backed enums', function () {
         ->and(PlsReviewStatus::Draft->value)->toBe('draft')
         ->and(PlsStepStatus::InProgress->value)->toBe('in_progress')
         ->and(ReviewGroupType::Committee->value)->toBe('committee')
+        ->and(AssistantSourceScope::Jurisdiction->value)->toBe('jurisdiction')
         ->and(DocumentType::FinalReport->value)->toBe('final_report')
         ->and(LegislationType::Regulation->value)->toBe('regulation')
         ->and(ReviewLegislationRelationshipType::Delegated->value)->toBe('delegated')
@@ -76,6 +80,10 @@ it('defines the expected prompt one relationships', function () {
         ->and((new Legislation)->reviews())->toBeInstanceOf(BelongsToMany::class)
         ->and((new PlsReviewLegislation)->review())->toBeInstanceOf(BelongsTo::class)
         ->and((new LegislationObjective)->review())->toBeInstanceOf(BelongsTo::class)
+        ->and((new AssistantSourceDocument)->country())->toBeInstanceOf(BelongsTo::class)
+        ->and((new AssistantSourceDocument)->jurisdiction())->toBeInstanceOf(BelongsTo::class)
+        ->and((new AssistantSourceDocument)->legislature())->toBeInstanceOf(BelongsTo::class)
+        ->and((new AssistantSourceDocument)->review())->toBeInstanceOf(BelongsTo::class)
         ->and((new Document)->chunks())->toBeInstanceOf(HasMany::class)
         ->and((new Document)->legislation())->toBeInstanceOf(BelongsToMany::class)
         ->and((new DocumentChunk)->document())->toBeInstanceOf(BelongsTo::class)
@@ -104,6 +112,9 @@ it('registers enum, date, and json casts on the scaffolded models', function () 
     ])->and((new Legislation)->getCasts())->toMatchArray([
         'legislation_type' => LegislationType::class,
         'date_enacted' => 'date',
+    ])->and((new AssistantSourceDocument)->getCasts())->toMatchArray([
+        'scope' => AssistantSourceScope::class,
+        'metadata' => 'array',
     ])->and((new Document)->getCasts())->toMatchArray([
         'document_type' => DocumentType::class,
         'metadata' => 'array',
@@ -131,6 +142,7 @@ it('registers enum, date, and json casts on the scaffolded models', function () 
 it('provides factory defaults for the main prompt one models', function () {
     $countryDefinition = CountryFactory::new()->definition();
     $reviewDefinition = PlsReviewFactory::new()->definition();
+    $assistantSourceDefinition = AssistantSourceDocumentFactory::new()->definition();
     $documentDefinition = DocumentFactory::new()->definition();
 
     expect($countryDefinition)
@@ -138,6 +150,8 @@ it('provides factory defaults for the main prompt one models', function () {
         ->and($reviewDefinition['status'])->toBe(PlsReviewStatus::Draft)
         ->and($reviewDefinition['current_step_number'])->toBe(1)
         ->and($reviewDefinition)->not->toHaveKey('legacy_group_id')
+        ->and($assistantSourceDefinition['scope'])->toBe(AssistantSourceScope::Global)
+        ->and($assistantSourceDefinition['metadata'])->toBeArray()
         ->and($documentDefinition['document_type'])->toBeInstanceOf(DocumentType::class)
         ->and($documentDefinition['metadata'])->toBeArray();
 });

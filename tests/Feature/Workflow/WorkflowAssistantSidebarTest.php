@@ -1,8 +1,10 @@
 <?php
 
 use App\Ai\Agents\ReviewAssistantAgent;
+use App\Domain\Documents\AssistantSourceDocument;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\DocumentChunk;
+use App\Domain\Documents\Enums\AssistantSourceScope;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Livewire\Pls\Reviews\AssistantSidebar;
 use App\Models\User;
@@ -486,15 +488,15 @@ test('assistant shows an inline error state when the sdk call fails', function (
 });
 
 test('global reference docs are included for process questions', function () {
-    config()->set('pls_assistant.reference_documents.global', [
-        [
-            'label' => 'WFD Manual',
-            'content' => 'Use a documented workflow for post-legislative scrutiny and make each step explicit.',
-        ],
-    ]);
-
     $review = plsReview([
         'title' => 'Global reference review',
+    ]);
+
+    AssistantSourceDocument::factory()->create([
+        'title' => 'WFD Manual',
+        'scope' => AssistantSourceScope::Global,
+        'summary' => 'Use a documented workflow for post-legislative scrutiny and make each step explicit.',
+        'content' => 'Use a documented workflow for post-legislative scrutiny and make each step explicit.',
     ]);
 
     ReviewAssistantAgent::fake([
@@ -515,24 +517,55 @@ test('global reference docs are included for process questions', function () {
     });
 });
 
+test('config reference docs remain a fallback when stored source documents are missing', function () {
+    config()->set('pls_assistant.reference_documents.global', [
+        [
+            'label' => 'Fallback WFD Manual',
+            'content' => 'Fallback guidance should only be used when stored source documents are unavailable.',
+        ],
+    ]);
+
+    $review = plsReview([
+        'title' => 'Fallback reference review',
+    ]);
+
+    ReviewAssistantAgent::fake([
+        'The fallback guidance is available because there are no stored global source documents yet.',
+    ]);
+
+    Livewire::test(AssistantSidebar::class, [
+        'review' => $review,
+        'workspaceKey' => 'workflow',
+    ])->call('sendPrompt', 'What reference guidance is available here?');
+
+    ReviewAssistantAgent::assertPrompted(function (AgentPrompt $prompt) {
+        expect((string) $prompt->agent->instructions())
+            ->toContain('Global reference guidance: Fallback WFD Manual: Fallback guidance should only be used when stored source documents are unavailable.');
+
+        return $prompt->contains('What reference guidance is available here?');
+    });
+});
+
 test('jurisdiction guidance is preferred for local practice questions', function () {
     $review = plsReview([
         'title' => 'Jurisdiction guidance review',
     ]);
 
-    config()->set('pls_assistant.reference_documents.global', [
-        [
-            'label' => 'WFD Manual',
-            'content' => 'Government response tracking should be tied to the report record.',
-        ],
+    AssistantSourceDocument::factory()->create([
+        'title' => 'WFD Manual',
+        'scope' => AssistantSourceScope::Global,
+        'summary' => 'Government response tracking should be tied to the report record.',
+        'content' => 'Government response tracking should be tied to the report record.',
     ]);
 
-    config()->set('pls_assistant.reference_documents.jurisdictions', [
-        [
-            'label' => 'Local Standing Orders',
-            'scope' => [$review->jurisdiction->name, $review->legislature->name],
-            'content' => 'In this jurisdiction, government responses are ordinarily logged against the report and follow-up calendar.',
-        ],
+    AssistantSourceDocument::factory()->create([
+        'title' => 'Local Standing Orders',
+        'scope' => AssistantSourceScope::Jurisdiction,
+        'country_id' => $review->country_id,
+        'jurisdiction_id' => $review->jurisdiction_id,
+        'legislature_id' => $review->legislature_id,
+        'summary' => 'In this jurisdiction, government responses are ordinarily logged against the report and follow-up calendar.',
+        'content' => 'In this jurisdiction, government responses are ordinarily logged against the report and follow-up calendar.',
     ]);
 
     ReviewAssistantAgent::fake([
@@ -572,19 +605,19 @@ test('mixed grounding keeps global jurisdiction and review layers distinct', fun
         'token_count' => 14,
     ]);
 
-    config()->set('pls_assistant.reference_documents.global', [
-        [
-            'label' => 'WFD Manual',
-            'content' => 'Use post-legislative scrutiny to connect evidence, findings, and follow-up.',
-        ],
+    AssistantSourceDocument::factory()->create([
+        'title' => 'WFD Manual',
+        'scope' => AssistantSourceScope::Global,
+        'summary' => 'Use post-legislative scrutiny to connect evidence, findings, and follow-up.',
+        'content' => 'Use post-legislative scrutiny to connect evidence, findings, and follow-up.',
     ]);
 
-    config()->set('pls_assistant.reference_documents.jurisdictions', [
-        [
-            'label' => 'Local PLS Guidance',
-            'scope' => [$review->jurisdiction->name],
-            'content' => 'In this jurisdiction, implementation delays should be tied to agency accountability and reporting timelines.',
-        ],
+    AssistantSourceDocument::factory()->create([
+        'title' => 'Local PLS Guidance',
+        'scope' => AssistantSourceScope::Jurisdiction,
+        'jurisdiction_id' => $review->jurisdiction_id,
+        'summary' => 'In this jurisdiction, implementation delays should be tied to agency accountability and reporting timelines.',
+        'content' => 'In this jurisdiction, implementation delays should be tied to agency accountability and reporting timelines.',
     ]);
 
     ReviewAssistantAgent::fake([

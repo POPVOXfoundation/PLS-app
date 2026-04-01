@@ -14,6 +14,7 @@ it('creates all prompt two pls tables', function () {
         'legislation',
         'pls_review_legislation',
         'legislation_objectives',
+        'assistant_source_documents',
         'documents',
         'document_chunks',
         'evidence_items',
@@ -76,6 +77,16 @@ it('creates the critical prompt two workflow and foreign key columns', function 
             'pls_review_id',
             'document_type',
             'storage_path',
+            'metadata',
+        ]))->toBeTrue()
+        ->and(Schema::hasColumns('assistant_source_documents', [
+            'scope',
+            'country_id',
+            'jurisdiction_id',
+            'legislature_id',
+            'pls_review_id',
+            'storage_path',
+            'content',
             'metadata',
         ]))->toBeTrue()
         ->and(Schema::hasColumns('document_chunks', [
