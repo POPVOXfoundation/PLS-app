@@ -1,0 +1,5 @@
+integrations:
+  forge:
+    pls.parllink.com:
+      server-id: 1175868
+      site-id: 3081294
