@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Reviews\PlsReview;
+use App\Http\Controllers\AcceptReviewInvitationController;
 use App\Livewire\Dashboard;
 use App\Livewire\Pls\Reviews\AnalysisPage;
 use App\Livewire\Pls\Reviews\CollaboratorsPage;
@@ -15,6 +16,8 @@ use App\Livewire\Pls\Reviews\WorkflowPage;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/login')->name('home');
+
+Route::get('pls/invitations/{token}/accept', AcceptReviewInvitationController::class)->name('pls.invitations.accept');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', Dashboard::class)->name('dashboard');

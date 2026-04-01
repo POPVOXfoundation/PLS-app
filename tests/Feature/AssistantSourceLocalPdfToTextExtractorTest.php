@@ -72,3 +72,45 @@ test('local pdf extractor fails when no usable text is returned', function () {
     expect($result->status)->toBe('failed')
         ->and($result->error)->toContain('No usable text');
 });
+
+test('local pdf extractor also extracts text from a stored docx file', function () {
+    Storage::fake('assistant-sources');
+
+    $temporaryPath = tempnam(sys_get_temp_dir(), 'docx-test-');
+    $archive = new ZipArchive;
+    $opened = $archive->open($temporaryPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+
+    expect($opened)->toBeTrue();
+
+    $archive->addFromString(
+        'word/document.xml',
+        <<<'XML'
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+            <w:body>
+                <w:p><w:r><w:t>Guide line one</w:t></w:r></w:p>
+                <w:p><w:r><w:t>Guide line two</w:t></w:r></w:p>
+            </w:body>
+        </w:document>
+        XML,
+    );
+    $archive->close();
+
+    Storage::disk('assistant-sources')->put('imports/wfd/guide.docx', file_get_contents($temporaryPath));
+
+    if (is_string($temporaryPath) && is_file($temporaryPath)) {
+        @unlink($temporaryPath);
+    }
+
+    $document = AssistantSourceDocument::factory()->create([
+        'storage_path' => 'imports/wfd/guide.docx',
+        'metadata' => [
+            'disk' => 'assistant-sources',
+        ],
+    ]);
+
+    $result = (new LocalPdfToTextExtractor('pdftotext'))->extract($document);
+
+    expect($result->status)->toBe('completed')
+        ->and($result->content)->toContain('Guide line one')
+        ->toContain('Guide line two');
+});

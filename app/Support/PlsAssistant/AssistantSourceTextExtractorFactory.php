@@ -19,6 +19,9 @@ class AssistantSourceTextExtractorFactory
                 roleArn: $this->nullableString(config('pls_assistant.assistant_sources.textract.role_arn')),
                 snsTopicArn: $this->nullableString(config('pls_assistant.assistant_sources.textract.sns_topic_arn')),
                 pollDelaySeconds: (int) config('pls_assistant.assistant_sources.textract.poll_delay_seconds', 15),
+                fallbackExtractor: new LocalPdfToTextExtractor(
+                    binary: (string) config('pls_assistant.assistant_sources.pdftotext_binary', 'pdftotext'),
+                ),
             ),
             default => throw new RuntimeException(sprintf(
                 'Unsupported assistant source extractor [%s].',

@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Documents\AssistantSourceDocument;
+use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\AssistantSourceScope;
 use App\Jobs\ExtractAssistantSourceText;
 use App\Jobs\PollAssistantSourceTextExtraction;
@@ -76,7 +77,7 @@ test('poll assistant source extraction job requeues when textract is still proce
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(AssistantSourceDocument $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::processing(
                 driver: 'textract',
@@ -123,7 +124,7 @@ test('poll assistant source extraction job finalizes completed textract content 
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(AssistantSourceDocument $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'textract',

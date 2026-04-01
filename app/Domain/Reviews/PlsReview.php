@@ -99,6 +99,16 @@ class PlsReview extends Model
         return $this->hasMany(PlsReviewMembership::class);
     }
 
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(PlsReviewInvitation::class);
+    }
+
+    public function pendingInvitations(): HasMany
+    {
+        return $this->hasMany(PlsReviewInvitation::class)->whereNull('accepted_at');
+    }
+
     public function members(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'pls_review_memberships')
@@ -294,7 +304,16 @@ class PlsReview extends Model
 
     public function canBeUpdatedBy(User $user): bool
     {
-        return $this->canBeViewedBy($user);
+        $membership = $this->membershipFor($user);
+
+        if ($membership === null) {
+            return false;
+        }
+
+        return in_array($membership->role, [
+            PlsReviewMembershipRole::Owner,
+            PlsReviewMembershipRole::Contributor,
+        ], true);
     }
 
     public function canManageCollaborators(User $user): bool

@@ -23,7 +23,7 @@ class PlsReviewMembershipFactory extends Factory
         return [
             'pls_review_id' => PlsReview::factory(),
             'user_id' => User::factory(),
-            'role' => PlsReviewMembershipRole::Editor,
+            'role' => PlsReviewMembershipRole::Contributor,
             'invited_by' => User::factory(),
         ];
     }

@@ -3,12 +3,12 @@
 namespace App\Support\PlsAssistant;
 
 use App\Domain\Documents\AssistantSourceDocument;
+use App\Domain\Documents\Document;
 use Aws\Result;
 use Aws\Textract\TextractClient;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use RuntimeException;
 use Throwable;
 
 class TextractPdfExtractor implements AssistantSourceTextExtractor
@@ -19,19 +19,20 @@ class TextractPdfExtractor implements AssistantSourceTextExtractor
         private readonly ?string $roleArn = null,
         private readonly ?string $snsTopicArn = null,
         private readonly int $pollDelaySeconds = 15,
+        private readonly ?AssistantSourceTextExtractor $fallbackExtractor = null,
     ) {}
 
-    public function extract(AssistantSourceDocument $document): AssistantSourceExtractionResult
+    public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
     {
         try {
+            if ($this->documentExtension($document) !== 'pdf') {
+                return $this->fallbackExtractor()->extract($document);
+            }
+
             $diskName = $this->documentDisk($document);
 
             if ((string) config("filesystems.disks.{$diskName}.driver") !== 's3') {
-                return AssistantSourceExtractionResult::failed(
-                    driver: 'textract',
-                    method: $this->method(),
-                    error: sprintf('Textract requires an s3-backed disk. [%s] is not configured as s3.', $diskName),
-                );
+                return $this->fallbackExtractor()->extract($document);
             }
 
             $bucket = $this->bucket ?: (string) config("filesystems.disks.{$diskName}.bucket");
@@ -72,7 +73,7 @@ class TextractPdfExtractor implements AssistantSourceTextExtractor
     /**
      * @return array<string, mixed>
      */
-    private function startPayload(string $bucket, string $diskName, AssistantSourceDocument $document): array
+    private function startPayload(string $bucket, string $diskName, AssistantSourceDocument|Document $document): array
     {
         $payload = [
             'DocumentLocation' => [
@@ -181,15 +182,37 @@ class TextractPdfExtractor implements AssistantSourceTextExtractor
         return trim($text);
     }
 
-    private function documentDisk(AssistantSourceDocument $document): string
+    private function documentDisk(AssistantSourceDocument|Document $document): string
     {
         $diskName = trim((string) data_get($document->metadata, 'disk', ''));
 
-        if ($diskName === '') {
-            throw new RuntimeException(sprintf('Assistant source [%s] does not define a storage disk.', $document->title));
+        if ($diskName !== '') {
+            return $diskName;
         }
 
-        return $diskName;
+        if ($document instanceof AssistantSourceDocument) {
+            $assistantSourceDisk = trim((string) config('pls_assistant.assistant_sources.source_disk', ''));
+
+            if ($assistantSourceDisk !== '') {
+                return $assistantSourceDisk;
+            }
+        }
+
+        return (string) config('filesystems.default');
+    }
+
+    private function documentExtension(AssistantSourceDocument|Document $document): string
+    {
+        $originalName = trim((string) data_get($document->metadata, 'original_name', ''));
+        $path = $originalName !== '' ? $originalName : (string) $document->storage_path;
+
+        return strtolower(pathinfo($path, PATHINFO_EXTENSION));
+    }
+
+    private function fallbackExtractor(): AssistantSourceTextExtractor
+    {
+        return $this->fallbackExtractor
+            ?? new LocalPdfToTextExtractor((string) config('pls_assistant.assistant_sources.pdftotext_binary', 'pdftotext'));
     }
 
     private function method(): string

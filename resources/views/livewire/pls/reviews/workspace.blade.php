@@ -51,9 +51,6 @@
                             <flux:button variant="ghost" icon="arrow-left" :href="route('pls.reviews.index')" wire:navigate>
                                 {{ __('All reviews') }}
                             </flux:button>
-                            <flux:button variant="primary" icon="plus" :href="route('pls.reviews.create')" wire:navigate>
-                                {{ __('New review') }}
-                            </flux:button>
                         </div>
                     </div>
                 </header>

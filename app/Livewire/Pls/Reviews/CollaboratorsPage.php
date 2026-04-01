@@ -6,10 +6,11 @@ use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Reviews\PlsReviewMembership;
 use App\Models\User;
-use Illuminate\Contracts\View\View;
-use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use App\Notifications\ReviewInvitationNotification;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\Rule;
+use Illuminate\View\View;
 
 class CollaboratorsPage extends Workspace
 {
@@ -17,13 +18,14 @@ class CollaboratorsPage extends Workspace
 
     protected string $workspace = 'collaborators';
 
-    public string $inviteCollaboratorUserId = '';
+    public string $inviteCollaboratorEmail = '';
 
-    public string $inviteCollaboratorRole = PlsReviewMembershipRole::Editor->value;
+    public string $inviteCollaboratorRole = PlsReviewMembershipRole::Contributor->value;
 
-    /**
-     * @var array<int|string, string>
-     */
+    /** @var array<int, array{id: int, name: string, email: string}> */
+    public array $emailMatches = [];
+
+    /** @var array<int|string, string> */
     public array $collaboratorRoles = [];
 
     public function mount(PlsReview $review): void
@@ -38,83 +40,137 @@ class CollaboratorsPage extends Workspace
 
         return $this->renderWorkspaceView('livewire.pls.reviews.collaborators-page', [
             'review' => $review,
-            'collaboratorRoleOptions' => [PlsReviewMembershipRole::Editor],
-            'availableCollaborators' => $this->availableCollaborators($review),
+            'collaboratorRoleOptions' => [PlsReviewMembershipRole::Contributor, PlsReviewMembershipRole::Viewer],
             'canManageCollaborators' => auth()->user()?->can('manageCollaborators', $review) ?? false,
         ], $review);
     }
 
-    public function inviteCollaborator(): void
+    public function updatedInviteCollaboratorEmail(): void
+    {
+        $query = trim($this->inviteCollaboratorEmail);
+
+        if (mb_strlen($query) < 2) {
+            $this->emailMatches = [];
+
+            return;
+        }
+
+        $existingIds = $this->review->memberships->pluck('user_id')->all();
+
+        $this->emailMatches = User::query()
+            ->where(fn ($q) => $q->where('email', 'like', "%{$query}%")->orWhere('name', 'like', "%{$query}%"))
+            ->whereNotIn('id', $existingIds)
+            ->limit(5)
+            ->get(['id', 'name', 'email'])
+            ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email])
+            ->values()
+            ->all();
+    }
+
+    public function selectMatch(int $userId): void
+    {
+        $user = User::find($userId);
+
+        if ($user) {
+            $this->inviteCollaboratorEmail = $user->email;
+            $this->emailMatches = [];
+        }
+    }
+
+    public function shareReview(): void
     {
         $this->authorize('manageCollaborators', $this->review);
 
         validator(
             [
-                'inviteCollaboratorUserId' => $this->inviteCollaboratorUserId,
+                'inviteCollaboratorEmail' => $this->inviteCollaboratorEmail,
                 'inviteCollaboratorRole' => $this->inviteCollaboratorRole,
             ],
             [
-                'inviteCollaboratorUserId' => [
-                    'required',
-                    'integer',
-                    Rule::exists('users', 'id'),
-                    Rule::unique('pls_review_memberships', 'user_id')
-                        ->where(fn ($query) => $query->where('pls_review_id', $this->review->id)),
-                ],
-                'inviteCollaboratorRole' => [
-                    'required',
-                    Rule::in([PlsReviewMembershipRole::Editor->value]),
-                ],
+                'inviteCollaboratorEmail' => ['required', 'email'],
+                'inviteCollaboratorRole' => ['required', Rule::in([
+                    PlsReviewMembershipRole::Contributor->value,
+                    PlsReviewMembershipRole::Viewer->value,
+                ])],
             ],
             [
-                'inviteCollaboratorUserId.required' => __('Select a user to invite.'),
-                'inviteCollaboratorUserId.unique' => __('That user is already a collaborator on this review.'),
-                'inviteCollaboratorRole.in' => __('Only editor access can be granted here.'),
+                'inviteCollaboratorEmail.required' => __('Enter an email address.'),
+                'inviteCollaboratorEmail.email' => __('Enter a valid email address.'),
+                'inviteCollaboratorRole.in' => __('Only contributor or viewer access can be granted here.'),
             ],
         )->validate();
 
-        $this->review->memberships()->create([
-            'user_id' => (int) $this->inviteCollaboratorUserId,
-            'role' => $this->inviteCollaboratorRole,
-            'invited_by' => auth()->id(),
-        ]);
+        $existingUser = User::where('email', $this->inviteCollaboratorEmail)->first();
+
+        if ($existingUser) {
+            $alreadyMember = $this->review->memberships()->where('user_id', $existingUser->id)->exists();
+
+            if ($alreadyMember) {
+                $this->addError('inviteCollaboratorEmail', __('That user is already a collaborator on this review.'));
+
+                return;
+            }
+
+            $this->review->memberships()->create([
+                'user_id' => $existingUser->id,
+                'role' => $this->inviteCollaboratorRole,
+                'invited_by' => auth()->id(),
+            ]);
+
+            $statusMessage = __('Access granted.');
+        } else {
+            $alreadyInvited = $this->review->pendingInvitations()
+                ->where('email', $this->inviteCollaboratorEmail)
+                ->exists();
+
+            if ($alreadyInvited) {
+                $this->addError('inviteCollaboratorEmail', __('An invitation is already pending for that email.'));
+
+                return;
+            }
+
+            $invitation = $this->review->invitations()->create([
+                'email' => $this->inviteCollaboratorEmail,
+                'role' => $this->inviteCollaboratorRole,
+                'invited_by' => auth()->id(),
+            ]);
+
+            Notification::route('mail', $invitation->email)
+                ->notify(new ReviewInvitationNotification($invitation));
+
+            $statusMessage = __('Invitation sent.');
+        }
 
         $this->review = $this->loadReview();
         $this->syncCollaboratorRoles($this->review, true);
-        $this->inviteCollaboratorUserId = '';
-        $this->inviteCollaboratorRole = PlsReviewMembershipRole::Editor->value;
-        $this->resetValidation(['inviteCollaboratorUserId', 'inviteCollaboratorRole']);
+        $this->inviteCollaboratorEmail = '';
+        $this->inviteCollaboratorRole = PlsReviewMembershipRole::Contributor->value;
+        $this->emailMatches = [];
+        $this->resetValidation(['inviteCollaboratorEmail', 'inviteCollaboratorRole']);
 
-        $this->dispatch('review-workspace-updated', status: __('Collaborator invited to this review.'));
+        $this->dispatch('review-workspace-updated', status: $statusMessage);
     }
 
     public function updateCollaboratorRole(int $membershipId): void
     {
         $this->authorize('manageCollaborators', $this->review);
 
-        $membership = $this->review->memberships()
-            ->whereKey($membershipId)
-            ->first();
+        $membership = $this->review->memberships()->whereKey($membershipId)->first();
 
         if ($membership === null || $membership->role === PlsReviewMembershipRole::Owner) {
             return;
         }
 
         validator(
-            [
-                'role' => $this->collaboratorRoles[$membershipId] ?? null,
-            ],
-            [
-                'role' => ['required', Rule::in([PlsReviewMembershipRole::Editor->value])],
-            ],
-            [
-                'role.in' => __('Review ownership cannot be reassigned from this screen.'),
-            ],
+            ['role' => $this->collaboratorRoles[$membershipId] ?? null],
+            ['role' => ['required', Rule::in([
+                PlsReviewMembershipRole::Contributor->value,
+                PlsReviewMembershipRole::Viewer->value,
+            ])]],
+            ['role.in' => __('Review ownership cannot be reassigned from this screen.')],
         )->validate();
 
-        $membership->update([
-            'role' => $this->collaboratorRoles[$membershipId],
-        ]);
+        $membership->update(['role' => $this->collaboratorRoles[$membershipId]]);
 
         $this->review = $this->loadReview();
         $this->syncCollaboratorRoles($this->review, true);
@@ -126,16 +182,13 @@ class CollaboratorsPage extends Workspace
     {
         $this->authorize('manageCollaborators', $this->review);
 
-        $membership = $this->review->memberships()
-            ->whereKey($membershipId)
-            ->first();
+        $membership = $this->review->memberships()->whereKey($membershipId)->first();
 
         if ($membership === null || $membership->role === PlsReviewMembershipRole::Owner) {
             return;
         }
 
         $membership->delete();
-
         unset($this->collaboratorRoles[$membershipId]);
 
         $this->review = $this->loadReview();
@@ -144,25 +197,32 @@ class CollaboratorsPage extends Workspace
         $this->dispatch('review-workspace-updated', status: __('Collaborator removed from this review.'));
     }
 
+    public function revokeInvitation(int $invitationId): void
+    {
+        $this->authorize('manageCollaborators', $this->review);
+
+        $invitation = $this->review->pendingInvitations()->whereKey($invitationId)->first();
+
+        if ($invitation === null) {
+            return;
+        }
+
+        $invitation->delete();
+
+        $this->review = $this->loadReview();
+
+        $this->dispatch('review-workspace-updated', status: __('Invitation revoked.'));
+    }
+
     private function loadReview(): PlsReview
     {
         return PlsReview::query()
             ->with([
                 'memberships.user',
                 'memberships.invitedBy',
+                'pendingInvitations.invitedBy',
             ])
             ->findOrFail($this->review->getKey());
-    }
-
-    /**
-     * @return EloquentCollection<int, User>
-     */
-    private function availableCollaborators(PlsReview $review): EloquentCollection
-    {
-        return User::query()
-            ->whereNotIn('id', $review->memberships->pluck('user_id'))
-            ->orderBy('name')
-            ->get();
     }
 
     private function syncCollaboratorRoles(PlsReview $review, bool $replace = false): void

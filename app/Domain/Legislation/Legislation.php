@@ -2,14 +2,15 @@
 
 namespace App\Domain\Legislation;
 
+use App\Domain\Documents\Document;
 use App\Domain\Institutions\Jurisdiction;
 use App\Domain\Legislation\Enums\LegislationType;
 use App\Domain\Reviews\PlsReview;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Model;
 
 class Legislation extends Model
 {
@@ -23,6 +24,7 @@ class Legislation extends Model
      */
     protected $fillable = [
         'jurisdiction_id',
+        'source_document_id',
         'title',
         'short_title',
         'legislation_type',
@@ -33,6 +35,11 @@ class Legislation extends Model
     public function jurisdiction(): BelongsTo
     {
         return $this->belongsTo(Jurisdiction::class);
+    }
+
+    public function sourceDocument(): BelongsTo
+    {
+        return $this->belongsTo(Document::class, 'source_document_id');
     }
 
     public function objectives(): HasMany

@@ -68,6 +68,9 @@ it('creates the critical prompt two workflow and foreign key columns', function 
             'step_key',
             'status',
         ]))->toBeTrue()
+        ->and(Schema::hasColumns('legislation', [
+            'source_document_id',
+        ]))->toBeTrue()
         ->and(Schema::hasColumns('pls_review_legislation', [
             'pls_review_id',
             'legislation_id',

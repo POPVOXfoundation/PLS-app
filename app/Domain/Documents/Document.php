@@ -11,10 +11,10 @@ use App\Domain\Reporting\GovernmentResponse;
 use App\Domain\Reporting\Report;
 use App\Domain\Reviews\PlsReview;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Model;
 
 class Document extends Model
 {
@@ -55,6 +55,11 @@ class Document extends Model
             'pls_review_id',
             'id',
         )->withPivot('relationship_type')->withTimestamps();
+    }
+
+    public function sourcedLegislation(): HasMany
+    {
+        return $this->hasMany(Legislation::class, 'source_document_id');
     }
 
     public function evidenceItems(): HasMany

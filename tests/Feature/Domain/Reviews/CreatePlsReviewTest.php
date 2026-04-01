@@ -167,7 +167,7 @@ it('prevents the owner membership from being removed or demoted', function () {
 
     expect(function () use ($ownerMembership): void {
         $ownerMembership->update([
-            'role' => PlsReviewMembershipRole::Editor,
+            'role' => PlsReviewMembershipRole::Contributor,
         ]);
     })->toThrow(ValidationException::class);
 

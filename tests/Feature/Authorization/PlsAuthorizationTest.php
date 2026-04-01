@@ -8,6 +8,7 @@ use App\Livewire\Pls\Reviews\Create as CreateReviewPage;
 use App\Livewire\Pls\Reviews\DocumentsPage;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
 
 test('creator can access and edit their review workspace', function () {
@@ -67,34 +68,62 @@ test('non-member cannot access a review', function () {
         ->assertForbidden();
 });
 
-test('invited member can access and edit a review', function () {
+test('contributor can access and edit a review', function () {
     $owner = User::factory()->reviewer()->create();
-    $editor = User::factory()->reviewer()->create();
+    $contributor = User::factory()->reviewer()->create();
     $review = plsReview([
         'created_by' => $owner->id,
     ]);
 
     $review->memberships()->create([
-        'user_id' => $editor->id,
-        'role' => PlsReviewMembershipRole::Editor,
+        'user_id' => $contributor->id,
+        'role' => PlsReviewMembershipRole::Contributor,
         'invited_by' => $owner->id,
     ]);
 
-    $this->actingAs($editor)
+    $this->actingAs($contributor)
         ->get(route('pls.reviews.workflow', $review))
         ->assertSuccessful();
 
-    Livewire::actingAs($editor)
+    Livewire::actingAs($contributor)
         ->test(DocumentsPage::class, ['review' => $review])
-        ->set('documentTitle', 'Editor working paper')
+        ->set('documentTitle', 'Contributor working paper')
         ->set('documentType', DocumentType::GroupReport->value)
-        ->set('documentStoragePath', 'documents/editor-working-paper.pdf')
+        ->set('documentStoragePath', 'documents/contributor-working-paper.pdf')
         ->call('storeDocument')
         ->assertHasNoErrors()
-        ->assertSee('Editor working paper');
+        ->assertSee('Contributor working paper');
 });
 
-test('owner can invite and remove collaborators', function () {
+test('viewer can access but cannot edit a review', function () {
+    $owner = User::factory()->reviewer()->create();
+    $viewer = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    $review->memberships()->create([
+        'user_id' => $viewer->id,
+        'role' => PlsReviewMembershipRole::Viewer,
+        'invited_by' => $owner->id,
+    ]);
+
+    $this->actingAs($viewer)
+        ->get(route('pls.reviews.workflow', $review))
+        ->assertSuccessful();
+
+    Livewire::actingAs($viewer)
+        ->test(DocumentsPage::class, ['review' => $review])
+        ->set('documentTitle', 'Viewer working paper')
+        ->set('documentType', DocumentType::GroupReport->value)
+        ->set('documentStoragePath', 'documents/viewer-working-paper.pdf')
+        ->call('storeDocument')
+        ->assertForbidden();
+});
+
+test('owner can add contributor by existing user email', function () {
+    Notification::fake();
+
     $owner = User::factory()->reviewer()->create();
     $invitee = User::factory()->reviewer()->create();
     $review = plsReview([
@@ -103,23 +132,214 @@ test('owner can invite and remove collaborators', function () {
 
     Livewire::actingAs($owner)
         ->test(CollaboratorsPage::class, ['review' => $review])
-        ->set('inviteCollaboratorUserId', (string) $invitee->id)
-        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Editor->value)
-        ->call('inviteCollaborator')
-        ->assertHasNoErrors()
-        ->assertSee($invitee->email);
-
-    $membership = PlsReviewMembership::query()
-        ->where('pls_review_id', $review->id)
-        ->where('user_id', $invitee->id)
-        ->firstOrFail();
+        ->set('inviteCollaboratorEmail', $invitee->email)
+        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Contributor->value)
+        ->call('shareReview')
+        ->assertHasNoErrors();
 
     $this->assertDatabaseHas('pls_review_memberships', [
         'pls_review_id' => $review->id,
         'user_id' => $invitee->id,
-        'role' => PlsReviewMembershipRole::Editor->value,
+        'role' => PlsReviewMembershipRole::Contributor->value,
         'invited_by' => $owner->id,
     ]);
+});
+
+test('owner can add viewer by existing user email', function () {
+    Notification::fake();
+
+    $owner = User::factory()->reviewer()->create();
+    $invitee = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    Livewire::actingAs($owner)
+        ->test(CollaboratorsPage::class, ['review' => $review])
+        ->set('inviteCollaboratorEmail', $invitee->email)
+        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Viewer->value)
+        ->call('shareReview')
+        ->assertHasNoErrors();
+
+    $this->assertDatabaseHas('pls_review_memberships', [
+        'pls_review_id' => $review->id,
+        'user_id' => $invitee->id,
+        'role' => PlsReviewMembershipRole::Viewer->value,
+    ]);
+});
+
+test('owner can invite unknown email as contributor', function () {
+    Notification::fake();
+
+    $owner = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    Livewire::actingAs($owner)
+        ->test(CollaboratorsPage::class, ['review' => $review])
+        ->set('inviteCollaboratorEmail', 'newperson@example.com')
+        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Contributor->value)
+        ->call('shareReview')
+        ->assertHasNoErrors();
+
+    $this->assertDatabaseHas('pls_review_invitations', [
+        'pls_review_id' => $review->id,
+        'email' => 'newperson@example.com',
+        'role' => PlsReviewMembershipRole::Contributor->value,
+        'invited_by' => $owner->id,
+    ]);
+
+    Notification::assertSentOnDemand(\App\Notifications\ReviewInvitationNotification::class);
+});
+
+test('owner can invite unknown email as viewer', function () {
+    Notification::fake();
+
+    $owner = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    Livewire::actingAs($owner)
+        ->test(CollaboratorsPage::class, ['review' => $review])
+        ->set('inviteCollaboratorEmail', 'viewer@example.com')
+        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Viewer->value)
+        ->call('shareReview')
+        ->assertHasNoErrors();
+
+    $this->assertDatabaseHas('pls_review_invitations', [
+        'pls_review_id' => $review->id,
+        'email' => 'viewer@example.com',
+        'role' => PlsReviewMembershipRole::Viewer->value,
+    ]);
+});
+
+test('duplicate existing collaborator is rejected', function () {
+    $owner = User::factory()->reviewer()->create();
+    $existing = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    $review->memberships()->create([
+        'user_id' => $existing->id,
+        'role' => PlsReviewMembershipRole::Contributor,
+        'invited_by' => $owner->id,
+    ]);
+
+    Livewire::actingAs($owner)
+        ->test(CollaboratorsPage::class, ['review' => $review])
+        ->set('inviteCollaboratorEmail', $existing->email)
+        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Contributor->value)
+        ->call('shareReview')
+        ->assertHasErrors(['inviteCollaboratorEmail']);
+});
+
+test('duplicate pending invite is rejected', function () {
+    Notification::fake();
+
+    $owner = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    $review->invitations()->create([
+        'email' => 'pending@example.com',
+        'role' => PlsReviewMembershipRole::Contributor->value,
+        'invited_by' => $owner->id,
+    ]);
+
+    Livewire::actingAs($owner)
+        ->test(CollaboratorsPage::class, ['review' => $review])
+        ->set('inviteCollaboratorEmail', 'pending@example.com')
+        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Contributor->value)
+        ->call('shareReview')
+        ->assertHasErrors(['inviteCollaboratorEmail']);
+});
+
+test('contributor cannot manage collaborators', function () {
+    $owner = User::factory()->reviewer()->create();
+    $contributor = User::factory()->reviewer()->create();
+    $invitee = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    $review->memberships()->create([
+        'user_id' => $contributor->id,
+        'role' => PlsReviewMembershipRole::Contributor,
+        'invited_by' => $owner->id,
+    ]);
+
+    Livewire::actingAs($contributor)
+        ->test(CollaboratorsPage::class, ['review' => $review])
+        ->set('inviteCollaboratorEmail', $invitee->email)
+        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Contributor->value)
+        ->call('shareReview')
+        ->assertForbidden();
+});
+
+test('viewer cannot manage collaborators', function () {
+    $owner = User::factory()->reviewer()->create();
+    $viewer = User::factory()->reviewer()->create();
+    $invitee = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    $review->memberships()->create([
+        'user_id' => $viewer->id,
+        'role' => PlsReviewMembershipRole::Viewer,
+        'invited_by' => $owner->id,
+    ]);
+
+    Livewire::actingAs($viewer)
+        ->test(CollaboratorsPage::class, ['review' => $review])
+        ->set('inviteCollaboratorEmail', $invitee->email)
+        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Contributor->value)
+        ->call('shareReview')
+        ->assertForbidden();
+});
+
+test('owner cannot assign owner role from collaborators page', function () {
+    $owner = User::factory()->reviewer()->create();
+    $invitee = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    Livewire::actingAs($owner)
+        ->test(CollaboratorsPage::class, ['review' => $review])
+        ->set('inviteCollaboratorEmail', $invitee->email)
+        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Owner->value)
+        ->call('shareReview')
+        ->assertHasErrors(['inviteCollaboratorRole']);
+
+    $this->assertDatabaseMissing('pls_review_memberships', [
+        'pls_review_id' => $review->id,
+        'user_id' => $invitee->id,
+        'role' => PlsReviewMembershipRole::Owner->value,
+    ]);
+});
+
+test('owner can remove collaborator membership', function () {
+    $owner = User::factory()->reviewer()->create();
+    $contributor = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    $review->memberships()->create([
+        'user_id' => $contributor->id,
+        'role' => PlsReviewMembershipRole::Contributor,
+        'invited_by' => $owner->id,
+    ]);
+
+    $membership = PlsReviewMembership::query()
+        ->where('pls_review_id', $review->id)
+        ->where('user_id', $contributor->id)
+        ->firstOrFail();
 
     Livewire::actingAs($owner)
         ->test(CollaboratorsPage::class, ['review' => $review])
@@ -131,46 +351,96 @@ test('owner can invite and remove collaborators', function () {
     ]);
 });
 
-test('invited editor cannot manage collaborators', function () {
+test('owner can revoke pending invitation', function () {
+    Notification::fake();
+
     $owner = User::factory()->reviewer()->create();
-    $editor = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    $invitation = $review->invitations()->create([
+        'email' => 'revokeme@example.com',
+        'role' => PlsReviewMembershipRole::Contributor->value,
+        'invited_by' => $owner->id,
+    ]);
+
+    Livewire::actingAs($owner)
+        ->test(CollaboratorsPage::class, ['review' => $review])
+        ->call('revokeInvitation', $invitation->id)
+        ->assertHasNoErrors();
+
+    $this->assertDatabaseMissing('pls_review_invitations', [
+        'id' => $invitation->id,
+    ]);
+});
+
+test('invitation accept flow creates membership with correct role', function () {
+    $owner = User::factory()->reviewer()->create();
     $invitee = User::factory()->reviewer()->create();
     $review = plsReview([
         'created_by' => $owner->id,
     ]);
 
-    $review->memberships()->create([
-        'user_id' => $editor->id,
-        'role' => PlsReviewMembershipRole::Editor,
+    $invitation = $review->invitations()->create([
+        'email' => $invitee->email,
+        'role' => PlsReviewMembershipRole::Viewer->value,
         'invited_by' => $owner->id,
     ]);
 
-    Livewire::actingAs($editor)
-        ->test(CollaboratorsPage::class, ['review' => $review])
-        ->set('inviteCollaboratorUserId', (string) $invitee->id)
-        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Editor->value)
-        ->call('inviteCollaborator')
-        ->assertForbidden();
-});
+    $this->actingAs($invitee)
+        ->get(route('pls.invitations.accept', ['token' => $invitation->token]))
+        ->assertRedirect();
 
-test('collaborators cannot be promoted to owner from the review workspace', function () {
-    $creator = User::factory()->reviewer()->create();
-    $invitee = User::factory()->reviewer()->create();
-    $review = plsReview([
-        'created_by' => $creator->id,
+    $this->assertDatabaseHas('pls_review_memberships', [
+        'pls_review_id' => $review->id,
+        'user_id' => $invitee->id,
+        'role' => PlsReviewMembershipRole::Viewer->value,
     ]);
 
-    Livewire::actingAs($creator)
-        ->test(CollaboratorsPage::class, ['review' => $review])
-        ->set('inviteCollaboratorUserId', (string) $invitee->id)
-        ->set('inviteCollaboratorRole', PlsReviewMembershipRole::Owner->value)
-        ->call('inviteCollaborator')
-        ->assertHasErrors(['inviteCollaboratorRole']);
+    expect($invitation->fresh()->accepted_at)->not->toBeNull();
+});
+
+test('accepted invitation cannot be reused', function () {
+    $owner = User::factory()->reviewer()->create();
+    $invitee = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    $invitation = $review->invitations()->create([
+        'email' => $invitee->email,
+        'role' => PlsReviewMembershipRole::Contributor->value,
+        'invited_by' => $owner->id,
+    ]);
+
+    $invitation->update(['accepted_at' => now()]);
+
+    $this->actingAs($invitee)
+        ->get(route('pls.invitations.accept', ['token' => $invitation->token]))
+        ->assertNotFound();
+});
+
+test('email mismatch prevents invitation acceptance', function () {
+    $owner = User::factory()->reviewer()->create();
+    $wrongUser = User::factory()->reviewer()->create();
+    $review = plsReview([
+        'created_by' => $owner->id,
+    ]);
+
+    $invitation = $review->invitations()->create([
+        'email' => 'someone-else@example.com',
+        'role' => PlsReviewMembershipRole::Contributor->value,
+        'invited_by' => $owner->id,
+    ]);
+
+    $this->actingAs($wrongUser)
+        ->get(route('pls.invitations.accept', ['token' => $invitation->token]))
+        ->assertForbidden();
 
     $this->assertDatabaseMissing('pls_review_memberships', [
         'pls_review_id' => $review->id,
-        'user_id' => $invitee->id,
-        'role' => PlsReviewMembershipRole::Owner->value,
+        'user_id' => $wrongUser->id,
     ]);
 });
 

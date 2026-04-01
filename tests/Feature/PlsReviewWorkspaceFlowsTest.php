@@ -1,5 +1,6 @@
 <?php
 
+use App\Ai\Agents\LegislationSourceExtractorAgent;
 use App\Domain\Analysis\Enums\FindingType;
 use App\Domain\Analysis\Enums\RecommendationType;
 use App\Domain\Documents\Document;
@@ -17,6 +18,9 @@ use App\Livewire\Pls\Reviews\LegislationPage;
 use App\Livewire\Pls\Reviews\ReportsPage;
 use App\Livewire\Pls\Reviews\WorkflowPage;
 use App\Models\User;
+use App\Support\PlsAssistant\AssistantSourceExtractionResult;
+use App\Support\PlsAssistant\AssistantSourceTextExtractor;
+use App\Support\PlsAssistant\AssistantSourceTextExtractorFactory;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -26,23 +30,71 @@ beforeEach(function () {
     $this->actingAs(User::factory()->create());
 });
 
-test('existing legislation can be attached from the review workspace', function () {
+test('uploaded legislation sources are analyzed immediately and can be saved as new legislation', function () {
+    Storage::fake('s3');
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
+
     $review = plsReview([
-        'title' => 'Review of procurement oversight',
+        'title' => 'Review of access to information implementation',
     ]);
 
-    $legislation = Legislation::factory()->create([
-        'jurisdiction_id' => $review->jurisdiction_id,
-        'title' => 'Public Procurement Act',
-        'legislation_type' => LegislationType::Act,
-    ]);
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: <<<'TEXT'
+                Access to Information Act
+                Short title: ATI Act
 
-    Livewire::test(LegislationPage::class, ['review' => $review])
-        ->set('attachLegislationId', (string) $legislation->id)
-        ->set('attachLegislationRelationshipType', ReviewLegislationRelationshipType::Primary->value)
-        ->call('attachLegislation')
+                This Act establishes a public right of access to government information. It sets timelines for responses and permits regulations to support implementation.
+
+                Enacted on May 4, 2010.
+                TEXT,
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    LegislationSourceExtractorAgent::fake([[
+        'title' => 'Access to Information Act',
+        'short_title' => 'ATI Act',
+        'legislation_type' => LegislationType::Act->value,
+        'date_enacted' => '2010-05-04',
+        'summary' => 'Establishes a public right of access to government information and supports implementation through regulations.',
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+        'warnings' => [],
+    ]]);
+
+    $component = Livewire::test(LegislationPage::class, ['review' => $review])
+        ->set('sourceUpload', UploadedFile::fake()->create('access-to-information-act.pdf', 256, 'application/pdf'))
+        ->assertSee('Needs review')
+        ->assertSee('Access to Information Act')
+        ->assertDontSee('Review record');
+
+    $document = $review->fresh()->documents()->sole();
+
+    $component
+        ->call('startReviewDocument', $document->id)
+        ->assertSet('analysisTitle', 'Access to Information Act')
+        ->assertSet('analysisShortTitle', 'ATI Act')
+        ->assertSet('analysisType', LegislationType::Act->value)
+        ->assertSet('analysisDateEnacted', '2010-05-04')
+        ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
+        ->assertSee('Review record')
+        ->call('saveAnalyzedLegislation')
         ->assertHasNoErrors()
-        ->assertSee('Public Procurement Act');
+        ->assertSee('Access to Information Act');
+
+    $legislation = Legislation::query()->where('title', 'Access to Information Act')->firstOrFail();
+
+    expect($legislation->jurisdiction_id)->toBe($review->jurisdiction_id)
+        ->and($legislation->source_document_id)->toBe($document->id);
 
     $this->assertDatabaseHas('pls_review_legislation', [
         'pls_review_id' => $review->id,
@@ -51,31 +103,367 @@ test('existing legislation can be attached from the review workspace', function 
     ]);
 });
 
-test('legislation can be created and attached from the review workspace', function () {
+test('oversized legislation uploads are rejected', function () {
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
+
     $review = plsReview([
-        'title' => 'Review of access to information implementation',
+        'title' => 'Review of oversized uploads',
     ]);
 
     Livewire::test(LegislationPage::class, ['review' => $review])
-        ->set('newLegislationTitle', 'Access to Information Act')
-        ->set('newLegislationShortTitle', 'ATI Act')
-        ->set('newLegislationType', LegislationType::Act->value)
-        ->set('newLegislationDateEnacted', '2010-05-04')
-        ->set('newLegislationSummary', 'Establishes public rights to request government information.')
-        ->set('newLegislationRelationshipType', ReviewLegislationRelationshipType::Primary->value)
-        ->call('createLegislation')
+        ->set('sourceUpload', UploadedFile::fake()->create('too-large.pdf', 51201, 'application/pdf'))
+        ->assertHasErrors(['sourceUpload']);
+
+    expect($review->fresh()->documents)->toHaveCount(0);
+});
+
+test('legislation source rows can be deleted from records', function () {
+    Storage::fake('s3');
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
+
+    $review = plsReview([
+        'title' => 'Review of removable source rows',
+    ]);
+
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: 'Implementation note with no clear enactment details or formal heading.',
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    LegislationSourceExtractorAgent::fake([[
+        'title' => 'Implementation Note',
+        'short_title' => null,
+        'legislation_type' => LegislationType::Act->value,
+        'date_enacted' => null,
+        'summary' => null,
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+        'warnings' => ['The summary needs manual review because the extracted source text was limited.'],
+    ]]);
+
+    $component = Livewire::test(LegislationPage::class, ['review' => $review])
+        ->set('sourceUpload', UploadedFile::fake()->create('working-note.pdf', 128, 'application/pdf'))
+        ->assertSee('Implementation Note');
+
+    $document = $review->fresh()->documents()->sole();
+
+    Storage::disk('s3')->assertExists($document->storage_path);
+
+    $component
+        ->call('confirmDeletion', $document->id)
+        ->assertDontSee('Implementation Note');
+
+    $this->assertDatabaseMissing('documents', [
+        'id' => $document->id,
+    ]);
+
+    Storage::disk('s3')->assertMissing($document->storage_path);
+});
+
+test('uploaded legislation docx sources use the shared extractor and can be saved', function () {
+    Storage::fake('s3');
+
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+
+    $review = plsReview([
+        'title' => 'Review of uploaded docx legislation',
+    ]);
+
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            expect($document)->toBeInstanceOf(Document::class)
+                ->and(data_get($document->metadata, 'disk'))->toBe('s3');
+
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: <<<'TEXT'
+                Access to Information Act
+                Short title: ATI Act
+
+                This Act establishes a public right of access to government information.
+
+                Enacted on May 4, 2010.
+                TEXT,
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    LegislationSourceExtractorAgent::fake([[
+        'title' => 'Access to Information Act',
+        'short_title' => 'ATI Act',
+        'legislation_type' => LegislationType::Act->value,
+        'date_enacted' => '2010-05-04',
+        'summary' => 'Establishes a public right of access to government information.',
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+        'warnings' => [],
+    ]]);
+
+    $component = Livewire::test(LegislationPage::class, ['review' => $review])
+        ->set('sourceUpload', UploadedFile::fake()->create(
+            'access-to-information-act.docx',
+            256,
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ))
+        ->assertSee('Needs review')
+        ->assertSee('Access to Information Act');
+
+    $document = $review->fresh()->documents()->sole();
+
+    $component
+        ->call('startReviewDocument', $document->id)
+        ->assertSet('analysisTitle', 'Access to Information Act')
+        ->assertSet('analysisShortTitle', 'ATI Act')
+        ->assertSet('analysisDateEnacted', '2010-05-04')
+        ->assertSee('Review record')
+        ->call('saveAnalyzedLegislation')
         ->assertHasNoErrors()
         ->assertSee('Access to Information Act');
 
-    $legislation = Legislation::query()->where('title', 'Access to Information Act')->firstOrFail();
+    expect(data_get($document->metadata, 'disk'))->toBe('s3');
+    Storage::disk('s3')->assertExists($document->storage_path);
+});
 
-    expect($legislation->jurisdiction_id)->toBe($review->jurisdiction_id);
+test('bill-style source text is kept as a primary record and avoids structural summary garbage', function () {
+    Storage::fake('s3');
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
 
-    $this->assertDatabaseHas('pls_review_legislation', [
-        'pls_review_id' => $review->id,
-        'legislation_id' => $legislation->id,
-        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+    $review = plsReview([
+        'title' => 'Review of a bill-style source',
     ]);
+
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: <<<'TEXT'
+                BELIZE: SOUTHERN DEEP PORT DEVELOPMENT FACILITY BILL, 2024
+
+                ARRANGEMENT OF CLAUSES
+                1. Short title.
+                2. Interpretation.
+
+                A Bill for an Act to provide for the development and operation of a southern deep port facility and related matters.
+                TEXT,
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    LegislationSourceExtractorAgent::fake([[
+        'title' => 'Southern Deep Port Development Facility Bill, 2024',
+        'short_title' => 'Southern Deep Port Development Facility Bill',
+        'legislation_type' => LegislationType::Act->value,
+        'date_enacted' => null,
+        'summary' => 'Provides for the development and operation of a southern deep port facility and related matters.',
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+        'warnings' => ['This looks like a bill or draft text, so an enactment date may not be available yet.'],
+    ]]);
+
+    $component = Livewire::test(LegislationPage::class, ['review' => $review])
+        ->set('sourceUpload', UploadedFile::fake()->create('southern-deep-port-development-facility-bill-2024.pdf', 256, 'application/pdf'))
+        ->assertSee('Needs review')
+        ->assertSee('Southern Deep Port Development Facility Bill, 2024');
+
+    $document = $review->fresh()->documents()->sole();
+
+    $component
+        ->call('startReviewDocument', $document->id)
+        ->assertSet('analysisTitle', 'Southern Deep Port Development Facility Bill, 2024')
+        ->assertSet('analysisShortTitle', 'Southern Deep Port Development Facility Bill')
+        ->assertSet('analysisType', LegislationType::Act->value)
+        ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
+        ->assertSet('analysisSummary', fn (string $summary): bool => str_contains(strtolower($summary), 'deep port facility'))
+        ->assertSee('This looks like a bill or draft text, so an enactment date may not be available yet.')
+        ->assertDontSee('Ready');
+});
+
+test('processing legislation extraction stays in a waiting state until text is ready', function () {
+    Storage::fake('s3');
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
+
+    $review = plsReview([
+        'title' => 'Review of source processing state',
+    ]);
+
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            if (data_get($document->metadata, 'extraction.textract_job_id') === null) {
+                return AssistantSourceExtractionResult::processing(
+                    driver: 'stub',
+                    method: 'stubbed shared extractor',
+                    metadata: [
+                        'textract_job_id' => 'job-123',
+                    ],
+                    pollAfterSeconds: 3,
+                );
+            }
+
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: <<<'TEXT'
+                Access to Information Act
+                Short title: ATI Act
+
+                This Act establishes a public right of access to government information.
+
+                Enacted on May 4, 2010.
+                TEXT,
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->twice()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    LegislationSourceExtractorAgent::fake([[
+        'title' => 'Access to Information Act',
+        'short_title' => 'ATI Act',
+        'legislation_type' => LegislationType::Act->value,
+        'date_enacted' => '2010-05-04',
+        'summary' => 'Establishes a public right of access to government information.',
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+        'warnings' => [],
+    ]]);
+
+    Livewire::test(LegislationPage::class, ['review' => $review])
+        ->set('sourceUpload', UploadedFile::fake()->create('access-to-information-act.pdf', 256, 'application/pdf'))
+        ->assertSee('Processing')
+        ->assertDontSee('Review record')
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Needs review')
+        ->assertSee('Access to Information Act');
+
+    expect(data_get($review->fresh()->documents()->sole()->metadata, 'extraction.textract_job_id'))->toBe('job-123')
+        ->and(data_get($review->fresh()->documents()->sole()->metadata, 'extraction.poll_attempts'))->toBe(1);
+});
+
+test('large legislation source prompts are trimmed before the ai extraction step', function () {
+    Storage::fake('s3');
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
+
+    $review = plsReview([
+        'title' => 'Review of large legislation prompt handling',
+    ]);
+
+    $largeText = implode("\n", array_fill(0, 1200, 'Section text describing the implementation, obligations, penalties, and procedural framework for the instrument.'));
+    $largeText = "Southern Deep Port Development Facility Bill, 2024\nShort title: Deep Port Bill\nEnacted on June 1, 2024.\n\n".$largeText;
+
+    $extractor = new class($largeText) implements AssistantSourceTextExtractor
+    {
+        public function __construct(private readonly string $content) {}
+
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: $this->content,
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+
+    LegislationSourceExtractorAgent::fake(function (string $prompt) {
+        expect(strlen($prompt))->toBeLessThan(22000)
+            ->and($prompt)->toContain('Source text excerpt:')
+            ->and($prompt)->toContain('Short title: Deep Port Bill')
+            ->and($prompt)->not->toContain(str_repeat('Section text describing the implementation, obligations, penalties, and procedural framework for the instrument.', 20));
+
+        return [
+            'title' => 'Southern Deep Port Development Facility Bill, 2024',
+            'short_title' => 'Deep Port Bill',
+            'legislation_type' => LegislationType::Act->value,
+            'date_enacted' => '2024-06-01',
+            'summary' => 'Provides the framework for the southern deep port facility.',
+            'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+            'warnings' => [],
+        ];
+    });
+
+    Livewire::test(LegislationPage::class, ['review' => $review])
+        ->set('sourceUpload', UploadedFile::fake()->create('southern-deep-port-development-facility-bill-2024.pdf', 256, 'application/pdf'))
+        ->assertSee('Needs review')
+        ->assertSee('Southern Deep Port Development Facility Bill, 2024');
+});
+
+test('ai extraction failures do not fall back to heuristic legislation parsing', function () {
+    Storage::fake('s3');
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
+
+    $review = plsReview([
+        'title' => 'Review of failed ai extraction',
+    ]);
+
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: <<<'TEXT'
+                BELIZE: SOUTHERN DEEP PORT DEVELOPMENT FACILITY BILL, 2024
+
+                ARRANGEMENT OF CLAUSES
+                1. Short title.
+                2. Interpretation.
+
+                A Bill for an Act to provide for the development and operation of a southern deep port facility and related matters.
+                TEXT,
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    LegislationSourceExtractorAgent::fake(function () {
+        throw new \RuntimeException('AI extraction failed');
+    });
+
+    Livewire::test(LegislationPage::class, ['review' => $review])
+        ->set('sourceUpload', UploadedFile::fake()->create('southern-deep-port-development-facility-bill-2024.pdf', 256, 'application/pdf'))
+        ->assertSee('Needs attention')
+        ->assertDontSee('Needs review')
+        ->assertDontSee('Review record');
+
+    $document = $review->fresh()->documents()->sole();
+
+    expect(data_get($document->metadata, 'legislation_analysis.status'))->toBe('failed')
+        ->and(data_get($document->metadata, 'legislation_analysis.summary'))->toBe('')
+        ->and(data_get($document->metadata, 'legislation_analysis.title'))->toBe('Southern Deep Port Development Facility Bill 2024');
 });
 
 test('document metadata can be added from the review workspace', function () {
@@ -163,6 +551,266 @@ test('review documents can be uploaded, edited, and deleted from the review work
     ]);
 
     Storage::disk(config('filesystems.default'))->assertMissing($updatedDocument->storage_path);
+});
+
+test('uploaded legislation can infer delegated relationship details', function () {
+    Storage::fake('s3');
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
+
+    $review = plsReview([
+        'title' => 'Review of delegated powers reporting',
+    ]);
+
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: <<<'TEXT'
+                Implementation Regulations
+
+                These regulations set reporting deadlines for implementing agencies and identify the responsible minister.
+
+                Made on 12 March 2014.
+                TEXT,
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    LegislationSourceExtractorAgent::fake([[
+        'title' => 'Implementation Regulations',
+        'short_title' => null,
+        'legislation_type' => LegislationType::Regulation->value,
+        'date_enacted' => '2014-03-12',
+        'summary' => 'Sets reporting deadlines for implementing agencies and identifies the responsible minister.',
+        'relationship_type' => ReviewLegislationRelationshipType::Delegated->value,
+        'warnings' => [],
+    ]]);
+
+    $component = Livewire::test(LegislationPage::class, ['review' => $review])
+        ->set('sourceUpload', UploadedFile::fake()->create('implementation-regulations.pdf', 256, 'application/pdf'))
+        ->assertSee('Needs review')
+        ->assertSee('Implementation Regulations');
+
+    $document = $review->fresh()->documents()->sole();
+
+    $component
+        ->call('startReviewDocument', $document->id)
+        ->assertSet('analysisTitle', 'Implementation Regulations')
+        ->assertSet('analysisType', LegislationType::Regulation->value)
+        ->assertSet('analysisDateEnacted', '2014-03-12')
+        ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Delegated->value)
+        ->assertSee('Review record');
+});
+
+test('best effort legislation parsing still enters the review state with warnings', function () {
+    Storage::fake('s3');
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
+
+    $review = plsReview([
+        'title' => 'Review of incomplete source text',
+    ]);
+
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: 'Implementation note with no clear enactment details or formal heading.',
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    LegislationSourceExtractorAgent::fake([[
+        'title' => 'Implementation Note',
+        'short_title' => null,
+        'legislation_type' => LegislationType::Act->value,
+        'date_enacted' => null,
+        'summary' => null,
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+        'warnings' => ['The summary needs manual review because the extracted source text was limited.'],
+    ]]);
+
+    $component = Livewire::test(LegislationPage::class, ['review' => $review])
+        ->set('sourceUpload', UploadedFile::fake()->create('working-note.pdf', 128, 'application/pdf'))
+        ->assertSee('Needs review')
+        ->assertSee('Implementation Note');
+
+    $document = $review->fresh()->documents()->sole();
+
+    $component
+        ->call('startReviewDocument', $document->id)
+        ->assertSet('analysisTitle', 'Implementation Note')
+        ->assertSee('Needs review')
+        ->assertSee('Review record');
+});
+
+test('opening a stale legislation review row refreshes missing extracted summary data', function () {
+    Storage::fake('s3');
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
+
+    $review = plsReview([
+        'title' => 'Review of stale legislation analysis',
+    ]);
+
+    $document = Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Southern Deep Port Development Facility Bill 2024',
+        'document_type' => DocumentType::LegislationText,
+        'storage_path' => 'pls/reviews/'.$review->id.'/documents/southern-deep-port.pdf',
+        'mime_type' => 'application/pdf',
+        'metadata' => [
+            'disk' => 's3',
+            'original_name' => 'Southern_Deep_Port_Development_Facility_Bill_2024_d5aa96a3ea.pdf',
+            'legislation_analysis' => [
+                'status' => 'needs_review',
+                'source_document_id' => null,
+                'source_label' => 'Southern Deep Port Development Facility Bill 2024',
+                'title' => 'Southern Deep Port Development Facility Bill, 2024',
+                'short_title' => 'Southern Deep Port Development Facility Bill',
+                'legislation_type' => 'act',
+                'date_enacted' => '',
+                'summary' => '',
+                'relationship_type' => 'primary',
+                'warnings' => [
+                    'Confirm or correct the fields before saving.',
+                    'This looks like a bill or draft text, so an enactment date may not be available yet.',
+                    'The summary needs manual review because the extracted source text was limited.',
+                ],
+                'duplicate_candidates' => [],
+            ],
+        ],
+    ]);
+
+    Storage::disk('s3')->put($document->storage_path, 'fake pdf bytes');
+
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: <<<'TEXT'
+                BELIZE: SOUTHERN DEEP PORT DEVELOPMENT FACILITY BILL, 2024
+
+                A Bill for an Act to provide for certain exemptions from taxes and duties proposed to be granted to the Southern Deep Port Development Ltd. by the Agreement; to provide for the effective implementation of the Southern Deep Port Development Facility; and to provide for matters connected therewith or incidental thereto.
+                TEXT,
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    LegislationSourceExtractorAgent::fake([[
+        'title' => 'Southern Deep Port Development Facility Bill, 2024',
+        'short_title' => 'Southern Deep Port Development Facility Bill',
+        'legislation_type' => LegislationType::Act->value,
+        'date_enacted' => null,
+        'summary' => 'Provides exemptions tied to the deep port agreement and supports implementation of the facility.',
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+        'warnings' => ['This looks like a bill or draft text, so an enactment date may not be available yet.'],
+    ]]);
+
+    Livewire::test(LegislationPage::class, ['review' => $review])
+        ->call('startReviewDocument', $document->id)
+        ->assertSet('analysisSummary', 'Provides exemptions tied to the deep port agreement and supports implementation of the facility.')
+        ->assertSee('Review record');
+
+    expect(data_get($document->fresh()->metadata, 'legislation_analysis.summary'))
+        ->toBe('Provides exemptions tied to the deep port agreement and supports implementation of the facility.');
+});
+
+test('duplicate legislation matches can be updated from the inline review state', function () {
+    Storage::fake('s3');
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
+
+    $review = plsReview([
+        'title' => 'Review of an existing public records statute',
+    ]);
+
+    $existingLegislation = Legislation::factory()->create([
+        'jurisdiction_id' => $review->jurisdiction_id,
+        'title' => 'Public Records Act',
+        'short_title' => 'PRA',
+        'legislation_type' => LegislationType::Act,
+        'summary' => 'Older summary.',
+    ]);
+
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: <<<'TEXT'
+                Public Records Act
+                Short title: PRA
+
+                This Act refreshes public access rules, names the oversight commission, and allows regulations for implementation.
+
+                Enacted on June 1, 2018.
+                TEXT,
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    LegislationSourceExtractorAgent::fake([[
+        'title' => 'Public Records Act',
+        'short_title' => 'PRA',
+        'legislation_type' => LegislationType::Act->value,
+        'date_enacted' => '2018-06-01',
+        'summary' => 'Refreshes public access rules, names the oversight commission, and allows regulations for implementation.',
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+        'warnings' => [],
+    ]]);
+
+    $component = Livewire::test(LegislationPage::class, ['review' => $review])
+        ->set('sourceUpload', UploadedFile::fake()->create('public-records-act.pdf', 256, 'application/pdf'))
+        ->assertSee('Needs review')
+        ->assertSee('Public Records Act');
+
+    $document = $review->fresh()->documents()->sole();
+
+    $component
+        ->call('startReviewDocument', $document->id)
+        ->assertSet('analysisSaveMode', 'update')
+        ->assertSee('Possible match found')
+        ->assertSee('Update existing record')
+        ->set('analysisExistingLegislationId', (string) $existingLegislation->id)
+        ->call('saveAnalyzedLegislation')
+        ->assertHasNoErrors()
+        ->assertSee('Public Records Act');
+
+    $updatedLegislation = $existingLegislation->fresh();
+
+    expect(str_contains(strtolower((string) $updatedLegislation->summary), 'refreshes public access rules'))->toBeTrue();
+    expect($updatedLegislation->source_document_id)->toBe($review->fresh()->documents()->sole()->id);
+
+    $this->assertDatabaseHas('pls_review_legislation', [
+        'pls_review_id' => $review->id,
+        'legislation_id' => $existingLegislation->id,
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+    ]);
 });
 
 test('findings and recommendations can be added from the review workspace', function () {
