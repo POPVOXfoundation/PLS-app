@@ -1,4 +1,4 @@
-<div class="flex max-h-[calc(100vh-16rem)] min-h-0 flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_18px_45px_-28px_rgba(15,23,42,0.16)] dark:border-zinc-700 dark:bg-zinc-900 dark:shadow-none" data-assistant-sidebar>
+<div class="flex max-h-[calc(100vh-16rem)] min-h-0 flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_18px_45px_-28px_rgba(15,23,42,0.16)] dark:border-zinc-700 dark:bg-zinc-900 dark:shadow-none" data-assistant-sidebar x-data="{ pendingMessage: '' }">
     <div class="border-b border-violet-300/30 bg-gradient-to-r from-slate-500 via-indigo-500 to-violet-500 px-4 py-2.5">
         <div class="flex items-center gap-2">
             <flux:heading size="base" class="!text-white">{{ __('PLS Assistant') }}</flux:heading>
@@ -35,7 +35,7 @@
                 }).observe(thinkingEl, { attributes: true, attributeFilter: ['style'] });
             }
         "
-        @assistant-message-added.window="scrollToLastMessage()"
+        @assistant-message-added.window="pendingMessage = ''; scrollToBottom()"
         class="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(250,250,252,0.9)_0%,rgba(255,255,255,1)_18%)] px-4 py-3.5 dark:[background:var(--color-zinc-900)]"
     >
         <div class="space-y-2.5">
@@ -126,6 +126,17 @@
                 </div>
             @endif
 
+            <div
+                x-show="pendingMessage.trim() !== ''"
+                x-cloak
+                class="flex justify-end pl-10"
+                data-message
+            >
+                <div class="ml-auto inline-flex w-auto max-w-[58%] rounded-[1rem] rounded-br-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-zinc-800 dark:border-zinc-600 dark:bg-zinc-700/50 dark:text-zinc-100">
+                    <div class="text-[13px] leading-5" x-text="pendingMessage"></div>
+                </div>
+            </div>
+
             <div wire:loading.flex wire:target="submitAssistantPrompt, sendPrompt" data-thinking class="items-start gap-2 pr-2">
                 <div class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
                     <flux:icon icon="sparkles" class="size-3 animate-spin" />
@@ -159,7 +170,16 @@
             </div>
         @endif
 
-        <form wire:submit="submitAssistantPrompt">
+        <form
+            wire:submit="submitAssistantPrompt"
+            x-on:submit="
+                pendingMessage = $wire.assistantInput;
+                $nextTick(() => {
+                    const container = document.querySelector('[data-assistant-sidebar] .overflow-y-auto');
+                    if (container) container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+                });
+            "
+        >
             <flux:composer
                 wire:model="assistantInput"
                 submit="enter"
