@@ -21,6 +21,8 @@ class AnalyzeReviewDocument
      *     extraction_driver: string|null,
      *     extraction_method: string|null,
      *     extraction_metadata: array<string, mixed>,
+     *     progress_stage: string|null,
+     *     poll_after_seconds: int|null,
      *     document_id: int,
      *     title: string,
      *     document_type: string,
@@ -34,20 +36,101 @@ class AnalyzeReviewDocument
      */
     public function analyze(Document $document): array
     {
-        [$status, $rawText, $warnings, $extractionDriver, $extractionMethod, $extractionMetadata] = $this->extractRawText($document);
+        $extraction = $this->extract($document);
 
-        if ($status !== 'completed') {
+        if ($extraction['status'] !== 'completed') {
             return $this->buildFailureResult(
                 document: $document,
-                status: $status,
-                warnings: $warnings,
-                extractionDriver: $extractionDriver,
-                extractionMethod: $extractionMethod,
-                extractionMetadata: $extractionMetadata,
-                rawText: $rawText,
+                status: $extraction['status'],
+                warnings: $extraction['warnings'],
+                extractionDriver: $extraction['extraction_driver'],
+                extractionMethod: $extraction['extraction_method'],
+                extractionMetadata: $extraction['extraction_metadata'],
+                rawText: $extraction['raw_text'],
+                pollAfterSeconds: $extraction['poll_after_seconds'],
+                progressStage: $extraction['progress_stage'],
             );
         }
 
+        return $this->enrich($document, $extraction['raw_text'], [
+            'extraction_driver' => $extraction['extraction_driver'],
+            'extraction_method' => $extraction['extraction_method'],
+            'extraction_metadata' => $extraction['extraction_metadata'],
+            'poll_after_seconds' => $extraction['poll_after_seconds'],
+        ]);
+    }
+
+    /**
+     * @return array{
+     *     status: string,
+     *     extraction_driver: string|null,
+     *     extraction_method: string|null,
+     *     extraction_metadata: array<string, mixed>,
+     *     progress_stage: string|null,
+     *     poll_after_seconds: int|null,
+     *     document_id: int,
+     *     title: string,
+     *     document_type: string,
+     *     summary: string,
+     *     key_themes: list<string>,
+     *     notable_excerpts: list<string>,
+     *     important_dates: list<string>,
+     *     warnings: list<string>,
+     *     raw_text: string
+     * }
+     */
+    public function extract(Document $document): array
+    {
+        [$status, $rawText, $warnings, $extractionDriver, $extractionMethod, $extractionMetadata] = $this->extractRawText($document);
+
+        return [
+            'status' => $status,
+            'extraction_driver' => $extractionDriver,
+            'extraction_method' => $extractionMethod,
+            'extraction_metadata' => $extractionMetadata,
+            'progress_stage' => $status === 'processing' ? 'extracting_text' : null,
+            'poll_after_seconds' => $status === 'processing'
+                ? (int) ($extractionMetadata['poll_after_seconds'] ?? config('pls_assistant.assistant_sources.textract.poll_delay_seconds', 15))
+                : null,
+            'document_id' => $document->id,
+            'title' => $document->title,
+            'document_type' => $document->document_type->value,
+            'summary' => (string) ($document->summary ?? ''),
+            'key_themes' => [],
+            'notable_excerpts' => [],
+            'important_dates' => [],
+            'warnings' => $warnings,
+            'raw_text' => $rawText,
+        ];
+    }
+
+    /**
+     * @param  array{
+     *     extraction_driver?: string|null,
+     *     extraction_method?: string|null,
+     *     extraction_metadata?: array<string, mixed>,
+     *     poll_after_seconds?: int|null
+     * }  $extractionContext
+     * @return array{
+     *     status: string,
+     *     extraction_driver: string|null,
+     *     extraction_method: string|null,
+     *     extraction_metadata: array<string, mixed>,
+     *     progress_stage: string|null,
+     *     poll_after_seconds: int|null,
+     *     document_id: int,
+     *     title: string,
+     *     document_type: string,
+     *     summary: string,
+     *     key_themes: list<string>,
+     *     notable_excerpts: list<string>,
+     *     important_dates: list<string>,
+     *     warnings: list<string>,
+     *     raw_text: string
+     * }
+     */
+    public function enrich(Document $document, string $rawText, array $extractionContext = []): array
+    {
         $aiError = null;
         $aiExtraction = $this->extractWithAi($document, $rawText, $aiError);
 
@@ -56,18 +139,21 @@ class AnalyzeReviewDocument
                 document: $document,
                 status: 'failed',
                 warnings: [$this->aiFailureWarning($aiError)],
-                extractionDriver: $extractionDriver,
-                extractionMethod: $extractionMethod,
-                extractionMetadata: $extractionMetadata,
+                extractionDriver: $extractionContext['extraction_driver'] ?? null,
+                extractionMethod: $extractionContext['extraction_method'] ?? null,
+                extractionMetadata: $extractionContext['extraction_metadata'] ?? [],
                 rawText: $rawText,
+                pollAfterSeconds: $extractionContext['poll_after_seconds'] ?? null,
             );
         }
 
         return [
             'status' => 'completed',
-            'extraction_driver' => $extractionDriver,
-            'extraction_method' => $extractionMethod,
-            'extraction_metadata' => $extractionMetadata,
+            'extraction_driver' => $extractionContext['extraction_driver'] ?? null,
+            'extraction_method' => $extractionContext['extraction_method'] ?? null,
+            'extraction_metadata' => $extractionContext['extraction_metadata'] ?? [],
+            'progress_stage' => null,
+            'poll_after_seconds' => null,
             'document_id' => $document->id,
             'title' => $aiExtraction['title'],
             'document_type' => $aiExtraction['document_type'],
@@ -118,7 +204,10 @@ class AnalyzeReviewDocument
 
         return match ($result->status) {
             'completed' => ['completed', trim((string) $result->content), [], $result->driver, $result->method, $result->metadata],
-            'processing' => ['processing', '', ['The document file is still being processed.'], $result->driver, $result->method, $result->metadata],
+            'processing' => ['processing', '', ['The document file is still being processed.'], $result->driver, $result->method, [
+                ...$result->metadata,
+                'poll_after_seconds' => $result->pollAfterSeconds,
+            ]],
             default => ['failed', '', [trim((string) $result->error) !== '' ? (string) $result->error : 'Unable to extract text from the document file.'], $result->driver, $result->method, $result->metadata],
         };
     }
@@ -240,6 +329,8 @@ class AnalyzeReviewDocument
      *     extraction_driver: string|null,
      *     extraction_method: string|null,
      *     extraction_metadata: array<string, mixed>,
+     *     progress_stage: string|null,
+     *     poll_after_seconds: int|null,
      *     document_id: int,
      *     title: string,
      *     document_type: string,
@@ -259,12 +350,16 @@ class AnalyzeReviewDocument
         ?string $extractionMethod,
         array $extractionMetadata,
         string $rawText,
+        ?int $pollAfterSeconds,
+        ?string $progressStage = null,
     ): array {
         return [
             'status' => $status,
             'extraction_driver' => $extractionDriver,
             'extraction_method' => $extractionMethod,
             'extraction_metadata' => $extractionMetadata,
+            'progress_stage' => $progressStage,
+            'poll_after_seconds' => $pollAfterSeconds,
             'document_id' => $document->id,
             'title' => $document->title,
             'document_type' => $document->document_type->value,

@@ -74,7 +74,7 @@
         </div>
     </flux:card>
 
-    <flux:card wire:poll.5s.keep-alive="refreshPendingAnalyses" class="space-y-6">
+    <flux:card wire:poll.2s.keep-alive="refreshPendingAnalyses" class="space-y-6">
         <div class="flex items-center justify-between gap-4">
             <div class="space-y-1">
                 <flux:heading size="lg">{{ __('Records') }}</flux:heading>
@@ -96,84 +96,89 @@
                 {{ __('No documents linked to this review yet.') }}
             </flux:text>
         @else
-            <div class="space-y-3">
-                @foreach ($recordRows as $row)
-                    <div
-                        wire:key="document-record-{{ $row['id'] }}"
-                        class="rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm shadow-zinc-950/5 dark:border-zinc-800 dark:bg-zinc-950/40"
-                    >
-                        <div class="space-y-1">
-                            <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1">
-                                <flux:heading size="sm" class="break-words text-base/tight text-zinc-900 dark:text-white">
+            <flux:table>
+                <flux:table.columns>
+                    <flux:table.column>{{ __('Record') }}</flux:table.column>
+                    <flux:table.column>{{ __('Status') }}</flux:table.column>
+                    <flux:table.column align="end" class="w-32">{{ __('Actions') }}</flux:table.column>
+                </flux:table.columns>
+                <flux:table.rows>
+                    @foreach ($recordRows as $row)
+                        <flux:table.row :key="$row['id']">
+                            <flux:table.cell variant="strong">
+                                @if (in_array($row['action'], ['review', 'edit'], true))
+                                    <button
+                                        type="button"
+                                        wire:click="startEditingDocument({{ $row['id'] }})"
+                                        class="text-left text-base font-normal text-zinc-900 transition hover:text-violet-700 dark:text-white dark:hover:text-violet-300"
+                                    >
+                                        {{ $row['title'] }}
+                                    </button>
+                                @else
                                     {{ $row['title'] }}
-                                </flux:heading>
+                                @endif
 
-                                @can('update', $review)
-                                    <div class="flex items-center gap-2 self-center justify-self-end">
-                                        @if ($row['status'] !== 'processing')
-                                            <flux:button.group>
-                                                <flux:button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    icon="pencil-square"
-                                                    wire:click="startEditingDocument({{ $row['id'] }})"
-                                                />
+                                @if ($row['summary'] !== '')
+                                    <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
+                                        {{ \Illuminate\Support\Str::limit($row['summary'], 180) }}
+                                    </flux:text>
+                                @endif
 
-                                                <flux:modal.trigger name="confirm-document-delete">
-                                                    <flux:button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        icon="trash"
-                                                        x-on:click="setDeleteConfirmation({{ $row['id'] }}, @js($row['title']), @js(__('document')))"
-                                                    />
-                                                </flux:modal.trigger>
-                                            </flux:button.group>
-                                        @else
-                                            <flux:modal.trigger name="confirm-document-delete">
-                                                <flux:button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    icon="trash"
-                                                    x-on:click="setDeleteConfirmation({{ $row['id'] }}, @js($row['title']), @js(__('document')))"
-                                                />
-                                            </flux:modal.trigger>
-                                        @endif
-                                    </div>
-                                @endcan
-                            </div>
-
-                            @if ($row['summary'] !== '')
-                                <flux:text class="-mt-1 max-w-5xl text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                                    {{ \Illuminate\Support\Str::limit($row['summary'], 220) }}
-                                </flux:text>
-                            @endif
-
-                            <div class="mt-3 flex flex-col gap-3 border-t border-zinc-200/80 pt-3 dark:border-zinc-800/80 sm:flex-row sm:items-center sm:justify-between">
                                 <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
-                                    {{ __('Updated :date', ['date' => $row['updated_at']]) }}
+                                    {{ $row['document_type'] }} • {{ __('Updated :date', ['date' => $row['updated_at']]) }}
                                 </flux:text>
-
-                                <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-                                    <flux:badge size="sm">{{ $row['document_type'] }}</flux:badge>
-                                    <flux:badge size="sm" :color="$row['status_color']">{{ $row['status_label'] }}</flux:badge>
-
+                            </flux:table.cell>
+                            <flux:table.cell>
+                                <flux:badge size="sm" :color="$row['status_color']" :class="$row['status_badge_class']">
+                                    {{ $row['status_label'] }}
+                                </flux:badge>
+                            </flux:table.cell>
+                            <flux:table.cell>
+                                <div class="flex min-w-28 items-center justify-end gap-1">
                                     @can('update', $review)
+                                        @if ($row['action'] === 'review')
+                                            <flux:button
+                                                size="sm"
+                                                variant="subtle"
+                                                wire:click="startEditingDocument({{ $row['id'] }})"
+                                            >
+                                                {{ __('Review') }}
+                                            </flux:button>
+                                        @elseif ($row['action'] === 'edit')
+                                            <flux:button
+                                                size="sm"
+                                                variant="subtle"
+                                                wire:click="startEditingDocument({{ $row['id'] }})"
+                                            >
+                                                {{ __('Edit') }}
+                                            </flux:button>
+                                        @endif
+
                                         @if ($row['status'] === 'needs_attention')
                                             <flux:button
                                                 size="sm"
-                                                variant="ghost"
+                                                variant="subtle"
                                                 wire:click="retryDocumentAnalysis({{ $row['id'] }})"
                                             >
                                                 {{ __('Retry') }}
                                             </flux:button>
                                         @endif
+
+                                        <flux:modal.trigger name="confirm-document-delete">
+                                            <flux:button
+                                                variant="ghost"
+                                                size="sm"
+                                                icon="trash"
+                                                x-on:click="setDeleteConfirmation({{ $row['id'] }}, @js($row['title']), @js(__('document')))"
+                                            />
+                                        </flux:modal.trigger>
                                     @endcan
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-                @endforeach
-            </div>
+                            </flux:table.cell>
+                        </flux:table.row>
+                    @endforeach
+                </flux:table.rows>
+            </flux:table>
         @endif
     </flux:card>
 

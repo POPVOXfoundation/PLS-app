@@ -2,13 +2,13 @@
 
 namespace App\Livewire\Pls\Reviews;
 
-use App\Domain\Documents\Actions\AnalyzeReviewDocument;
-use App\Domain\Documents\Actions\ChunkDocumentText;
+use App\Domain\Documents\Actions\PersistReviewDocumentState;
 use App\Domain\Documents\Actions\StoreReviewDocumentMetadata;
 use App\Domain\Documents\Actions\UpdateReviewDocument;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Reviews\PlsReview;
+use App\Jobs\ProcessReviewDocument;
 use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -103,8 +103,6 @@ class DocumentsPage extends Workspace
             'documentUploads.*.mimes' => __('Choose PDF, DOCX, TXT, or MD files only.'),
         ]);
 
-        $statuses = [];
-
         foreach ($this->documentUploads as $upload) {
             $storedReview = app(StoreReviewDocumentMetadata::class)->store([
                 'pls_review_id' => $this->review->id,
@@ -133,7 +131,8 @@ class DocumentsPage extends Workspace
                 continue;
             }
 
-            $statuses[] = $this->processDocument($document);
+            app(PersistReviewDocumentState::class)->markQueued($document);
+            ProcessReviewDocument::dispatch($document->id);
         }
 
         $this->documentUploads = [];
@@ -141,21 +140,13 @@ class DocumentsPage extends Workspace
         $this->review = $this->loadReview();
 
         $this->dispatchWorkspaceToast(match (true) {
-            $statuses === [] => Toast::warning(
+            $this->review->documents->isEmpty() => Toast::warning(
                 __('Upload skipped'),
                 __('No documents were uploaded.'),
             ),
-            in_array('needs_attention', $statuses, true) => Toast::warning(
-                __('Documents uploaded'),
-                __('Documents uploaded. Some records need attention.'),
-            ),
-            in_array('processing', $statuses, true) => Toast::warning(
-                __('Documents uploaded'),
-                __('Documents uploaded. Processing has started.'),
-            ),
             default => Toast::success(
                 __('Documents uploaded'),
-                __('Documents uploaded and analyzed.'),
+                __('Documents uploaded. Processing has started.'),
             ),
         });
     }
@@ -167,6 +158,10 @@ class DocumentsPage extends Workspace
             ->first();
 
         if (! $document instanceof Document) {
+            return;
+        }
+
+        if ($this->documentRecordStatus($document) === 'processing') {
             return;
         }
 
@@ -229,8 +224,8 @@ class DocumentsPage extends Workspace
             return;
         }
 
-        $document = $this->resetDocumentAnalysisAttempts($document);
-        $status = $this->processDocument($document);
+        app(PersistReviewDocumentState::class)->resetForRetry($document);
+        ProcessReviewDocument::dispatch($document->id);
         $this->review = $this->loadReview();
 
         if ($this->documentEditingId === (string) $documentId) {
@@ -241,36 +236,14 @@ class DocumentsPage extends Workspace
             }
         }
 
-        $this->dispatchWorkspaceToast(match ($status) {
-            'processing' => Toast::warning(
-                __('Retry started'),
-                __('Document retry started. Processing continues in the background.'),
-            ),
-            'saved' => Toast::success(
-                __('Analysis completed'),
-                __('Document analysis completed successfully.'),
-            ),
-            default => Toast::warning(
-                __('Needs attention'),
-                __('Document still needs attention after retry.'),
-            ),
-        });
+        $this->dispatchWorkspaceToast(Toast::warning(
+            __('Retry started'),
+            __('Document retry started. Processing continues in the background.'),
+        ));
     }
 
     public function refreshPendingAnalyses(): void
     {
-        $documents = $this->documentsQuery()
-            ->get()
-            ->filter(fn (Document $document): bool => $this->documentRecordStatus($document) === 'processing');
-
-        if ($documents->isEmpty()) {
-            return;
-        }
-
-        foreach ($documents as $document) {
-            $this->processDocument($this->incrementExtractionPollAttempts($document));
-        }
-
         $this->review = $this->loadReview();
     }
 
@@ -328,70 +301,6 @@ class DocumentsPage extends Workspace
             ->where('document_type', '!=', DocumentType::LegislationText->value);
     }
 
-    private function processDocument(Document $document): string
-    {
-        $result = app(AnalyzeReviewDocument::class)->analyze($document);
-        $this->persistExtractionState($document, $result);
-
-        $rawText = trim((string) ($result['raw_text'] ?? ''));
-
-        if ($rawText !== '') {
-            app(ChunkDocumentText::class)->chunk($document, $rawText);
-        }
-
-        return $this->persistDocumentAnalysisState($document->fresh(), $result);
-    }
-
-    /**
-     * @param  array{
-     *     status?: string,
-     *     title?: string,
-     *     document_type?: string,
-     *     summary?: string,
-     *     key_themes?: list<string>,
-     *     notable_excerpts?: list<string>,
-     *     important_dates?: list<string>,
-     *     warnings?: list<string>
-     * }  $result
-     */
-    private function persistDocumentAnalysisState(Document $document, array $result): string
-    {
-        $metadata = $document->metadata ?? [];
-
-        $status = match ($result['status'] ?? 'completed') {
-            'processing' => 'processing',
-            'failed' => 'needs_attention',
-            default => 'saved',
-        };
-
-        data_set($metadata, 'document_analysis', array_filter([
-            'analysis_driver' => 'review_document_extractor_v1',
-            'status' => $status,
-            'title' => $result['title'] ?? null,
-            'document_type' => $result['document_type'] ?? null,
-            'summary' => $result['summary'] ?? null,
-            'key_themes' => $result['key_themes'] ?? [],
-            'notable_excerpts' => $result['notable_excerpts'] ?? [],
-            'important_dates' => $result['important_dates'] ?? [],
-            'warnings' => $result['warnings'] ?? [],
-            'updated_at' => now()->toIso8601String(),
-        ], fn (mixed $value): bool => $value !== null));
-
-        $attributes = [
-            'metadata' => $metadata,
-        ];
-
-        if ($status === 'saved') {
-            $attributes['title'] = (string) ($result['title'] ?? $document->title);
-            $attributes['document_type'] = (string) ($result['document_type'] ?? $document->document_type->value);
-            $attributes['summary'] = $this->blankToNull((string) ($result['summary'] ?? ''));
-        }
-
-        $document->forceFill($attributes)->save();
-
-        return $status;
-    }
-
     /**
      * @param  array<string, mixed>  $storedAnalysis
      */
@@ -443,76 +352,7 @@ class DocumentsPage extends Workspace
      */
     private function storedAnalysisForDocument(Document $document): array
     {
-        $analysis = data_get($document->metadata, 'document_analysis', []);
-
-        return is_array($analysis) ? $analysis : [];
-    }
-
-    /**
-     * @param  array{
-     *     extraction_method?: string|null,
-     *     extraction_driver?: string|null,
-     *     extraction_metadata?: array<string, mixed>,
-     *     status?: string,
-     *     warnings?: list<string>
-     * }  $result
-     */
-    private function persistExtractionState(Document $document, array $result): void
-    {
-        $metadata = $document->metadata ?? [];
-
-        foreach (($result['extraction_metadata'] ?? []) as $key => $value) {
-            data_set($metadata, "extraction.{$key}", $value);
-        }
-
-        data_set($metadata, 'extraction.status', $result['status'] ?? 'completed');
-        data_set($metadata, 'extraction.driver', $result['extraction_driver'] ?? data_get($metadata, 'extraction.driver'));
-        data_set($metadata, 'extraction_method', $result['extraction_method'] ?? data_get($metadata, 'extraction_method'));
-        data_set($metadata, 'extraction.error', ($result['status'] ?? null) === 'failed' ? ($result['warnings'][0] ?? null) : null);
-
-        if (($result['status'] ?? null) === 'processing') {
-            data_set($metadata, 'extraction.processing_at', now()->toIso8601String());
-        }
-
-        if (($result['status'] ?? null) === 'completed') {
-            data_set($metadata, 'extraction.completed_at', now()->toIso8601String());
-            data_set($metadata, 'extraction.error', null);
-        }
-
-        if (($result['status'] ?? null) === 'failed') {
-            data_set($metadata, 'extraction.failed_at', now()->toIso8601String());
-        }
-
-        $document->forceFill([
-            'metadata' => $metadata,
-        ])->save();
-    }
-
-    private function incrementExtractionPollAttempts(Document $document): Document
-    {
-        $metadata = $document->metadata ?? [];
-        $pollAttempts = (int) data_get($metadata, 'extraction.poll_attempts', 0) + 1;
-
-        data_set($metadata, 'extraction.poll_attempts', $pollAttempts);
-
-        $document->forceFill([
-            'metadata' => $metadata,
-        ])->save();
-
-        return $document->fresh();
-    }
-
-    private function resetDocumentAnalysisAttempts(Document $document): Document
-    {
-        $metadata = $document->metadata ?? [];
-
-        data_set($metadata, 'extraction.poll_attempts', 0);
-
-        $document->forceFill([
-            'metadata' => $metadata,
-        ])->save();
-
-        return $document->fresh();
+        return app(PersistReviewDocumentState::class)->storedAnalysis($document);
     }
 
     private function documentRecordStatus(Document $document): string
@@ -524,9 +364,27 @@ class DocumentsPage extends Workspace
         }
 
         return match (data_get($document->metadata, 'extraction.status')) {
-            'processing' => 'processing',
+            'queued', 'processing' => 'processing',
             'failed' => 'needs_attention',
             default => 'saved',
+        };
+    }
+
+    private function documentRecordProgressStage(Document $document, string $status): ?string
+    {
+        if ($status !== 'processing') {
+            return null;
+        }
+
+        $storedStage = data_get($document->metadata, 'document_analysis.progress_stage');
+
+        if (is_string($storedStage) && $storedStage !== '') {
+            return $storedStage;
+        }
+
+        return match (data_get($document->metadata, 'extraction.status')) {
+            'queued' => 'queued',
+            default => 'extracting_text',
         };
     }
 
@@ -556,9 +414,12 @@ class DocumentsPage extends Workspace
      *     summary: string,
      *     document_type: string,
      *     status: string,
+     *     progress_stage: string|null,
      *     status_label: string,
      *     status_color: string,
+     *     status_badge_class: string,
      *     updated_at: string
+     *     action: string|null
      * }>
      */
     private function recordRows(PlsReview $review): array
@@ -568,6 +429,7 @@ class DocumentsPage extends Workspace
             ->map(function (Document $document): array {
                 $storedAnalysis = $this->storedAnalysisForDocument($document);
                 $status = $this->documentRecordStatus($document);
+                $progressStage = $this->documentRecordProgressStage($document, $status);
 
                 return [
                     'id' => $document->id,
@@ -575,31 +437,65 @@ class DocumentsPage extends Workspace
                     'summary' => (string) ($storedAnalysis['summary'] ?? $document->summary ?? ''),
                     'document_type' => Str::headline((string) ($storedAnalysis['document_type'] ?? $document->document_type->value)),
                     'status' => $status,
-                    'status_label' => $this->statusLabel($status),
-                    'status_color' => $this->statusColor($status),
+                    'progress_stage' => $progressStage,
+                    'status_label' => $this->statusLabel($status, $progressStage),
+                    'status_color' => $this->statusColor($status, $progressStage),
+                    'status_badge_class' => $this->statusBadgeClass($status, $progressStage),
                     'updated_at' => $document->updated_at?->toFormattedDateString() ?? $document->created_at?->toFormattedDateString() ?? '—',
+                    'action' => match ($status) {
+                        'saved' => 'edit',
+                        'needs_attention' => 'review',
+                        default => null,
+                    },
                 ];
             })
             ->values()
             ->all();
     }
 
-    private function statusLabel(string $status): string
+    private function statusLabel(string $status, ?string $progressStage = null): string
     {
+        if ($status === 'processing') {
+            return match ($progressStage) {
+                'queued' => __('Queued'),
+                'filling_record' => __('Filling record'),
+                default => __('Extracting text'),
+            };
+        }
+
         return match ($status) {
-            'processing' => __('Processing'),
             'needs_attention' => __('Needs attention'),
             default => __('Saved'),
         };
     }
 
-    private function statusColor(string $status): string
+    private function statusColor(string $status, ?string $progressStage = null): string
     {
+        if ($status === 'processing') {
+            return match ($progressStage) {
+                'queued' => 'zinc',
+                'filling_record' => 'violet',
+                default => 'sky',
+            };
+        }
+
         return match ($status) {
-            'processing' => 'sky',
             'needs_attention' => 'rose',
             default => 'emerald',
         };
+    }
+
+    private function statusBadgeClass(string $status, ?string $progressStage = null): string
+    {
+        if ($status === 'processing') {
+            return match ($progressStage) {
+                'queued' => 'ring-1 ring-zinc-200 dark:ring-zinc-700',
+                'filling_record' => 'ring-1 ring-violet-200 dark:ring-violet-800/70',
+                default => 'ring-1 ring-sky-200 dark:ring-sky-800/70',
+            };
+        }
+
+        return '';
     }
 
     private function performDocumentDeletion(int $documentId): void

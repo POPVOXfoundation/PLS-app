@@ -292,6 +292,13 @@ class LegislationPage extends Workspace
             : __('Save record');
     }
 
+    public function analysisWarningsHeading(): string
+    {
+        return $this->analysisStatus === 'saved'
+            ? __('Warnings')
+            : __('Needs review');
+    }
+
     public function refreshPendingAnalyses(): void
     {
         $this->review = $this->loadReview();

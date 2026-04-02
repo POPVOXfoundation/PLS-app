@@ -13,6 +13,7 @@ use App\Domain\Reporting\Enums\GovernmentResponseStatus;
 use App\Domain\Reporting\Enums\ReportStatus;
 use App\Domain\Reporting\Enums\ReportType;
 use App\Domain\Reporting\Report;
+use App\Jobs\ProcessReviewDocument;
 use App\Jobs\ProcessReviewLegislationSource;
 use App\Livewire\Pls\Reviews\AnalysisPage;
 use App\Livewire\Pls\Reviews\DocumentsPage;
@@ -38,6 +39,12 @@ function runLegislationSourcePipeline(int $documentId): void
 {
     app()->call([(new ProcessReviewLegislationSource($documentId)), 'handle']);
     app()->call([(new ProcessReviewLegislationSource($documentId, 'enrich')), 'handle']);
+}
+
+function runReviewDocumentPipeline(int $documentId): void
+{
+    app()->call([(new ProcessReviewDocument($documentId)), 'handle']);
+    app()->call([(new ProcessReviewDocument($documentId, 'enrich')), 'handle']);
 }
 
 test('uploaded legislation sources are queued and can be saved as new legislation after background processing', function () {
@@ -358,6 +365,37 @@ test('saved source rows can be reopened for editing after the initial review', f
         ->assertSee('Tax and duty exemptions')
         ->assertSee('This Act provides exemptions from taxes and duties for the facility.')
         ->assertSee('Save changes');
+});
+
+test('saved legislation rows show warnings without the needs review heading', function () {
+    $review = plsReview([
+        'title' => 'Review of saved legislation warnings',
+    ]);
+
+    $document = Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Public Records Act source',
+        'document_type' => DocumentType::LegislationText,
+        'metadata' => [
+            'legislation_analysis' => [
+                'status' => 'saved',
+                'source_document_id' => null,
+                'source_label' => 'Public Records Act source',
+                'title' => 'Public Records Act',
+                'short_title' => 'PRA',
+                'legislation_type' => LegislationType::Act->value,
+                'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+                'warnings' => ['Double-check the enactment date against the gazette.'],
+                'legislation_id' => null,
+            ],
+        ],
+    ]);
+
+    Livewire::test(LegislationPage::class, ['review' => $review])
+        ->call('startReviewDocument', $document->id)
+        ->assertSee('Warnings')
+        ->assertDontSee('Needs review')
+        ->assertSee('Double-check the enactment date against the gazette.');
 });
 
 test('uploaded legislation docx sources use the shared extractor and can be saved', function () {
@@ -808,6 +846,7 @@ test('failed legislation analysis can be retried on the same source row', functi
 
 test('review documents can be uploaded in batches analyzed and saved from the review workspace', function () {
     Storage::fake(config('filesystems.default'));
+    Queue::fake();
     config()->set('pls_assistant.assistant_sources.extractor', 'local');
     config()->set('pls_assistant.assistant_sources.source_disk', config('filesystems.default'));
 
@@ -862,8 +901,19 @@ test('review documents can be uploaded in batches analyzed and saved from the re
             UploadedFile::fake()->create('consultation-digest.txt', 16, 'text/plain'),
         ])
         ->assertHasNoErrors()
-        ->assertSee('Implementation Brief')
-        ->assertSee('Consultation Digest');
+        ->assertSee('Queued');
+
+    $queuedDocuments = $review->fresh()->documents()
+        ->where('document_type', '!=', DocumentType::LegislationText->value)
+        ->get();
+
+    expect($queuedDocuments)->toHaveCount(2);
+
+    Queue::assertPushed(ProcessReviewDocument::class, 2);
+
+    foreach ($queuedDocuments as $queuedDocument) {
+        runReviewDocumentPipeline($queuedDocument->id);
+    }
 
     $implementationBrief = $review->fresh()->documents()
         ->where('title', 'Implementation Brief')
@@ -872,6 +922,12 @@ test('review documents can be uploaded in batches analyzed and saved from the re
     $consultationDigest = $review->fresh()->documents()
         ->where('title', 'Consultation Digest')
         ->firstOrFail();
+
+    $component
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Implementation Brief')
+        ->assertSee('Consultation Digest')
+        ->assertSee('Saved');
 
     expect(data_get($implementationBrief->metadata, 'document_analysis.status'))->toBe('saved')
         ->and(data_get($implementationBrief->metadata, 'document_analysis.key_themes'))->toBe(['implementation delays', 'reporting timetable changes'])
@@ -912,6 +968,7 @@ test('review documents can be uploaded in batches analyzed and saved from the re
 
 test('failed document analysis can be retried on the same review document row', function () {
     Storage::fake(config('filesystems.default'));
+    Queue::fake();
     config()->set('pls_assistant.assistant_sources.extractor', 'local');
     config()->set('pls_assistant.assistant_sources.source_disk', config('filesystems.default'));
 
@@ -945,11 +1002,19 @@ test('failed document analysis can be retried on the same review document row', 
         ->set('documentUploads', [
             UploadedFile::fake()->create('implementation-report.pdf', 256, 'application/pdf'),
         ])
-        ->assertSee('Needs attention');
+        ->assertSee('Queued');
 
     $document = $review->fresh()->documents()->firstOrFail();
 
-    expect(data_get($document->metadata, 'document_analysis.status'))->toBe('needs_attention');
+    Queue::assertPushed(ProcessReviewDocument::class, fn (ProcessReviewDocument $job): bool => $job->documentId === $document->id && $job->step === 'extract');
+
+    runReviewDocumentPipeline($document->id);
+
+    $component
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Needs attention');
+
+    expect(data_get($document->fresh()->metadata, 'document_analysis.status'))->toBe('needs_attention');
 
     ReviewDocumentExtractorAgent::fake([[
         'title' => 'Implementation Report',
@@ -964,12 +1029,160 @@ test('failed document analysis can be retried on the same review document row', 
     $component
         ->call('retryDocumentAnalysis', $document->id)
         ->assertHasNoErrors()
+        ->assertSee('Queued');
+
+    Queue::assertPushed(ProcessReviewDocument::class, fn (ProcessReviewDocument $job): bool => $job->documentId === $document->id);
+
+    runReviewDocumentPipeline($document->id);
+
+    $component
+        ->call('refreshPendingAnalyses')
         ->assertSee('Implementation Report')
         ->assertSee('Saved');
 
     expect($document->fresh()->id)->toBe($document->id)
         ->and(data_get($document->fresh()->metadata, 'document_analysis.status'))->toBe('saved')
         ->and($document->fresh()->title)->toBe('Implementation Report');
+});
+
+test('processing document extraction requeues in the background until text is ready', function () {
+    Storage::fake(config('filesystems.default'));
+    Queue::fake();
+    config()->set('pls_assistant.assistant_sources.extractor', 'local');
+    config()->set('pls_assistant.assistant_sources.source_disk', config('filesystems.default'));
+
+    $review = plsReview([
+        'title' => 'Review of document processing state',
+    ]);
+
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            if (data_get($document->metadata, 'extraction.textract_job_id') === null) {
+                return AssistantSourceExtractionResult::processing(
+                    driver: 'stub',
+                    method: 'stubbed shared extractor',
+                    metadata: [
+                        'textract_job_id' => 'document-job-123',
+                    ],
+                    pollAfterSeconds: 3,
+                );
+            }
+
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: <<<'TEXT'
+                Implementation progress has stalled in three agencies.
+                The document recommends revising reporting timetables and restoring funding certainty.
+                Dated 15 January 2025.
+                TEXT,
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->times(2)->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    ReviewDocumentExtractorAgent::fake([[
+        'title' => 'Implementation Brief',
+        'document_type' => DocumentType::ImplementationReport->value,
+        'summary' => 'Summarizes stalled implementation across three agencies and recommends timetable changes.',
+        'key_themes' => ['implementation delays'],
+        'notable_excerpts' => ['Implementation progress has stalled in three agencies.'],
+        'important_dates' => ['2025-01-15'],
+        'warnings' => [],
+    ]]);
+
+    Livewire::test(DocumentsPage::class, ['review' => $review])
+        ->set('documentUploads', [
+            UploadedFile::fake()->create('implementation-brief.pdf', 256, 'application/pdf'),
+        ])
+        ->assertSee('Queued');
+
+    $document = $review->fresh()->documents()->firstOrFail();
+
+    app()->call([(new ProcessReviewDocument($document->id)), 'handle']);
+
+    Queue::assertPushed(ProcessReviewDocument::class, fn (ProcessReviewDocument $job): bool => $job->documentId === $document->id && $job->step === 'extract');
+
+    expect(data_get($document->fresh()->metadata, 'extraction.textract_job_id'))->toBe('document-job-123')
+        ->and(data_get($document->fresh()->metadata, 'extraction.poll_attempts'))->toBe(0);
+
+    app()->call([(new ProcessReviewDocument($document->id)), 'handle']);
+
+    Livewire::test(DocumentsPage::class, ['review' => $review])
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Filling record');
+
+    Queue::assertPushed(ProcessReviewDocument::class, fn (ProcessReviewDocument $job): bool => $job->documentId === $document->id && $job->step === 'enrich');
+
+    app()->call([(new ProcessReviewDocument($document->id, 'enrich')), 'handle']);
+
+    Livewire::test(DocumentsPage::class, ['review' => $review])
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Saved')
+        ->assertSee('Implementation Brief');
+});
+
+test('processing document rows show the active progress stage in the records table', function () {
+    $review = plsReview([
+        'title' => 'Review of visible document progress stages',
+    ]);
+
+    Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Queued document',
+        'document_type' => DocumentType::GroupReport,
+        'metadata' => [
+            'extraction' => [
+                'status' => 'queued',
+            ],
+            'document_analysis' => [
+                'status' => 'processing',
+                'progress_stage' => 'queued',
+                'title' => 'Queued document',
+            ],
+        ],
+    ]);
+
+    Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Extracting document',
+        'document_type' => DocumentType::GroupReport,
+        'metadata' => [
+            'extraction' => [
+                'status' => 'processing',
+            ],
+            'document_analysis' => [
+                'status' => 'processing',
+                'progress_stage' => 'extracting_text',
+                'title' => 'Extracting document',
+            ],
+        ],
+    ]);
+
+    Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Filling document',
+        'document_type' => DocumentType::GroupReport,
+        'metadata' => [
+            'extraction' => [
+                'status' => 'processing',
+            ],
+            'document_analysis' => [
+                'status' => 'processing',
+                'progress_stage' => 'filling_record',
+                'title' => 'Filling document',
+            ],
+        ],
+    ]);
+
+    Livewire::test(DocumentsPage::class, ['review' => $review])
+        ->assertSee('Queued')
+        ->assertSee('Extracting text')
+        ->assertSee('Filling record');
 });
 
 test('legislation source documents do not appear in the documents workspace', function () {

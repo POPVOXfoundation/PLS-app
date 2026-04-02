@@ -232,7 +232,7 @@
 
                 @if ($analysisWarnings !== [])
                     <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
-                        <flux:heading size="sm">{{ __('Needs review') }}</flux:heading>
+                        <flux:heading size="sm">{{ $this->analysisWarningsHeading() }}</flux:heading>
                         <div class="mt-2 space-y-1">
                             @foreach ($analysisWarnings as $warning)
                                 <div>{{ $warning }}</div>
