@@ -396,6 +396,7 @@ class AssistantSidebar extends Component
      *     context: string,
      *     playbook: array{
      *         allowed_capabilities: list<string>,
+     *         disallowed_capabilities: list<string>,
      *         guardrails: list<string>,
      *         intro: string,
      *         objectives: list<string>,

@@ -35,27 +35,27 @@ it('shows the configured role and prompts for the current tab', function (string
         'workflow',
         'Process Guide',
         [
-            'Summarize the current step.',
-            'Explain what comes next.',
-            'Turn the current workflow state into a short update.',
+            'Where am I in this inquiry?',
+            'What should I do next?',
+            'Am I ready to move to the next step?',
         ],
     ],
     'documents' => [
         'documents',
         'Document Intelligence Assistant',
         [
-            'Summarize the uploaded documents.',
-            'What documents look missing so far?',
-            'Draft a short document status update.',
+            'What documents do I have so far?',
+            "What's missing for this type of inquiry?",
+            "Does this legislation require secondary legislation I haven't found?",
         ],
     ],
     'reports' => [
         'reports',
-        'Report Drafting Assistant',
+        'Report Drafting and Structuring Assistant',
         [
-            'Summarize the current report status.',
-            'Explain the current government response status.',
-            'Suggest a report structure from the current record.',
+            'Suggest a report structure for this inquiry',
+            'Draft the introduction section',
+            'Help me write the executive summary',
         ],
     ],
 ]);
@@ -68,12 +68,12 @@ test('assistant intro changes by tab', function () {
     Livewire::test(AssistantSidebar::class, [
         'review' => $review,
         'workspaceKey' => 'workflow',
-    ])->assertSee('Ask about the current workflow stage');
+    ])->assertSee("You're in Workflow. I can help you understand where you are in this inquiry");
 
     Livewire::test(AssistantSidebar::class, [
         'review' => $review,
         'workspaceKey' => 'documents',
-    ])->assertSee('Ask about uploaded materials');
+    ])->assertSee("You're in Documents. I can help you review what you've uploaded");
 });
 
 test('assistant composer submits on enter while preserving shift enter for new lines', function () {
@@ -356,9 +356,9 @@ test('analysis tab instructions keep outputs provisional', function () {
 
     ReviewAssistantAgent::assertPrompted(function (AgentPrompt $prompt) {
         expect((string) $prompt->agent->instructions())
-            ->toContain('Tab role: Analytical Support Assistant')
+            ->toContain('Tab role: Evidence Analysis Assistant')
             ->toContain('Response style:')
-            ->toContain('Keep findings and recommendation options explicitly provisional.');
+            ->toContain('Frame everything as provisional: "potential finding," "draft recommendation," "the evidence suggests."');
 
         return $prompt->contains('Group the current analysis into themes.');
     });

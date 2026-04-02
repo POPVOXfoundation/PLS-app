@@ -14,6 +14,8 @@ it('creates all prompt two pls tables', function () {
         'legislation',
         'pls_review_legislation',
         'legislation_objectives',
+        'assistant_tab_playbooks',
+        'assistant_tab_playbook_versions',
         'assistant_source_documents',
         'documents',
         'document_chunks',
@@ -84,6 +86,26 @@ it('creates the critical prompt two workflow and foreign key columns', function 
             'document_type',
             'storage_path',
             'metadata',
+        ]))->toBeTrue()
+        ->and(Schema::hasColumns('assistant_tab_playbooks', [
+            'tab_key',
+            'label',
+            'active_version_id',
+        ]))->toBeTrue()
+        ->and(Schema::hasColumns('assistant_tab_playbook_versions', [
+            'assistant_tab_playbook_id',
+            'version_number',
+            'role',
+            'intro',
+            'objectives',
+            'allowed_capabilities',
+            'disallowed_capabilities',
+            'suggested_prompts',
+            'rules',
+            'guardrails',
+            'response_style',
+            'change_note',
+            'created_by',
         ]))->toBeTrue()
         ->and(Schema::hasColumns('assistant_source_documents', [
             'scope',

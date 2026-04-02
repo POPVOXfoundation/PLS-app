@@ -20,6 +20,11 @@
             <flux:button variant="ghost" :href="route('pls.reviews.index')" wire:navigate>
                 {{ __('All reviews') }}
             </flux:button>
+            @can('manageAssistantPlaybooks')
+                <flux:button variant="ghost" :href="route('pls.assistant.playbooks')" wire:navigate>
+                    {{ __('Assistant playbooks') }}
+                </flux:button>
+            @endcan
         </div>
     </div>
 
