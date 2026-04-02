@@ -40,7 +40,6 @@ class ImportDppInstitutionCatalog
 
         /** @var Collection<int, object> $sourceGovBodies */
         $sourceGovBodies = $source->table('gov_bodies')
-            ->where('is_active', true)
             ->orderBy('country_id')
             ->orderByRaw('coalesce(parent_id, id)')
             ->orderBy('chamber_order')
