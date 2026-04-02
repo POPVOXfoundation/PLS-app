@@ -39,7 +39,7 @@
                         type="button"
                         wire:click="selectTab(@js($tab['key']))"
                         @class([
-                            'flex w-full items-start justify-between rounded-xl border px-3 py-3 text-left transition',
+                            'flex w-full items-start justify-between rounded-xl border px-3 py-3 text-left',
                             'border-zinc-900 bg-zinc-50 dark:border-zinc-200 dark:bg-zinc-800/70' => $selectedTabKey === $tab['key'],
                             'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:border-zinc-700 dark:hover:bg-zinc-900/70' => $selectedTabKey !== $tab['key'],
                         ])
