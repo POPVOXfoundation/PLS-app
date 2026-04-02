@@ -72,6 +72,9 @@ class AnalyzeLegislationSource
      *     legislation_type: string,
      *     date_enacted: string,
      *     summary: string,
+     *     key_themes: list<string>,
+     *     notable_excerpts: list<string>,
+     *     important_dates: list<string>,
      *     relationship_type: string,
      *     signals: list<string>,
      *     hints: list<string>,
@@ -114,6 +117,9 @@ class AnalyzeLegislationSource
             'legislation_type' => $aiExtraction['legislation_type'],
             'date_enacted' => $aiExtraction['date_enacted'] ?? '',
             'summary' => $aiExtraction['summary'] ?? '',
+            'key_themes' => $aiExtraction['key_themes'],
+            'notable_excerpts' => $aiExtraction['notable_excerpts'],
+            'important_dates' => $aiExtraction['important_dates'],
             'relationship_type' => $aiExtraction['relationship_type'],
             'signals' => [],
             'hints' => [],
@@ -245,6 +251,9 @@ class AnalyzeLegislationSource
      *     legislation_type: string,
      *     date_enacted: string|null,
      *     summary: string|null,
+     *     key_themes: list<string>,
+     *     notable_excerpts: list<string>,
+     *     important_dates: list<string>,
      *     relationship_type: string,
      *     warnings: list<string>
      * }|null
@@ -268,6 +277,9 @@ class AnalyzeLegislationSource
         $legislationType = $this->normalizeLegislationType($response['legislation_type'] ?? null);
         $dateEnacted = $this->normalizeDate($response['date_enacted'] ?? null);
         $summary = $this->normalizeSummary($response['summary'] ?? null);
+        $keyThemes = $this->normalizeStringList($response['key_themes'] ?? [], 5, 120);
+        $notableExcerpts = $this->normalizeStringList($response['notable_excerpts'] ?? [], 3, 320);
+        $importantDates = $this->normalizeImportantDates($response['important_dates'] ?? []);
         $relationshipType = $this->normalizeRelationshipType($response['relationship_type'] ?? null);
         $warnings = $this->normalizeWarnings($response['warnings'] ?? []);
 
@@ -281,6 +293,9 @@ class AnalyzeLegislationSource
             'legislation_type' => $legislationType->value,
             'date_enacted' => $dateEnacted,
             'summary' => $summary,
+            'key_themes' => $keyThemes,
+            'notable_excerpts' => $notableExcerpts,
+            'important_dates' => $importantDates,
             'relationship_type' => $relationshipType->value,
             'warnings' => $warnings,
         ];
@@ -347,6 +362,9 @@ class AnalyzeLegislationSource
      *     legislation_type: string,
      *     date_enacted: string,
      *     summary: string,
+     *     key_themes: list<string>,
+     *     notable_excerpts: list<string>,
+     *     important_dates: list<string>,
      *     relationship_type: string,
      *     signals: list<string>,
      *     hints: list<string>,
@@ -380,6 +398,9 @@ class AnalyzeLegislationSource
             'legislation_type' => '',
             'date_enacted' => '',
             'summary' => '',
+            'key_themes' => [],
+            'notable_excerpts' => [],
+            'important_dates' => [],
             'relationship_type' => '',
             'signals' => [],
             'hints' => [],
@@ -472,6 +493,59 @@ class AnalyzeLegislationSource
             ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function normalizeStringList(mixed $value, int $limit, int $maxLength): array
+    {
+        return Collection::wrap($value)
+            ->filter(fn (mixed $item): bool => is_string($item) && trim($item) !== '')
+            ->map(fn (mixed $item): string => Str::of((string) $item)
+                ->replaceMatches('/\s+/', ' ')
+                ->trim()
+                ->limit($maxLength, '')
+                ->toString())
+            ->filter()
+            ->unique()
+            ->take($limit)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function normalizeImportantDates(mixed $value): array
+    {
+        return Collection::wrap($value)
+            ->filter(fn (mixed $item): bool => is_string($item) && trim($item) !== '')
+            ->map(fn (mixed $item): ?string => $this->normalizeVisibleDate((string) $item))
+            ->filter()
+            ->unique()
+            ->take(5)
+            ->values()
+            ->all();
+    }
+
+    private function normalizeVisibleDate(string $value): ?string
+    {
+        $value = Str::of($value)
+            ->replaceMatches('/\s+/', ' ')
+            ->trim()
+            ->limit(120, '')
+            ->toString();
+
+        if ($value === '') {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse($value)->toDateString();
+        } catch (Throwable) {
+            return $value;
+        }
     }
 
     /**

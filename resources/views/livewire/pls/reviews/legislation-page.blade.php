@@ -98,7 +98,18 @@
                     @foreach ($recordRows as $row)
                         <flux:table.row :key="$row['id']">
                             <flux:table.cell variant="strong">
-                                {{ $row['title'] }}
+                                @if (in_array($row['action'], ['review', 'edit'], true) && $row['source_document_id'] !== null)
+                                    <button
+                                        type="button"
+                                        wire:click="startReviewDocument({{ $row['source_document_id'] }})"
+                                        class="text-left text-base font-normal text-zinc-900 transition hover:text-violet-700 dark:text-white dark:hover:text-violet-300"
+                                    >
+                                        {{ $row['title'] }}
+                                    </button>
+                                @else
+                                    {{ $row['title'] }}
+                                @endif
+
                                 @if ($row['subtitle'])
                                     <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ $row['subtitle'] }}</flux:text>
                                 @endif
@@ -129,6 +140,14 @@
                                             wire:click="startReviewDocument({{ $row['source_document_id'] }})"
                                         >
                                             {{ __('Review') }}
+                                        </flux:button>
+                                    @elseif ($row['action'] === 'edit' && $row['source_document_id'] !== null)
+                                        <flux:button
+                                            size="sm"
+                                            variant="subtle"
+                                            wire:click="startReviewDocument({{ $row['source_document_id'] }})"
+                                        >
+                                            {{ __('Edit') }}
                                         </flux:button>
                                     @elseif ($row['action'] === 'retry' && $row['source_document_id'] !== null)
                                         <flux:button
@@ -204,7 +223,7 @@
             <form wire:submit="saveAnalyzedLegislation" class="space-y-6">
                 <div class="flex items-start justify-between gap-4">
                     <div class="space-y-2">
-                        <flux:heading size="lg">{{ __('Review record') }}</flux:heading>
+                        <flux:heading size="lg">{{ $this->analysisModalHeading() }}</flux:heading>
                         <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
                             {{ __('Source: :source', ['source' => $analysisSourceLabel]) }}
                         </flux:text>
@@ -222,7 +241,7 @@
                     </div>
                 @endif
 
-                @if ($analysisDuplicateCandidates !== [])
+                @if ($analysisDuplicateCandidates !== [] && $analysisStatus !== 'saved')
                     <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
                         <div class="space-y-3">
                             <div>
@@ -273,8 +292,53 @@
 
                 <flux:textarea wire:model="analysisSummary" :invalid="$errors->has('analysisSummary')" :label="__('Summary')" rows="4" />
 
+                <div class="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
+                    <div class="space-y-4">
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+                            <flux:heading size="sm">{{ __('Themes') }}</flux:heading>
+                            @if ($analysisKeyThemes === [])
+                                <flux:text class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{{ __('No themes extracted.') }}</flux:text>
+                            @else
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    @foreach ($analysisKeyThemes as $theme)
+                                        <flux:badge size="sm">{{ $theme }}</flux:badge>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+                            <flux:heading size="sm">{{ __('Dates mentioned') }}</flux:heading>
+                            @if ($analysisImportantDates === [])
+                                <flux:text class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{{ __('No dates extracted.') }}</flux:text>
+                            @else
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    @foreach ($analysisImportantDates as $date)
+                                        <flux:badge size="sm">{{ $date }}</flux:badge>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+
+                    <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+                        <flux:heading size="sm">{{ __('Notable excerpts') }}</flux:heading>
+                        @if ($analysisNotableExcerpts === [])
+                            <flux:text class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{{ __('No excerpts extracted.') }}</flux:text>
+                        @else
+                            <div class="mt-3 space-y-3">
+                                @foreach ($analysisNotableExcerpts as $excerpt)
+                                    <div class="rounded-xl bg-white/80 p-3 dark:bg-zinc-950/50">
+                                        <flux:text class="text-sm leading-6 text-zinc-600 dark:text-zinc-300">“{{ $excerpt }}”</flux:text>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </div>
+
                 <div class="flex justify-end">
-                    <flux:button variant="primary" type="submit">{{ __('Save record') }}</flux:button>
+                    <flux:button variant="primary" type="submit">{{ $this->analysisSubmitLabel() }}</flux:button>
                 </div>
             </form>
         </flux:modal>

@@ -34,6 +34,9 @@ Rules:
 - The short title must be shorter than the title. If the visible short title is the same as the title, return a shorter cleaned version or null.
 - Do not repeat the long title verbatim into the summary.
 - Write the summary in plain language as one or two short sentences about what the instrument does.
+- Key themes should be short phrases, not full paragraphs.
+- Notable excerpts should be short verbatim passages copied from the text when they are genuinely informative.
+- Important dates should come from visible text only. Normalize exact dates when clear.
 - Exclude formulaic legislative text such as "BE IT ENACTED", arrangement-of-clauses material, citation clauses, and procedural boilerplate from the summary.
 - If the source is a bill or draft bill, treat it as primary legislation for relationship purposes.
 - If the text clearly describes regulations, rules, an order, or an ordinance as the source instrument itself, classify it as delegated.
@@ -56,6 +59,9 @@ TEXT;
             ))->required(),
             'date_enacted' => $schema->string()->nullable()->required(),
             'summary' => $schema->string()->nullable()->required(),
+            'key_themes' => $schema->array()->items($schema->string())->required(),
+            'notable_excerpts' => $schema->array()->items($schema->string())->required(),
+            'important_dates' => $schema->array()->items($schema->string())->required(),
             'relationship_type' => $schema->string()->enum(array_map(
                 static fn (ReviewLegislationRelationshipType $type): string => $type->value,
                 ReviewLegislationRelationshipType::cases(),

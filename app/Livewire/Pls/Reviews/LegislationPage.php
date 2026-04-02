@@ -61,6 +61,21 @@ class LegislationPage extends Workspace
     public array $analysisWarnings = [];
 
     /**
+     * @var list<string>
+     */
+    public array $analysisKeyThemes = [];
+
+    /**
+     * @var list<string>
+     */
+    public array $analysisNotableExcerpts = [];
+
+    /**
+     * @var list<string>
+     */
+    public array $analysisImportantDates = [];
+
+    /**
      * @var list<array{id: int, title: string, short_title: string, legislation_type: string, date_enacted: string}>
      */
     public array $analysisDuplicateCandidates = [];
@@ -221,16 +236,17 @@ class LegislationPage extends Workspace
             ->findOrFail($documentId);
 
         $storedAnalysis = $state->storedAnalysis($document);
+        $linkedLegislationId = $this->linkedLegislationIdForDocument($document);
 
-        if (($storedAnalysis['status'] ?? null) !== 'needs_review') {
+        if (! in_array(($storedAnalysis['status'] ?? null), ['needs_review', 'saved'], true)) {
             return;
         }
 
-        if ($state->storedAnalysisNeedsRefresh($document)) {
+        if (($storedAnalysis['status'] ?? null) === 'needs_review' && $state->storedAnalysisNeedsRefresh($document)) {
             return;
         }
 
-        $this->fillAnalysisStateFromStored($document, $storedAnalysis);
+        $this->fillAnalysisStateFromStored($document, $storedAnalysis, $linkedLegislationId);
         $this->dispatch('modal-show', name: 'review-record');
     }
 
@@ -260,6 +276,20 @@ class LegislationPage extends Workspace
     public function hasAnalysisState(): bool
     {
         return $this->analysisSourceDocumentId !== '';
+    }
+
+    public function analysisModalHeading(): string
+    {
+        return $this->analysisStatus === 'saved'
+            ? __('Edit record')
+            : __('Review record');
+    }
+
+    public function analysisSubmitLabel(): string
+    {
+        return $this->analysisStatus === 'saved'
+            ? __('Save changes')
+            : __('Save record');
     }
 
     public function refreshPendingAnalyses(): void
@@ -303,7 +333,7 @@ class LegislationPage extends Workspace
     /**
      * @param  array<string, mixed>  $storedAnalysis
      */
-    private function fillAnalysisStateFromStored(Document $document, array $storedAnalysis): void
+    private function fillAnalysisStateFromStored(Document $document, array $storedAnalysis, ?int $linkedLegislationId = null): void
     {
         $this->analysisSourceDocumentId = (string) ($storedAnalysis['source_document_id'] ?? $document->id);
         $this->analysisSourceLabel = (string) ($storedAnalysis['source_label'] ?? $document->title);
@@ -311,6 +341,21 @@ class LegislationPage extends Workspace
         $this->analysisWarnings = collect($storedAnalysis['warnings'] ?? [])
             ->filter(fn (mixed $warning): bool => is_string($warning) && trim($warning) !== '')
             ->map(fn (mixed $warning): string => trim((string) $warning))
+            ->values()
+            ->all();
+        $this->analysisKeyThemes = collect($storedAnalysis['key_themes'] ?? [])
+            ->filter(fn (mixed $theme): bool => is_string($theme) && trim($theme) !== '')
+            ->map(fn (mixed $theme): string => trim((string) $theme))
+            ->values()
+            ->all();
+        $this->analysisNotableExcerpts = collect($storedAnalysis['notable_excerpts'] ?? [])
+            ->filter(fn (mixed $excerpt): bool => is_string($excerpt) && trim($excerpt) !== '')
+            ->map(fn (mixed $excerpt): string => trim((string) $excerpt))
+            ->values()
+            ->all();
+        $this->analysisImportantDates = collect($storedAnalysis['important_dates'] ?? [])
+            ->filter(fn (mixed $date): bool => is_string($date) && trim($date) !== '')
+            ->map(fn (mixed $date): string => trim((string) $date))
             ->values()
             ->all();
         $this->analysisTitle = (string) ($storedAnalysis['title'] ?? '');
@@ -323,10 +368,16 @@ class LegislationPage extends Workspace
             ->filter(fn (mixed $candidate): bool => is_array($candidate))
             ->values()
             ->all();
-        $this->analysisExistingLegislationId = $this->analysisDuplicateCandidates === []
-            ? ''
-            : (string) $this->analysisDuplicateCandidates[0]['id'];
-        $this->analysisSaveMode = $this->analysisDuplicateCandidates === [] ? 'create' : 'update';
+
+        if ($this->analysisStatus === 'saved' && $linkedLegislationId !== null) {
+            $this->analysisExistingLegislationId = (string) $linkedLegislationId;
+            $this->analysisSaveMode = 'update';
+        } else {
+            $this->analysisExistingLegislationId = $this->analysisDuplicateCandidates === []
+                ? ''
+                : (string) $this->analysisDuplicateCandidates[0]['id'];
+            $this->analysisSaveMode = $this->analysisDuplicateCandidates === [] ? 'create' : 'update';
+        }
 
         $this->resetValidation([
             'analysisSourceDocumentId',
@@ -339,6 +390,21 @@ class LegislationPage extends Workspace
             'analysisSummary',
             'analysisRelationshipType',
         ]);
+    }
+
+    private function linkedLegislationIdForDocument(Document $document): ?int
+    {
+        $linkedLegislationId = data_get($document->metadata, 'legislation_analysis.legislation_id');
+
+        if (is_numeric($linkedLegislationId) && (int) $linkedLegislationId > 0) {
+            return (int) $linkedLegislationId;
+        }
+
+        $review = $document->relationLoaded('review') ? $document->review : $this->review;
+
+        return $review?->legislation()
+            ->where('source_document_id', $document->id)
+            ->value('legislation.id');
     }
 
     private function loadReview(): PlsReview
@@ -368,6 +434,9 @@ class LegislationPage extends Workspace
         $this->analysisRelationshipType = ReviewLegislationRelationshipType::Primary->value;
         $this->analysisSaveMode = 'create';
         $this->analysisWarnings = [];
+        $this->analysisKeyThemes = [];
+        $this->analysisNotableExcerpts = [];
+        $this->analysisImportantDates = [];
         $this->analysisDuplicateCandidates = [];
 
         $this->resetValidation([
@@ -481,6 +550,7 @@ class LegislationPage extends Workspace
                 'status_detail' => $this->statusDetail($status, $progressStage),
                 'action' => match ($status) {
                     'needs_review' => 'review',
+                    'saved' => 'edit',
                     'failed' => 'retry',
                     default => null,
                 },

@@ -78,6 +78,9 @@ test('uploaded legislation sources are queued and can be saved as new legislatio
         'legislation_type' => LegislationType::Act->value,
         'date_enacted' => '2010-05-04',
         'summary' => 'Establishes a public right of access to government information and supports implementation through regulations.',
+        'key_themes' => ['Public access rights', 'Response timelines'],
+        'notable_excerpts' => ['This Act establishes a public right of access to government information.'],
+        'important_dates' => ['2010-05-04'],
         'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
         'warnings' => [],
     ]]);
@@ -108,6 +111,10 @@ test('uploaded legislation sources are queued and can be saved as new legislatio
         ->assertSet('analysisDateEnacted', '2010-05-04')
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
         ->assertSee('Review record')
+        ->assertSee('Public access rights')
+        ->assertSee('Response timelines')
+        ->assertSee('This Act establishes a public right of access to government information.')
+        ->assertSee('2010-05-04')
         ->call('saveAnalyzedLegislation')
         ->assertHasNoErrors()
         ->assertSee('Access to Information Act');
@@ -237,6 +244,9 @@ test('deleting a saved source row removes the saved legislation from the current
         'legislation_type' => LegislationType::Act->value,
         'date_enacted' => '2026-04-02',
         'summary' => 'Provides exemptions from taxes and duties for the facility and authorizes related implementation rules.',
+        'key_themes' => ['Tax and duty exemptions', 'Implementation rules'],
+        'notable_excerpts' => ['This Act provides exemptions from taxes and duties for the facility.'],
+        'important_dates' => ['2026-04-02'],
         'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
         'warnings' => [],
     ]]);
@@ -277,6 +287,77 @@ test('deleting a saved source row removes the saved legislation from the current
     ]);
 
     Storage::disk('s3')->assertMissing($document->storage_path);
+});
+
+test('saved source rows can be reopened for editing after the initial review', function () {
+    Storage::fake('s3');
+    Queue::fake();
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
+
+    $review = plsReview([
+        'title' => 'Review of reopening saved source rows',
+    ]);
+
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: <<<'TEXT'
+                Southern Deep Port Development Facility Act, 2024
+                Short title: Deep Port Act
+
+                This Act provides exemptions from taxes and duties for the facility and authorizes related implementation rules.
+
+                Enacted on April 2, 2026.
+                TEXT,
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    LegislationSourceExtractorAgent::fake([[
+        'title' => 'Southern Deep Port Development Facility Act, 2024',
+        'short_title' => 'Deep Port Act',
+        'legislation_type' => LegislationType::Act->value,
+        'date_enacted' => '2026-04-02',
+        'summary' => 'Provides exemptions from taxes and duties for the facility and authorizes related implementation rules.',
+        'key_themes' => ['Tax and duty exemptions', 'Implementation rules'],
+        'notable_excerpts' => ['This Act provides exemptions from taxes and duties for the facility.'],
+        'important_dates' => ['2026-04-02'],
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+        'warnings' => [],
+    ]]);
+
+    $component = Livewire::test(LegislationPage::class, ['review' => $review])
+        ->set('sourceUpload', UploadedFile::fake()->create('deep-port-act.pdf', 128, 'application/pdf'));
+
+    $document = $review->fresh()->documents()->sole();
+
+    runLegislationSourcePipeline($document->id);
+
+    $component
+        ->call('refreshPendingAnalyses')
+        ->call('startReviewDocument', $document->id)
+        ->call('saveAnalyzedLegislation')
+        ->assertSee('Saved')
+        ->assertSee('Edit');
+
+    $component
+        ->call('startReviewDocument', $document->id)
+        ->assertSet('analysisStatus', 'saved')
+        ->assertSet('analysisSaveMode', 'update')
+        ->assertSet('analysisTitle', 'Southern Deep Port Development Facility Act, 2024')
+        ->assertSet('analysisExistingLegislationId', fn (string $value): bool => $value !== '')
+        ->assertSee('Edit record')
+        ->assertSee('Tax and duty exemptions')
+        ->assertSee('This Act provides exemptions from taxes and duties for the facility.')
+        ->assertSee('Save changes');
 });
 
 test('uploaded legislation docx sources use the shared extractor and can be saved', function () {
