@@ -587,7 +587,7 @@ test('reviewer can access create page and create reviews', function () {
 
     Livewire::actingAs($reviewer)
         ->test(CreateReviewPage::class)
-        ->set('jurisdiction_id', (string) $hierarchy['jurisdiction']->id)
+        ->set('scope', 'national')
         ->set('legislature_id', (string) $hierarchy['legislature']->id)
         ->set('review_group_id', (string) $hierarchy['reviewGroup']->id)
         ->set('title', 'Reviewer-created PLS review')

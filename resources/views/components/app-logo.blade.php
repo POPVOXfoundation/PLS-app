@@ -3,19 +3,13 @@
 ])
 
 @if($sidebar)
-    <flux:sidebar.brand
-        name="{{ config('app.name') }}"
-        class="in-data-flux-sidebar-collapsed-desktop:in-data-flux-sidebar-active:opacity-100"
-        {{ $attributes }}
-    >
-        <x-slot name="logo" class="flex aspect-square size-8 items-center justify-center rounded-md bg-accent-content text-accent-foreground">
-            <x-app-logo-icon class="size-5 fill-current text-white dark:text-black" />
-        </x-slot>
-    </flux:sidebar.brand>
+    <a {{ $attributes->merge(['class' => 'flex items-center']) }}>
+        <img src="{{ asset('images/pls.png') }}" alt="{{ config('app.name') }}" class="h-9 w-auto dark:hidden" />
+        <img src="{{ asset('images/pls_dark.png') }}" alt="{{ config('app.name') }}" class="hidden h-9 w-auto dark:block" />
+    </a>
 @else
-    <flux:brand name="{{ config('app.name') }}" {{ $attributes }}>
-        <x-slot name="logo" class="flex aspect-square size-8 items-center justify-center rounded-md bg-accent-content text-accent-foreground">
-            <x-app-logo-icon class="size-5 fill-current text-white dark:text-black" />
-        </x-slot>
-    </flux:brand>
+    <a {{ $attributes->merge(['class' => 'flex items-center']) }}>
+        <img src="{{ asset('images/pls.png') }}" alt="{{ config('app.name') }}" class="mt-1 h-11 w-auto dark:hidden" />
+        <img src="{{ asset('images/pls_dark.png') }}" alt="{{ config('app.name') }}" class="mt-1 hidden h-11 w-auto dark:block" />
+    </a>
 @endif

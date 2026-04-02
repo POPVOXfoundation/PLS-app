@@ -23,7 +23,7 @@
     <body class="min-h-screen bg-zinc-50 text-zinc-950 antialiased dark:bg-zinc-950">
         <div class="min-h-screen">
             <flux:header class="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/92 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/92">
-                <div class="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+                <div class="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
                     <div class="flex min-w-0 items-center gap-5">
                         <x-app-logo href="{{ route('dashboard') }}" wire:navigate class="shrink-0" />
 
