@@ -5,10 +5,12 @@ use App\Models\User;
 test('admin sees the assistant playbooks link in the top user menu', function () {
     $admin = User::factory()->admin()->create();
 
-    $this->actingAs($admin)
+    $response = $this->actingAs($admin)
         ->get(route('dashboard'))
         ->assertOk()
         ->assertSee('Assistant playbooks');
+
+    expect(substr_count($response->getContent(), 'Assistant playbooks'))->toBe(1);
 });
 
 test('non-admin users do not see the assistant playbooks link in the top user menu', function () {
