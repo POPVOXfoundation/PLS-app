@@ -13,6 +13,7 @@ use App\Domain\Reporting\Enums\GovernmentResponseStatus;
 use App\Domain\Reporting\Enums\ReportStatus;
 use App\Domain\Reporting\Enums\ReportType;
 use App\Domain\Reporting\Report;
+use App\Jobs\ProcessReviewLegislationSource;
 use App\Livewire\Pls\Reviews\AnalysisPage;
 use App\Livewire\Pls\Reviews\DocumentsPage;
 use App\Livewire\Pls\Reviews\LegislationPage;
@@ -25,6 +26,7 @@ use App\Support\PlsAssistant\AssistantSourceTextExtractorFactory;
 use App\Support\Toast;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
@@ -32,8 +34,15 @@ beforeEach(function () {
     $this->actingAs(User::factory()->create());
 });
 
-test('uploaded legislation sources are analyzed immediately and can be saved as new legislation', function () {
+function runLegislationSourcePipeline(int $documentId): void
+{
+    app()->call([(new ProcessReviewLegislationSource($documentId)), 'handle']);
+    app()->call([(new ProcessReviewLegislationSource($documentId, 'enrich')), 'handle']);
+}
+
+test('uploaded legislation sources are queued and can be saved as new legislation after background processing', function () {
     Storage::fake('s3');
+    Queue::fake();
     config()->set('pls_assistant.assistant_sources.extractor', 'textract');
     config()->set('pls_assistant.assistant_sources.source_disk', 's3');
 
@@ -75,13 +84,23 @@ test('uploaded legislation sources are analyzed immediately and can be saved as 
 
     $component = Livewire::test(LegislationPage::class, ['review' => $review])
         ->set('sourceUpload', UploadedFile::fake()->create('access-to-information-act.pdf', 256, 'application/pdf'))
-        ->assertSee('Needs review')
-        ->assertSee('Access to Information Act')
+        ->assertSee('Processing')
         ->assertDontSee('Review record');
 
     $document = $review->fresh()->documents()->sole();
 
+    Queue::assertPushed(ProcessReviewLegislationSource::class, fn (ProcessReviewLegislationSource $job): bool => $job->documentId === $document->id && $job->step === 'extract');
+
     $component
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Processing');
+
+    runLegislationSourcePipeline($document->id);
+
+    $component
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Needs review')
+        ->assertSee('Access to Information Act')
         ->call('startReviewDocument', $document->id)
         ->assertSet('analysisTitle', 'Access to Information Act')
         ->assertSet('analysisShortTitle', 'ATI Act')
@@ -122,6 +141,7 @@ test('oversized legislation uploads are rejected', function () {
 
 test('legislation source rows can be deleted from records', function () {
     Storage::fake('s3');
+    Queue::fake();
     config()->set('pls_assistant.assistant_sources.extractor', 'textract');
     config()->set('pls_assistant.assistant_sources.source_disk', 's3');
 
@@ -156,9 +176,15 @@ test('legislation source rows can be deleted from records', function () {
 
     $component = Livewire::test(LegislationPage::class, ['review' => $review])
         ->set('sourceUpload', UploadedFile::fake()->create('working-note.pdf', 128, 'application/pdf'))
-        ->assertSee('Implementation Note');
+        ->assertSee('Processing');
 
     $document = $review->fresh()->documents()->sole();
+
+    runLegislationSourcePipeline($document->id);
+
+    $component
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Implementation Note');
 
     Storage::disk('s3')->assertExists($document->storage_path);
 
@@ -173,8 +199,89 @@ test('legislation source rows can be deleted from records', function () {
     Storage::disk('s3')->assertMissing($document->storage_path);
 });
 
+test('deleting a saved source row removes the saved legislation from the current review records', function () {
+    Storage::fake('s3');
+    Queue::fake();
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
+
+    $review = plsReview([
+        'title' => 'Review of deleting saved source rows',
+    ]);
+
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: <<<'TEXT'
+                Southern Deep Port Development Facility Act, 2024
+                Short title: Deep Port Act
+
+                This Act provides exemptions from taxes and duties for the facility and authorizes related implementation rules.
+
+                Enacted on April 2, 2026.
+                TEXT,
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    LegislationSourceExtractorAgent::fake([[
+        'title' => 'Southern Deep Port Development Facility Act, 2024',
+        'short_title' => 'Deep Port Act',
+        'legislation_type' => LegislationType::Act->value,
+        'date_enacted' => '2026-04-02',
+        'summary' => 'Provides exemptions from taxes and duties for the facility and authorizes related implementation rules.',
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+        'warnings' => [],
+    ]]);
+
+    $component = Livewire::test(LegislationPage::class, ['review' => $review])
+        ->set('sourceUpload', UploadedFile::fake()->create('deep-port-act.pdf', 128, 'application/pdf'));
+
+    $document = $review->fresh()->documents()->sole();
+
+    runLegislationSourcePipeline($document->id);
+
+    $component
+        ->call('refreshPendingAnalyses')
+        ->call('startReviewDocument', $document->id)
+        ->call('saveAnalyzedLegislation')
+        ->assertSee('Saved')
+        ->assertSee('Southern Deep Port Development Facility Act, 2024');
+
+    $legislation = Legislation::query()
+        ->where('source_document_id', $document->id)
+        ->firstOrFail();
+
+    $component
+        ->call('confirmDeletion', $document->id)
+        ->assertDontSee('Southern Deep Port Development Facility Act, 2024');
+
+    $this->assertDatabaseMissing('documents', [
+        'id' => $document->id,
+    ]);
+
+    $this->assertDatabaseMissing('pls_review_legislation', [
+        'pls_review_id' => $review->id,
+        'legislation_id' => $legislation->id,
+    ]);
+
+    $this->assertDatabaseMissing('legislation', [
+        'id' => $legislation->id,
+    ]);
+
+    Storage::disk('s3')->assertMissing($document->storage_path);
+});
+
 test('uploaded legislation docx sources use the shared extractor and can be saved', function () {
     Storage::fake('s3');
+    Queue::fake();
 
     config()->set('pls_assistant.assistant_sources.extractor', 'textract');
 
@@ -223,12 +330,16 @@ test('uploaded legislation docx sources use the shared extractor and can be save
             256,
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         ))
-        ->assertSee('Needs review')
-        ->assertSee('Access to Information Act');
+        ->assertSee('Processing');
 
     $document = $review->fresh()->documents()->sole();
 
+    runLegislationSourcePipeline($document->id);
+
     $component
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Needs review')
+        ->assertSee('Access to Information Act')
         ->call('startReviewDocument', $document->id)
         ->assertSet('analysisTitle', 'Access to Information Act')
         ->assertSet('analysisShortTitle', 'ATI Act')
@@ -244,6 +355,7 @@ test('uploaded legislation docx sources use the shared extractor and can be save
 
 test('bill-style source text is kept as a primary record and avoids structural summary garbage', function () {
     Storage::fake('s3');
+    Queue::fake();
     config()->set('pls_assistant.assistant_sources.extractor', 'textract');
     config()->set('pls_assistant.assistant_sources.source_disk', 's3');
 
@@ -286,12 +398,14 @@ test('bill-style source text is kept as a primary record and avoids structural s
 
     $component = Livewire::test(LegislationPage::class, ['review' => $review])
         ->set('sourceUpload', UploadedFile::fake()->create('southern-deep-port-development-facility-bill-2024.pdf', 256, 'application/pdf'))
-        ->assertSee('Needs review')
-        ->assertSee('Southern Deep Port Development Facility Bill, 2024');
+        ->assertSee('Processing');
 
     $document = $review->fresh()->documents()->sole();
 
+    runLegislationSourcePipeline($document->id);
+
     $component
+        ->call('refreshPendingAnalyses')
         ->call('startReviewDocument', $document->id)
         ->assertSet('analysisTitle', 'Southern Deep Port Development Facility Bill, 2024')
         ->assertSet('analysisShortTitle', 'Southern Deep Port Development Facility Bill')
@@ -302,8 +416,9 @@ test('bill-style source text is kept as a primary record and avoids structural s
         ->assertDontSee('Ready');
 });
 
-test('processing legislation extraction stays in a waiting state until text is ready', function () {
+test('processing legislation extraction requeues in the background until text is ready', function () {
     Storage::fake('s3');
+    Queue::fake();
     config()->set('pls_assistant.assistant_sources.extractor', 'textract');
     config()->set('pls_assistant.assistant_sources.source_disk', 's3');
 
@@ -342,7 +457,7 @@ test('processing legislation extraction stays in a waiting state until text is r
     };
 
     $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
-    $factory->shouldReceive('make')->twice()->andReturn($extractor);
+    $factory->shouldReceive('make')->times(3)->andReturn($extractor);
     app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
     LegislationSourceExtractorAgent::fake([[
         'title' => 'Access to Information Act',
@@ -357,17 +472,96 @@ test('processing legislation extraction stays in a waiting state until text is r
     Livewire::test(LegislationPage::class, ['review' => $review])
         ->set('sourceUpload', UploadedFile::fake()->create('access-to-information-act.pdf', 256, 'application/pdf'))
         ->assertSee('Processing')
-        ->assertDontSee('Review record')
-        ->call('refreshPendingAnalyses')
-        ->assertSee('Needs review')
-        ->assertSee('Access to Information Act');
+        ->assertSee('Queued')
+        ->assertDontSee('Review record');
 
-    expect(data_get($review->fresh()->documents()->sole()->metadata, 'extraction.textract_job_id'))->toBe('job-123')
-        ->and(data_get($review->fresh()->documents()->sole()->metadata, 'extraction.poll_attempts'))->toBe(1);
+    $document = $review->fresh()->documents()->sole();
+
+    runLegislationSourcePipeline($document->id);
+
+    Queue::assertPushed(ProcessReviewLegislationSource::class, fn (ProcessReviewLegislationSource $job): bool => $job->documentId === $document->id && $job->step === 'extract');
+
+    expect(data_get($document->fresh()->metadata, 'extraction.textract_job_id'))->toBe('job-123')
+        ->and(data_get($document->fresh()->metadata, 'extraction.poll_attempts'))->toBe(0);
+
+    app()->call([(new ProcessReviewLegislationSource($document->id)), 'handle']);
+
+    Livewire::test(LegislationPage::class, ['review' => $review])
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Filling record')
+        ->assertDontSee('Needs review');
+
+    Queue::assertPushed(ProcessReviewLegislationSource::class, fn (ProcessReviewLegislationSource $job): bool => $job->documentId === $document->id && $job->step === 'enrich');
+
+    app()->call([(new ProcessReviewLegislationSource($document->id, 'enrich')), 'handle']);
+
+    Livewire::test(LegislationPage::class, ['review' => $review])
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Needs review');
+});
+
+test('processing legislation rows show the active progress stage in the records table', function () {
+    $review = plsReview([
+        'title' => 'Review of visible legislation progress stages',
+    ]);
+
+    Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Queued source',
+        'document_type' => DocumentType::LegislationText,
+        'metadata' => [
+            'extraction' => [
+                'status' => 'queued',
+            ],
+            'legislation_analysis' => [
+                'status' => 'processing',
+                'progress_stage' => 'queued',
+                'title' => 'Queued source',
+            ],
+        ],
+    ]);
+
+    Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Extracting source',
+        'document_type' => DocumentType::LegislationText,
+        'metadata' => [
+            'extraction' => [
+                'status' => 'processing',
+            ],
+            'legislation_analysis' => [
+                'status' => 'processing',
+                'progress_stage' => 'extracting_text',
+                'title' => 'Extracting source',
+            ],
+        ],
+    ]);
+
+    Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Filling source',
+        'document_type' => DocumentType::LegislationText,
+        'metadata' => [
+            'extraction' => [
+                'status' => 'processing',
+            ],
+            'legislation_analysis' => [
+                'status' => 'processing',
+                'progress_stage' => 'filling_record',
+                'title' => 'Filling source',
+            ],
+        ],
+    ]);
+
+    Livewire::test(LegislationPage::class, ['review' => $review])
+        ->assertSee('Queued')
+        ->assertSee('Extracting text')
+        ->assertSee('Filling record');
 });
 
 test('large legislation source prompts are trimmed before the ai extraction step', function () {
     Storage::fake('s3');
+    Queue::fake();
     config()->set('pls_assistant.assistant_sources.extractor', 'textract');
     config()->set('pls_assistant.assistant_sources.source_disk', 's3');
 
@@ -415,12 +609,21 @@ test('large legislation source prompts are trimmed before the ai extraction step
 
     Livewire::test(LegislationPage::class, ['review' => $review])
         ->set('sourceUpload', UploadedFile::fake()->create('southern-deep-port-development-facility-bill-2024.pdf', 256, 'application/pdf'))
+        ->assertSee('Processing');
+
+    $document = $review->fresh()->documents()->sole();
+
+    runLegislationSourcePipeline($document->id);
+
+    Livewire::test(LegislationPage::class, ['review' => $review])
+        ->call('refreshPendingAnalyses')
         ->assertSee('Needs review')
         ->assertSee('Southern Deep Port Development Facility Bill, 2024');
 });
 
 test('ai extraction failures do not fall back to heuristic legislation parsing', function () {
     Storage::fake('s3');
+    Queue::fake();
     config()->set('pls_assistant.assistant_sources.extractor', 'textract');
     config()->set('pls_assistant.assistant_sources.source_disk', 's3');
 
@@ -455,17 +658,71 @@ test('ai extraction failures do not fall back to heuristic legislation parsing',
         throw new \RuntimeException('AI extraction failed');
     });
 
-    Livewire::test(LegislationPage::class, ['review' => $review])
+    $component = Livewire::test(LegislationPage::class, ['review' => $review])
         ->set('sourceUpload', UploadedFile::fake()->create('southern-deep-port-development-facility-bill-2024.pdf', 256, 'application/pdf'))
-        ->assertSee('Needs attention')
-        ->assertDontSee('Needs review')
+        ->assertSee('Processing')
         ->assertDontSee('Review record');
 
     $document = $review->fresh()->documents()->sole();
 
-    expect(data_get($document->metadata, 'legislation_analysis.status'))->toBe('failed')
-        ->and(data_get($document->metadata, 'legislation_analysis.summary'))->toBe('')
-        ->and(data_get($document->metadata, 'legislation_analysis.title'))->toBe('Southern Deep Port Development Facility Bill 2024');
+    runLegislationSourcePipeline($document->id);
+
+    $component
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Needs attention')
+        ->assertDontSee('Needs review')
+        ->assertDontSee('Review record');
+
+    expect(data_get($document->fresh()->metadata, 'legislation_analysis.status'))->toBe('failed')
+        ->and(data_get($document->fresh()->metadata, 'legislation_analysis.summary'))->toBe('')
+        ->and(data_get($document->fresh()->metadata, 'legislation_analysis.title'))->toBe('Southern Deep Port Development Facility Bill 2024');
+});
+
+test('failed legislation analysis can be retried on the same source row', function () {
+    Storage::fake('s3');
+    Queue::fake();
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
+
+    $review = plsReview([
+        'title' => 'Review of failed legislation retries',
+    ]);
+
+    $document = Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Implementation Regulations',
+        'document_type' => DocumentType::LegislationText,
+        'storage_path' => 'pls/reviews/'.$review->id.'/documents/implementation-regulations.pdf',
+        'mime_type' => 'application/pdf',
+        'metadata' => [
+            'disk' => 's3',
+            'original_name' => 'implementation-regulations.pdf',
+            'extraction' => [
+                'status' => 'failed',
+                'poll_attempts' => 4,
+                'error' => 'The AI record step failed.',
+            ],
+            'legislation_analysis' => [
+                'analysis_driver' => 'ai',
+                'status' => 'failed',
+                'source_document_id' => null,
+                'source_label' => 'Implementation Regulations',
+                'title' => 'Implementation Regulations',
+                'warnings' => ['The source text was extracted, but the AI record step failed. Retry the source to try again.'],
+            ],
+        ],
+    ]);
+
+    Livewire::test(LegislationPage::class, ['review' => $review])
+        ->assertSee('Needs attention')
+        ->call('retrySourceAnalysis', $document->id)
+        ->assertSee('Processing');
+
+    Queue::assertPushed(ProcessReviewLegislationSource::class, fn (ProcessReviewLegislationSource $job): bool => $job->documentId === $document->id);
+
+    expect(data_get($document->fresh()->metadata, 'extraction.status'))->toBe('queued')
+        ->and(data_get($document->fresh()->metadata, 'extraction.poll_attempts'))->toBe(0)
+        ->and(data_get($document->fresh()->metadata, 'legislation_analysis.status'))->toBe('processing');
 });
 
 test('review documents can be uploaded in batches analyzed and saved from the review workspace', function () {
@@ -698,6 +955,7 @@ test('workflow document metrics exclude legislation source uploads', function ()
 
 test('uploaded legislation can infer delegated relationship details', function () {
     Storage::fake('s3');
+    Queue::fake();
     config()->set('pls_assistant.assistant_sources.extractor', 'textract');
     config()->set('pls_assistant.assistant_sources.source_disk', 's3');
 
@@ -738,12 +996,15 @@ test('uploaded legislation can infer delegated relationship details', function (
 
     $component = Livewire::test(LegislationPage::class, ['review' => $review])
         ->set('sourceUpload', UploadedFile::fake()->create('implementation-regulations.pdf', 256, 'application/pdf'))
-        ->assertSee('Needs review')
-        ->assertSee('Implementation Regulations');
+        ->assertSee('Processing');
 
     $document = $review->fresh()->documents()->sole();
 
+    runLegislationSourcePipeline($document->id);
+
     $component
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Implementation Regulations')
         ->call('startReviewDocument', $document->id)
         ->assertSet('analysisTitle', 'Implementation Regulations')
         ->assertSet('analysisType', LegislationType::Regulation->value)
@@ -754,6 +1015,7 @@ test('uploaded legislation can infer delegated relationship details', function (
 
 test('best effort legislation parsing still enters the review state with warnings', function () {
     Storage::fake('s3');
+    Queue::fake();
     config()->set('pls_assistant.assistant_sources.extractor', 'textract');
     config()->set('pls_assistant.assistant_sources.source_disk', 's3');
 
@@ -788,19 +1050,22 @@ test('best effort legislation parsing still enters the review state with warning
 
     $component = Livewire::test(LegislationPage::class, ['review' => $review])
         ->set('sourceUpload', UploadedFile::fake()->create('working-note.pdf', 128, 'application/pdf'))
-        ->assertSee('Needs review')
-        ->assertSee('Implementation Note');
+        ->assertSee('Processing');
 
     $document = $review->fresh()->documents()->sole();
 
+    runLegislationSourcePipeline($document->id);
+
     $component
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Implementation Note')
         ->call('startReviewDocument', $document->id)
         ->assertSet('analysisTitle', 'Implementation Note')
         ->assertSee('Needs review')
         ->assertSee('Review record');
 });
 
-test('opening a stale legislation review row refreshes missing extracted summary data', function () {
+test('stale legislation rows are surfaced for retry instead of refreshing inline', function () {
     Storage::fake('s3');
     config()->set('pls_assistant.assistant_sources.extractor', 'textract');
     config()->set('pls_assistant.assistant_sources.source_disk', 's3');
@@ -840,46 +1105,15 @@ test('opening a stale legislation review row refreshes missing extracted summary
 
     Storage::disk('s3')->put($document->storage_path, 'fake pdf bytes');
 
-    $extractor = new class implements AssistantSourceTextExtractor
-    {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
-        {
-            return AssistantSourceExtractionResult::completed(
-                driver: 'stub',
-                method: 'stubbed shared extractor',
-                content: <<<'TEXT'
-                BELIZE: SOUTHERN DEEP PORT DEVELOPMENT FACILITY BILL, 2024
-
-                A Bill for an Act to provide for certain exemptions from taxes and duties proposed to be granted to the Southern Deep Port Development Ltd. by the Agreement; to provide for the effective implementation of the Southern Deep Port Development Facility; and to provide for matters connected therewith or incidental thereto.
-                TEXT,
-            );
-        }
-    };
-
-    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
-    $factory->shouldReceive('make')->once()->andReturn($extractor);
-    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
-    LegislationSourceExtractorAgent::fake([[
-        'title' => 'Southern Deep Port Development Facility Bill, 2024',
-        'short_title' => 'Southern Deep Port Development Facility Bill',
-        'legislation_type' => LegislationType::Act->value,
-        'date_enacted' => null,
-        'summary' => 'Provides exemptions tied to the deep port agreement and supports implementation of the facility.',
-        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
-        'warnings' => ['This looks like a bill or draft text, so an enactment date may not be available yet.'],
-    ]]);
-
     Livewire::test(LegislationPage::class, ['review' => $review])
+        ->assertSee('Needs attention')
         ->call('startReviewDocument', $document->id)
-        ->assertSet('analysisSummary', 'Provides exemptions tied to the deep port agreement and supports implementation of the facility.')
-        ->assertSee('Review record');
-
-    expect(data_get($document->fresh()->metadata, 'legislation_analysis.summary'))
-        ->toBe('Provides exemptions tied to the deep port agreement and supports implementation of the facility.');
+        ->assertDontSee('Review record');
 });
 
 test('duplicate legislation matches can be updated from the inline review state', function () {
     Storage::fake('s3');
+    Queue::fake();
     config()->set('pls_assistant.assistant_sources.extractor', 'textract');
     config()->set('pls_assistant.assistant_sources.source_disk', 's3');
 
@@ -929,12 +1163,15 @@ test('duplicate legislation matches can be updated from the inline review state'
 
     $component = Livewire::test(LegislationPage::class, ['review' => $review])
         ->set('sourceUpload', UploadedFile::fake()->create('public-records-act.pdf', 256, 'application/pdf'))
-        ->assertSee('Needs review')
-        ->assertSee('Public Records Act');
+        ->assertSee('Processing');
 
     $document = $review->fresh()->documents()->sole();
 
+    runLegislationSourcePipeline($document->id);
+
     $component
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Public Records Act')
         ->call('startReviewDocument', $document->id)
         ->assertSet('analysisSaveMode', 'update')
         ->assertSee('Possible match found')

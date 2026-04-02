@@ -66,7 +66,7 @@
         </div>
     </flux:card>
 
-    <flux:card wire:poll.5s.keep-alive="refreshPendingAnalyses" class="space-y-6">
+    <flux:card wire:poll.2s.keep-alive="refreshPendingAnalyses" class="space-y-6">
         <div class="flex items-center justify-between gap-4">
             <div class="space-y-1">
                 <flux:heading size="lg">{{ __('Records') }}</flux:heading>
@@ -116,7 +116,9 @@
                                 @endif
                             </flux:table.cell>
                             <flux:table.cell>
-                                <flux:badge size="sm" :color="$row['status_color']">{{ $row['status_label'] }}</flux:badge>
+                                <flux:badge size="sm" :color="$row['status_color']" :class="$row['status_badge_class']">
+                                    {{ $row['status_label'] }}
+                                </flux:badge>
                             </flux:table.cell>
                             <flux:table.cell>
                                 <div class="flex min-w-28 items-center justify-end gap-1">
@@ -132,7 +134,7 @@
                                         <flux:button
                                             size="sm"
                                             variant="subtle"
-                                            wire:click="startReviewDocument({{ $row['source_document_id'] }})"
+                                            wire:click="retrySourceAnalysis({{ $row['source_document_id'] }})"
                                         >
                                             {{ __('Retry') }}
                                         </flux:button>

@@ -2,19 +2,20 @@
 
 namespace App\Livewire\Pls\Reviews;
 
-use App\Domain\Documents\Actions\ChunkDocumentText;
 use App\Domain\Documents\Actions\StoreReviewDocumentMetadata;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
-use App\Domain\Legislation\Actions\AnalyzeLegislationSource;
+use App\Domain\Legislation\Actions\PersistLegislationSourceState;
 use App\Domain\Legislation\Actions\SaveAnalyzedLegislationForReview;
 use App\Domain\Legislation\Enums\LegislationType;
 use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
 use App\Domain\Legislation\Legislation;
 use App\Domain\Reviews\PlsReview;
+use App\Jobs\ProcessReviewLegislationSource;
 use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -121,30 +122,17 @@ class LegislationPage extends Workspace
             return;
         }
 
-        $status = $this->processSourceDocument($document);
+        $document = app(PersistLegislationSourceState::class)->markQueued($document);
+        ProcessReviewLegislationSource::dispatch($document->id);
 
         $this->sourceUpload = null;
         $this->resetValidation(['sourceUpload']);
         $this->review = $this->loadReview();
 
-        $this->dispatchWorkspaceToast(match ($status) {
-            'processing' => Toast::warning(
-                __('Source added'),
-                __('Source added. Processing has started.'),
-            ),
-            'needs_review' => Toast::success(
-                __('Source added'),
-                __('Source added. It is ready for review.'),
-            ),
-            'failed' => Toast::warning(
-                __('Source added'),
-                __('Source added, but it needs attention before it can be reviewed.'),
-            ),
-            default => Toast::success(
-                __('Source added'),
-                __('Source added.'),
-            ),
-        });
+        $this->dispatchWorkspaceToast(Toast::warning(
+            __('Source added'),
+            __('Source added. Processing has started.'),
+        ));
     }
 
     public function saveAnalyzedLegislation(SaveAnalyzedLegislationForReview $action): void
@@ -185,15 +173,19 @@ class LegislationPage extends Workspace
         }
 
         if ($sourceDocumentId !== null) {
-            $this->markSourceDocumentSaved(
-                $sourceDocumentId,
-                $this->analysisSaveMode === 'update'
-                    ? (int) $this->analysisExistingLegislationId
-                    : (int) $this->review->legislation()
-                        ->where('source_document_id', $sourceDocumentId)
-                        ->latest('legislation.id')
-                        ->value('legislation.id'),
-            );
+            $document = $this->review->documents()->find($sourceDocumentId);
+
+            if ($document instanceof Document) {
+                app(PersistLegislationSourceState::class)->markSaved(
+                    $document,
+                    $this->analysisSaveMode === 'update'
+                        ? (int) $this->analysisExistingLegislationId
+                        : (int) $this->review->legislation()
+                            ->where('source_document_id', $sourceDocumentId)
+                            ->latest('legislation.id')
+                            ->value('legislation.id'),
+                );
+            }
         }
 
         $this->resetSourceFlow();
@@ -223,30 +215,46 @@ class LegislationPage extends Workspace
     {
         $this->authorizeReviewMutation();
 
+        $state = app(PersistLegislationSourceState::class);
         $document = $this->review->documents()
             ->where('document_type', DocumentType::LegislationText->value)
             ->findOrFail($documentId);
 
-        $storedAnalysis = $this->storedAnalysisForDocument($document);
-        $status = (string) ($storedAnalysis['status'] ?? '');
-
-        if ($status === 'processing') {
-            return;
-        }
-
-        if ($status === '' || $status === 'failed' || $this->storedAnalysisNeedsRefresh($storedAnalysis)) {
-            $status = $this->processSourceDocument($this->incrementExtractionPollAttempts($document));
-
-            $document = $document->fresh();
-            $storedAnalysis = $this->storedAnalysisForDocument($document);
-        }
+        $storedAnalysis = $state->storedAnalysis($document);
 
         if (($storedAnalysis['status'] ?? null) !== 'needs_review') {
             return;
         }
 
+        if ($state->storedAnalysisNeedsRefresh($document)) {
+            return;
+        }
+
         $this->fillAnalysisStateFromStored($document, $storedAnalysis);
         $this->dispatch('modal-show', name: 'review-record');
+    }
+
+    public function retrySourceAnalysis(int $documentId): void
+    {
+        $this->authorizeReviewMutation();
+
+        $document = $this->review->documents()
+            ->where('document_type', DocumentType::LegislationText->value)
+            ->find($documentId);
+
+        if (! $document instanceof Document) {
+            return;
+        }
+
+        app(PersistLegislationSourceState::class)->resetForRetry($document);
+        ProcessReviewLegislationSource::dispatch($document->id);
+
+        $this->review = $this->loadReview();
+
+        $this->dispatchWorkspaceToast(Toast::warning(
+            __('Retry started'),
+            __('Source retry started. Processing continues in the background.'),
+        ));
     }
 
     public function hasAnalysisState(): bool
@@ -256,19 +264,6 @@ class LegislationPage extends Workspace
 
     public function refreshPendingAnalyses(): void
     {
-        $documents = $this->review->documents()
-            ->where('document_type', DocumentType::LegislationText->value)
-            ->get()
-            ->filter(fn (Document $document): bool => $this->sourceRecordStatus($document) === 'processing');
-
-        if ($documents->isEmpty()) {
-            return;
-        }
-
-        foreach ($documents as $document) {
-            $this->processSourceDocument($this->incrementExtractionPollAttempts($document));
-        }
-
         $this->review = $this->loadReview();
     }
 
@@ -303,93 +298,6 @@ class LegislationPage extends Workspace
         $trimmed = trim($value);
 
         return $trimmed === '' ? null : $trimmed;
-    }
-
-    private function processSourceDocument(Document $document): string
-    {
-        $result = app(AnalyzeLegislationSource::class)->analyze($document, $this->review->jurisdiction_id);
-        $this->persistExtractionState($document, $result);
-
-        $rawText = trim((string) ($result['raw_text'] ?? ''));
-
-        if ($rawText !== '') {
-            app(ChunkDocumentText::class)->chunk($document, $rawText);
-        }
-
-        return $this->persistLegislationAnalysisState($document->fresh(), $result);
-    }
-
-    /**
-     * @param  array{
-     *     status?: string,
-     *     source_document_id?: int,
-     *     source_label?: string,
-     *     title?: string,
-     *     short_title?: string,
-     *     legislation_type?: string,
-     *     date_enacted?: string,
-     *     summary?: string,
-     *     relationship_type?: string,
-     *     warnings?: list<string>,
-     *     duplicate_candidates?: list<array{id: int, title: string, short_title: string, legislation_type: string, date_enacted: string}>
-     * }  $result
-     */
-    private function persistLegislationAnalysisState(Document $document, array $result): string
-    {
-        $metadata = $document->metadata ?? [];
-
-        $status = match ($result['status'] ?? 'completed') {
-            'processing' => 'processing',
-            'failed' => 'failed',
-            default => 'needs_review',
-        };
-
-        data_set($metadata, 'legislation_analysis', array_filter([
-            'analysis_driver' => 'ai',
-            'status' => $status,
-            'source_document_id' => $result['source_document_id'] ?? $document->id,
-            'source_label' => $result['source_label'] ?? $document->title,
-            'title' => $result['title'] ?? null,
-            'short_title' => $result['short_title'] ?? null,
-            'legislation_type' => $result['legislation_type'] ?? null,
-            'date_enacted' => $result['date_enacted'] ?? null,
-            'summary' => $result['summary'] ?? null,
-            'relationship_type' => $result['relationship_type'] ?? null,
-            'warnings' => $result['warnings'] ?? [],
-            'duplicate_candidates' => $result['duplicate_candidates'] ?? [],
-            'updated_at' => now()->toIso8601String(),
-        ], fn (mixed $value): bool => $value !== null));
-
-        $document->forceFill([
-            'metadata' => $metadata,
-        ])->save();
-
-        return $status;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function storedAnalysisForDocument(Document $document): array
-    {
-        $analysis = data_get($document->metadata, 'legislation_analysis', []);
-
-        return is_array($analysis) ? $analysis : [];
-    }
-
-    /**
-     * @param  array<string, mixed>  $storedAnalysis
-     */
-    private function storedAnalysisNeedsRefresh(array $storedAnalysis): bool
-    {
-        if (($storedAnalysis['status'] ?? null) !== 'needs_review') {
-            return false;
-        }
-
-        return ($storedAnalysis['analysis_driver'] ?? null) !== 'ai'
-            || blank((string) ($storedAnalysis['title'] ?? ''))
-            || blank((string) ($storedAnalysis['legislation_type'] ?? ''))
-            || blank((string) ($storedAnalysis['relationship_type'] ?? ''));
     }
 
     /**
@@ -431,81 +339,6 @@ class LegislationPage extends Workspace
             'analysisSummary',
             'analysisRelationshipType',
         ]);
-    }
-
-    private function markSourceDocumentSaved(int $documentId, int $legislationId): void
-    {
-        if ($legislationId <= 0) {
-            return;
-        }
-
-        $document = $this->review->documents()->find($documentId);
-
-        if (! $document instanceof Document) {
-            return;
-        }
-
-        $metadata = $document->metadata ?? [];
-        data_set($metadata, 'legislation_analysis.status', 'saved');
-        data_set($metadata, 'legislation_analysis.legislation_id', $legislationId);
-        data_set($metadata, 'legislation_analysis.saved_at', now()->toIso8601String());
-
-        $document->forceFill([
-            'metadata' => $metadata,
-        ])->save();
-    }
-
-    private function incrementExtractionPollAttempts(Document $document): Document
-    {
-        $metadata = $document->metadata ?? [];
-        $pollAttempts = (int) data_get($metadata, 'extraction.poll_attempts', 0) + 1;
-
-        data_set($metadata, 'extraction.poll_attempts', $pollAttempts);
-
-        $document->forceFill([
-            'metadata' => $metadata,
-        ])->save();
-
-        return $document->fresh();
-    }
-
-    /**
-     * @param  array{
-     *     status?: string,
-     *     extraction_driver?: string|null,
-     *     extraction_method?: string|null,
-     *     extraction_metadata?: array<string, mixed>
-     * }  $result
-     */
-    private function persistExtractionState(Document $document, array $result): void
-    {
-        $metadata = $document->metadata ?? [];
-
-        foreach (($result['extraction_metadata'] ?? []) as $key => $value) {
-            data_set($metadata, "extraction.{$key}", $value);
-        }
-
-        data_set($metadata, 'extraction.status', $result['status'] ?? 'completed');
-        data_set($metadata, 'extraction.driver', $result['extraction_driver'] ?? data_get($metadata, 'extraction.driver'));
-        data_set($metadata, 'extraction_method', $result['extraction_method'] ?? data_get($metadata, 'extraction_method'));
-        data_set($metadata, 'extraction.error', ($result['status'] ?? null) === 'failed' ? ($result['warnings'][0] ?? null) : null);
-
-        if (($result['status'] ?? null) === 'processing') {
-            data_set($metadata, 'extraction.processing_at', now()->toIso8601String());
-        }
-
-        if (($result['status'] ?? null) === 'completed') {
-            data_set($metadata, 'extraction.completed_at', now()->toIso8601String());
-            data_set($metadata, 'extraction.error', null);
-        }
-
-        if (($result['status'] ?? null) === 'failed') {
-            data_set($metadata, 'extraction.failed_at', now()->toIso8601String());
-        }
-
-        $document->forceFill([
-            'metadata' => $metadata,
-        ])->save();
     }
 
     private function loadReview(): PlsReview
@@ -600,8 +433,11 @@ class LegislationPage extends Workspace
      *     legislation_type: string,
      *     date_enacted: string,
      *     status: string,
+     *     progress_stage: string|null,
      *     status_label: string,
      *     status_color: string,
+     *     status_badge_class: string,
+     *     status_detail: string|null,
      *     action: string|null
      * }>
      */
@@ -617,7 +453,7 @@ class LegislationPage extends Workspace
                 $sourcedLegislationIds[] = $savedLegislation->id;
             }
 
-            $storedAnalysis = $this->storedAnalysisForDocument($document);
+            $storedAnalysis = app(PersistLegislationSourceState::class)->storedAnalysis($document);
             $status = $savedLegislation instanceof Legislation
                 ? 'saved'
                 : $this->sourceRecordStatus($document);
@@ -638,8 +474,11 @@ class LegislationPage extends Workspace
                 'date_enacted' => $savedLegislation?->date_enacted?->toFormattedDateString()
                     ?? ($this->blankToNull((string) ($storedAnalysis['date_enacted'] ?? '')) ?? '—'),
                 'status' => $status,
-                'status_label' => $this->statusLabel($status),
-                'status_color' => $this->statusColor($status),
+                'progress_stage' => $progressStage = $this->sourceRecordProgressStage($document, $status),
+                'status_label' => $this->statusLabel($status, $progressStage),
+                'status_color' => $this->statusColor($status, $progressStage),
+                'status_badge_class' => $this->statusBadgeClass($status, $progressStage),
+                'status_detail' => $this->statusDetail($status, $progressStage),
                 'action' => match ($status) {
                     'needs_review' => 'review',
                     'failed' => 'retry',
@@ -663,8 +502,11 @@ class LegislationPage extends Workspace
                 'legislation_type' => Str::headline($legislation->legislation_type->value),
                 'date_enacted' => $legislation->date_enacted?->toFormattedDateString() ?? '—',
                 'status' => 'saved',
+                'progress_stage' => null,
                 'status_label' => $this->statusLabel('saved'),
                 'status_color' => $this->statusColor('saved'),
+                'status_badge_class' => $this->statusBadgeClass('saved'),
+                'status_detail' => $this->statusDetail('saved'),
                 'action' => null,
             ];
         }
@@ -674,38 +516,108 @@ class LegislationPage extends Workspace
 
     private function sourceRecordStatus(Document $document): string
     {
+        $state = app(PersistLegislationSourceState::class);
         $storedStatus = data_get($document->metadata, 'legislation_analysis.status');
 
         if (is_string($storedStatus) && $storedStatus !== '') {
+            if ($storedStatus === 'needs_review' && $state->storedAnalysisNeedsRefresh($document)) {
+                return 'failed';
+            }
+
             return $storedStatus;
         }
 
         $extractionStatus = data_get($document->metadata, 'extraction.status');
 
         return match ($extractionStatus) {
-            'processing' => 'processing',
+            'queued', 'processing' => 'processing',
             'failed' => 'failed',
             default => 'needs_review',
         };
     }
 
-    private function statusLabel(string $status): string
+    private function sourceRecordProgressStage(Document $document, string $status): ?string
     {
+        if ($status !== 'processing') {
+            return null;
+        }
+
+        $progressStage = data_get($document->metadata, 'legislation_analysis.progress_stage');
+
+        return is_string($progressStage) && $progressStage !== ''
+            ? $progressStage
+            : 'queued';
+    }
+
+    private function statusLabel(string $status, ?string $progressStage = null): string
+    {
+        if ($status === 'processing') {
+            return match ($progressStage) {
+                'queued' => __('Queued'),
+                'extracting_text' => __('Extracting text'),
+                'filling_record' => __('Filling record'),
+                default => __('Processing'),
+            };
+        }
+
         return match ($status) {
-            'processing' => __('Processing'),
             'needs_review' => __('Needs review'),
             'failed' => __('Needs attention'),
             default => __('Saved'),
         };
     }
 
-    private function statusColor(string $status): string
+    private function statusColor(string $status, ?string $progressStage = null): string
     {
+        if ($status === 'processing') {
+            return match ($progressStage) {
+                'queued' => 'zinc',
+                'extracting_text' => 'sky',
+                'filling_record' => 'violet',
+                default => 'sky',
+            };
+        }
+
         return match ($status) {
-            'processing' => 'sky',
             'needs_review' => 'amber',
             'failed' => 'rose',
             default => 'emerald',
+        };
+    }
+
+    private function statusBadgeClass(string $status, ?string $progressStage = null): string
+    {
+        if ($status === 'processing') {
+            return match ($progressStage) {
+                'queued' => 'ring-1 ring-zinc-300/70 dark:ring-zinc-700/70',
+                'extracting_text' => 'ring-1 ring-sky-300/70 dark:ring-sky-700/60',
+                'filling_record' => 'ring-1 ring-violet-300/70 dark:ring-violet-700/60',
+                default => 'ring-1 ring-sky-300/70 dark:ring-sky-700/60',
+            };
+        }
+
+        return match ($status) {
+            'needs_review' => 'ring-1 ring-amber-300/70 dark:ring-amber-700/60',
+            'failed' => 'ring-1 ring-rose-300/70 dark:ring-rose-700/60',
+            default => 'ring-1 ring-emerald-300/70 dark:ring-emerald-700/60',
+        };
+    }
+
+    private function statusDetail(string $status, ?string $progressStage = null): ?string
+    {
+        if ($status === 'processing') {
+            return match ($progressStage) {
+                'queued' => __('Waiting for the background worker.'),
+                'extracting_text' => __('Reading the uploaded file.'),
+                'filling_record' => __('Using AI to draft the record.'),
+                default => __('Work is still running in the background.'),
+            };
+        }
+
+        return match ($status) {
+            'needs_review' => __('Review before saving.'),
+            'failed' => __('Open retry when you are ready.'),
+            default => __('Saved to this review.'),
         };
     }
 
@@ -720,12 +632,33 @@ class LegislationPage extends Workspace
             return;
         }
 
-        if ($document->storage_path !== '') {
-            Storage::disk((string) data_get($document->metadata, 'disk', config('filesystems.default')))
-                ->delete($document->storage_path);
-        }
+        DB::transaction(function () use ($document): void {
+            $sourcedLegislation = Legislation::query()
+                ->where('source_document_id', $document->id)
+                ->get();
 
-        $document->delete();
+            foreach ($sourcedLegislation as $legislation) {
+                $this->review->legislation()->detach($legislation->id);
+
+                if ($legislation->reviews()->exists()) {
+                    $legislation->forceFill([
+                        'source_document_id' => null,
+                    ])->save();
+
+                    continue;
+                }
+
+                $legislation->delete();
+            }
+
+            if ($document->storage_path !== '') {
+                Storage::disk((string) data_get($document->metadata, 'disk', config('filesystems.default')))
+                    ->delete($document->storage_path);
+            }
+
+            $document->delete();
+        });
+
         $this->review = $this->loadReview();
 
         if ($this->analysisSourceDocumentId === (string) $documentId) {

@@ -323,4 +323,9 @@ return [
             ],
         ],
     ],
+
+    'review_source_enrichment' => [
+        'queue' => env('PLS_REVIEW_SOURCE_ENRICHMENT_QUEUE', 'review-source-enrichment'),
+        'ai_stage_delay_seconds' => (int) env('PLS_REVIEW_SOURCE_ENRICHMENT_AI_STAGE_DELAY_SECONDS', 3),
+    ],
 ];

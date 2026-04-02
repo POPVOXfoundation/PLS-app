@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Str;
 
+$reviewSourceEnrichmentQueue = env('PLS_REVIEW_SOURCE_ENRICHMENT_QUEUE', 'review-source-enrichment');
+
 return [
 
     /*
@@ -99,6 +101,7 @@ return [
     'waits' => [
         'redis:default' => 60,
         'redis:assistant-sources' => 120,
+        "redis:{$reviewSourceEnrichmentQueue}" => 120,
     ],
 
     /*
@@ -224,6 +227,19 @@ return [
             'timeout' => 240,
             'nice' => 0,
         ],
+        'review-source-enrichment' => [
+            'connection' => 'redis',
+            'queue' => [$reviewSourceEnrichmentQueue],
+            'balance' => false,
+            'minProcesses' => 1,
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1,
+            'timeout' => 240,
+            'nice' => 0,
+        ],
     ],
 
     'environments' => [
@@ -236,6 +252,9 @@ return [
             'assistant-sources' => [
                 'maxProcesses' => 2,
             ],
+            'review-source-enrichment' => [
+                'maxProcesses' => 3,
+            ],
         ],
 
         'local' => [
@@ -244,6 +263,9 @@ return [
             ],
             'assistant-sources' => [
                 'maxProcesses' => 1,
+            ],
+            'review-source-enrichment' => [
+                'maxProcesses' => 2,
             ],
         ],
     ],
