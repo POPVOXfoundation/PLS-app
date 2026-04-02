@@ -14,6 +14,7 @@ use App\Domain\Consultations\Submission;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\DocumentChunk;
 use App\Domain\Documents\Enums\DocumentType;
+use App\Domain\Institutions\Country;
 use App\Domain\Institutions\Enums\ReviewGroupType;
 use App\Domain\Institutions\ReviewGroup;
 use App\Domain\Legislation\Enums\LegislationType;
@@ -41,17 +42,9 @@ class PlsReviewDemoSeeder extends Seeder
 {
     public function run(CreatePlsReview $createPlsReview): void
     {
-        $owner = User::query()->firstOrCreate(
-            ['email' => 'pls-demo@example.test'],
-            [
-                'name' => 'PLS Demo Reviewer',
-                'password' => 'password',
-            ],
-        );
-
-        $this->seedBelizeReview($createPlsReview, $owner);
-        $this->seedUgandaReview($createPlsReview, $owner);
-        $this->seedTennesseeReview($createPlsReview, $owner);
+        $this->seedBelizeReview($createPlsReview, $this->ownerForCountry('BLZ', 'belize'));
+        $this->seedUgandaReview($createPlsReview, $this->ownerForCountry('UGA', 'uganda'));
+        $this->seedTennesseeReview($createPlsReview, $this->ownerForCountry('USA', 'tennessee'));
     }
 
     private function seedBelizeReview(CreatePlsReview $createPlsReview, User $owner): void
@@ -675,6 +668,20 @@ class PlsReviewDemoSeeder extends Seeder
                 'document_id' => $document?->id,
                 'response_status' => $status,
                 'received_at' => $receivedAt,
+            ],
+        );
+    }
+
+    private function ownerForCountry(string $iso3, string $suffix): User
+    {
+        $country = Country::query()->where('iso3', $iso3)->firstOrFail();
+
+        return User::query()->updateOrCreate(
+            ['email' => "pls-demo-{$suffix}@example.test"],
+            [
+                'name' => 'PLS Demo Reviewer',
+                'password' => 'password',
+                'country_id' => $country->id,
             ],
         );
     }

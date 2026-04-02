@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use App\Domain\Institutions\Country;
 use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Reviews\PlsReviewMembership;
 use App\Models\Enums\UserRole;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -28,6 +30,7 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'country_id',
         'role',
         'password',
     ];
@@ -65,6 +68,11 @@ class User extends Authenticatable
             UserRole::ReviewGroupStaff,
             UserRole::Reviewer,
         ], true);
+    }
+
+    public function country(): BelongsTo
+    {
+        return $this->belongsTo(Country::class);
     }
 
     public function canViewPlsReviews(): bool

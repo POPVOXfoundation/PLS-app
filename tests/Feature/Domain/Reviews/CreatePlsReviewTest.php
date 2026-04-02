@@ -28,7 +28,9 @@ it('creates a draft review without a review group and uses the creator as the ow
             'slug' => 'national-assembly',
         ],
     ]);
-    $owner = User::factory()->reviewer()->create();
+    $owner = User::factory()->reviewer()->create([
+        'country_id' => $country->id,
+    ]);
 
     $review = app(CreatePlsReview::class)->create(
         CreatePlsReviewData::from([
@@ -70,7 +72,9 @@ it('creates a draft review without a review group and uses the creator as the ow
 
 it('creates a draft review with a review group and the derived institutional hierarchy', function () {
     ['country' => $country, 'jurisdiction' => $jurisdiction, 'legislature' => $legislature] = plsHierarchy();
-    $owner = User::factory()->reviewer()->create();
+    $owner = User::factory()->reviewer()->create([
+        'country_id' => $country->id,
+    ]);
     $reviewGroup = ReviewGroup::factory()->create([
         'country_id' => $country->id,
         'jurisdiction_id' => $jurisdiction->id,
@@ -96,8 +100,10 @@ it('creates a draft review with a review group and the derived institutional hie
 });
 
 it('seeds the official workflow steps in build plan order', function () {
-    ['legislature' => $legislature] = plsHierarchy();
-    $owner = User::factory()->reviewer()->create();
+    ['country' => $country, 'legislature' => $legislature] = plsHierarchy();
+    $owner = User::factory()->reviewer()->create([
+        'country_id' => $country->id,
+    ]);
 
     $review = app(CreatePlsReview::class)->create(new CreatePlsReviewData(
         legislatureId: $legislature->id,
@@ -119,8 +125,10 @@ it('seeds the official workflow steps in build plan order', function () {
 });
 
 it('creates unique slugs for reviews with the same title for the same owner', function () {
-    ['legislature' => $legislature] = plsHierarchy();
-    $owner = User::factory()->reviewer()->create();
+    ['country' => $country, 'legislature' => $legislature] = plsHierarchy();
+    $owner = User::factory()->reviewer()->create([
+        'country_id' => $country->id,
+    ]);
 
     $action = app(CreatePlsReview::class);
 
@@ -177,8 +185,10 @@ it('prevents the owner membership from being removed or demoted', function () {
 });
 
 it('validates review creation input before persisting', function () {
-    ['legislature' => $legislature] = plsHierarchy();
-    $owner = User::factory()->reviewer()->create();
+    ['country' => $country, 'legislature' => $legislature] = plsHierarchy();
+    $owner = User::factory()->reviewer()->create([
+        'country_id' => $country->id,
+    ]);
 
     expect(fn () => app(CreatePlsReview::class)->create(
         new CreatePlsReviewData(
@@ -191,4 +201,20 @@ it('validates review creation input before persisting', function () {
     ))->toThrow(ValidationException::class);
 
     $this->assertDatabaseCount('pls_reviews', 0);
+});
+
+it('prevents creating a review outside the creators country scope', function () {
+    ['legislature' => $legislature] = plsHierarchy();
+    $otherCountry = \App\Domain\Institutions\Country::factory()->create();
+    $owner = User::factory()->reviewer()->create([
+        'country_id' => $otherCountry->id,
+    ]);
+
+    expect(fn () => app(CreatePlsReview::class)->create(
+        CreatePlsReviewData::from([
+            'legislature_id' => $legislature->id,
+            'title' => 'Cross-country review',
+            'created_by' => $owner->id,
+        ]),
+    ))->toThrow(ValidationException::class);
 });

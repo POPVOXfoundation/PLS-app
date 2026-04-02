@@ -6,6 +6,8 @@ use App\Domain\Analysis\Finding;
 use App\Domain\Analysis\Recommendation;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
+use App\Domain\Institutions\Country;
+use App\Domain\Institutions\Enums\JurisdictionType;
 use App\Domain\Legislation\Enums\LegislationType;
 use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
 use App\Domain\Legislation\Legislation;
@@ -18,7 +20,11 @@ use App\Support\Toast;
 use Livewire\Livewire;
 
 beforeEach(function () {
-    $this->actingAs(User::factory()->create());
+    $country = Country::factory()->create();
+
+    $this->actingAs(User::factory()->create([
+        'country_id' => $country->id,
+    ]));
 });
 
 test('reviews index page is displayed', function () {
@@ -33,11 +39,17 @@ test('reviews index page is displayed', function () {
         ->assertSee($review->assignmentLabel());
 });
 
-test('review can be created from the create page without a review group', function () {
-    ['legislature' => $legislature] = plsHierarchy();
+test('review can be created from the create page with a selected inquiry lead', function () {
+    ['country' => $country, 'jurisdiction' => $jurisdiction, 'legislature' => $legislature, 'reviewGroup' => $reviewGroup] = plsHierarchy();
+    $user = User::factory()->reviewer()->create([
+        'country_id' => $country->id,
+    ]);
 
-    $response = Livewire::test(CreateReviewPage::class)
+    $response = Livewire::actingAs($user)
+        ->test(CreateReviewPage::class)
+        ->set('jurisdiction_id', (string) $jurisdiction->id)
         ->set('legislature_id', (string) $legislature->id)
+        ->set('review_group_id', (string) $reviewGroup->id)
         ->set('title', 'Post-Legislative Review of the Public Procurement Act')
         ->set('description', 'Evaluates implementation delays, supplier access, and compliance monitoring.')
         ->set('start_date', '2026-03-10')
@@ -48,58 +60,99 @@ test('review can be created from the create page without a review group', functi
         ->where('title', 'Post-Legislative Review of the Public Procurement Act')
         ->firstOrFail();
 
-    expect($review->review_group_id)->toBeNull();
-    expect($review->created_by)->toBe(auth()->id());
-    expect($review->legislature_id)->toBe($legislature->id);
-    expect($review->jurisdiction_id)->toBe($legislature->jurisdiction_id);
-    expect($review->country_id)->toBe($legislature->jurisdiction->country_id);
-    expect($review->steps()->count())->toBe(11);
-    expect($review->memberships()->where('user_id', auth()->id())->firstOrFail()->role)->toBe(PlsReviewMembershipRole::Owner);
-    expect(session()->get('toast'))->toBe(Toast::success(
-        'Review created',
-        'Review created and workflow steps seeded.',
-    ));
+    expect($review->review_group_id)->toBe($reviewGroup->id)
+        ->and($review->created_by)->toBe($user->id)
+        ->and($review->legislature_id)->toBe($legislature->id)
+        ->and($review->jurisdiction_id)->toBe($legislature->jurisdiction_id)
+        ->and($review->country_id)->toBe($legislature->jurisdiction->country_id)
+        ->and($review->steps()->count())->toBe(11)
+        ->and($review->memberships()->where('user_id', $user->id)->firstOrFail()->role)->toBe(PlsReviewMembershipRole::Owner);
+    expect(session()->get('toast'))->toBe(Toast::success('Review created', 'Review created and workflow steps seeded.'));
     $response->assertRedirect(route('pls.reviews.workflow', ['review' => $review->id]));
 });
 
-test('review can be created from the create page with a review group', function () {
-    ['legislature' => $legislature, 'reviewGroup' => $reviewGroup] = plsHierarchy();
+test('review can create a legislature and inquiry lead inline for a non-national jurisdiction', function () {
+    ['country' => $country, 'jurisdiction' => $nationalJurisdiction] = plsHierarchy();
+    $stateJurisdiction = \App\Domain\Institutions\Jurisdiction::factory()->create([
+        'country_id' => $country->id,
+        'name' => 'Tennessee',
+        'slug' => 'tennessee',
+        'jurisdiction_type' => JurisdictionType::State,
+        'parent_id' => $nationalJurisdiction->id,
+    ]);
+    $user = User::factory()->reviewer()->create([
+        'country_id' => $country->id,
+    ]);
 
-    Livewire::test(CreateReviewPage::class)
-        ->set('legislature_id', (string) $legislature->id)
-        ->set('review_group_id', (string) $reviewGroup->id)
-        ->set('title', 'Review group scoped review')
-        ->set('description', 'Evaluates implementation under a designated review group.')
+    Livewire::actingAs($user)
+        ->test(CreateReviewPage::class)
+        ->set('jurisdiction_id', (string) $stateJurisdiction->id)
+        ->set('creating_legislature', true)
+        ->set('new_legislature_name', 'Tennessee General Assembly')
+        ->set('creating_review_group', true)
+        ->set('new_review_group_name', 'State and Local Government Office')
+        ->set('title', 'State-level scrutiny review')
+        ->set('description', 'Evaluates implementation under a newly created state legislature and inquiry lead.')
         ->call('save')
         ->assertHasNoErrors();
 
     $review = PlsReview::query()
-        ->where('title', 'Review group scoped review')
+        ->where('title', 'State-level scrutiny review')
         ->firstOrFail();
+    $legislature = $review->legislature()->firstOrFail();
+    $reviewGroup = $review->reviewGroup()->firstOrFail();
 
-    expect($review->review_group_id)->toBe($reviewGroup->id)
-        ->and($review->created_by)->toBe(auth()->id())
-        ->and($review->memberships()->where('user_id', auth()->id())->firstOrFail()->role)->toBe(PlsReviewMembershipRole::Owner);
+    expect($review->created_by)->toBe($user->id)
+        ->and($review->country_id)->toBe($country->id)
+        ->and($review->jurisdiction_id)->toBe($stateJurisdiction->id)
+        ->and($legislature->name)->toBe('Tennessee General Assembly')
+        ->and($legislature->jurisdiction_id)->toBe($stateJurisdiction->id)
+        ->and($reviewGroup->name)->toBe('State and Local Government Office')
+        ->and($reviewGroup->country_id)->toBe($country->id)
+        ->and($reviewGroup->jurisdiction_id)->toBe($stateJurisdiction->id)
+        ->and($reviewGroup->legislature_id)->toBe($legislature->id);
 });
 
 test('review create page validates required fields', function () {
     $component = Livewire::test(CreateReviewPage::class)
         ->call('save')
         ->assertHasErrors([
+            'jurisdiction_id' => ['required'],
             'legislature_id' => ['required'],
+            'review_group_id' => ['required'],
             'title' => ['required'],
         ]);
 
+    expect(substr_count($component->html(), 'Choose the jurisdiction for this review.'))->toBe(1);
     expect(substr_count($component->html(), 'Choose the legislature for this review.'))->toBe(1);
+    expect(substr_count($component->html(), 'Choose the inquiry lead for this review.'))->toBe(1);
     expect(substr_count($component->html(), 'Enter the public-facing review title.'))->toBe(1);
 });
 
-test('review create page does not render the seeded workflow panel', function () {
+test('review create page does not ask for country again and uses inquiry lead copy', function () {
     $this->get(route('pls.reviews.create'))
         ->assertOk()
         ->assertSee('Institution preview')
-        ->assertDontSee('Seeded workflow')
-        ->assertDontSee('Every new review starts with the canonical 11-step post-legislative scrutiny workflow.');
+        ->assertSee('Inquiry lead')
+        ->assertDontSee('Review group')
+        ->assertDontSee('Select a country');
+});
+
+test('review create page prevents cross-country creation', function () {
+    ['jurisdiction' => $jurisdiction, 'legislature' => $legislature, 'reviewGroup' => $reviewGroup] = plsHierarchy();
+    $userCountry = Country::factory()->create();
+    $user = User::factory()->reviewer()->create([
+        'country_id' => $userCountry->id,
+    ]);
+
+    Livewire::actingAs($user)
+        ->test(CreateReviewPage::class)
+        ->set('jurisdiction_id', (string) $jurisdiction->id)
+        ->set('legislature_id', (string) $legislature->id)
+        ->set('review_group_id', (string) $reviewGroup->id)
+        ->set('title', 'Blocked cross-country review')
+        ->call('save')
+        ->assertHasErrors('jurisdiction_id');
 });
 
 test('review show route redirects to workflow route', function () {

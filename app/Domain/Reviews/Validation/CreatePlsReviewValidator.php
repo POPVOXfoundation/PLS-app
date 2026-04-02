@@ -51,7 +51,7 @@ class CreatePlsReviewValidator
         return [
             'legislature_id.required' => 'Choose the legislature for this review.',
             'legislature_id.exists' => 'Select a valid legislature for the review.',
-            'review_group_id.exists' => 'Select a valid review group for the review.',
+            'review_group_id.exists' => 'Select a valid inquiry lead for the review.',
             'created_by.required' => 'A review owner is required.',
             'created_by.exists' => 'Select a valid review owner.',
             'title.required' => 'Enter the public-facing review title.',
@@ -67,7 +67,7 @@ class CreatePlsReviewValidator
     {
         return [
             'legislature_id' => 'legislature',
-            'review_group_id' => 'review group',
+            'review_group_id' => 'inquiry lead',
             'created_by' => 'review owner',
             'start_date' => 'start date',
         ];

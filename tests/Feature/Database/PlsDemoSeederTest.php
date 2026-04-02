@@ -25,6 +25,7 @@ it('seeds a realistic pls demo dataset', function () {
     $this->assertDatabaseHas('countries', ['iso2' => 'BZ']);
     $this->assertDatabaseHas('countries', ['iso2' => 'UG']);
     $this->assertDatabaseHas('countries', ['iso2' => 'US']);
+    $this->assertDatabaseHas('legislatures', ['slug' => 'blz-parl']);
     $this->assertDatabaseHas('pls_reviews', ['title' => 'Post-Legislative Review of the Access to Information Act']);
     $this->assertDatabaseHas('reports', ['title' => 'Final Report on the Public Finance Management Act Review']);
 });

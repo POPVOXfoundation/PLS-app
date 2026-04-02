@@ -136,11 +136,41 @@ function plsHierarchy(array $overrides = []): array
 function plsReviewContext(array $reviewAttributes = [], array $hierarchyOverrides = []): array
 {
     $hierarchy = plsHierarchy($hierarchyOverrides);
+    $resolvedLegislature = isset($reviewAttributes['legislature_id']) && $reviewAttributes['legislature_id'] !== null
+        ? Legislature::query()
+            ->with('jurisdiction.country')
+            ->findOrFail((int) $reviewAttributes['legislature_id'])
+        : null;
+    $resolvedReviewGroup = isset($reviewAttributes['review_group_id']) && $reviewAttributes['review_group_id'] !== null
+        ? ReviewGroup::query()
+            ->with(['country', 'jurisdiction', 'legislature'])
+            ->findOrFail((int) $reviewAttributes['review_group_id'])
+        : null;
+
+    if ($resolvedLegislature !== null) {
+        $hierarchy['legislature'] = $resolvedLegislature;
+        $hierarchy['jurisdiction'] = $resolvedLegislature->jurisdiction;
+        $hierarchy['country'] = $resolvedLegislature->jurisdiction->country;
+    }
+
+    if ($resolvedReviewGroup !== null) {
+        $hierarchy['reviewGroup'] = $resolvedReviewGroup;
+        $hierarchy['country'] = $resolvedReviewGroup->country ?? $hierarchy['country'];
+        $hierarchy['jurisdiction'] = $resolvedReviewGroup->jurisdiction ?? $hierarchy['jurisdiction'];
+        $hierarchy['legislature'] = $resolvedReviewGroup->legislature ?? $hierarchy['legislature'];
+    }
+
     $owner = isset($reviewAttributes['created_by']) && $reviewAttributes['created_by'] !== null
         ? User::query()->findOrFail((int) $reviewAttributes['created_by'])
         : (auth()->user() instanceof User
             ? auth()->user()
             : User::factory()->reviewer()->create());
+
+    if ($owner->country_id !== $hierarchy['country']->id) {
+        $owner->forceFill([
+            'country_id' => $hierarchy['country']->id,
+        ])->save();
+    }
 
     $review = app(CreatePlsReview::class)->create(CreatePlsReviewData::from(array_merge([
         'legislature_id' => $hierarchy['legislature']->id,

@@ -11,6 +11,7 @@ use App\Domain\Reviews\Enums\PlsStepStatus;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Reviews\Support\PlsReviewWorkflow;
 use App\Domain\Reviews\Validation\CreatePlsReviewValidator;
+use App\Models\User;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -33,12 +34,26 @@ class CreatePlsReview
         $data = CreatePlsReviewData::from($validated);
 
         return $this->database->transaction(function () use ($data): PlsReview {
+            $creator = User::query()->findOrFail($data->createdBy);
             $legislature = Legislature::query()
                 ->with('jurisdiction.country')
                 ->findOrFail($data->legislatureId);
 
             $jurisdiction = $legislature->jurisdiction;
             $country = $jurisdiction->country;
+
+            if ($creator->country_id === null) {
+                throw ValidationException::withMessages([
+                    'created_by' => 'Assign a country to the review creator before creating reviews.',
+                ]);
+            }
+
+            if ($creator->country_id !== $country->id) {
+                throw ValidationException::withMessages([
+                    'legislature_id' => 'Choose a legislature inside your assigned country.',
+                ]);
+            }
+
             $reviewGroup = $data->reviewGroupId === null
                 ? null
                 : ReviewGroup::query()
@@ -95,19 +110,19 @@ class CreatePlsReview
 
         if ($reviewGroup->legislature_id !== null && $reviewGroup->legislature_id !== $legislature->id) {
             throw ValidationException::withMessages([
-                'review_group_id' => 'Select a review group that belongs to the chosen legislature.',
+                'review_group_id' => 'Select an inquiry lead that belongs to the chosen legislature.',
             ]);
         }
 
         if ($reviewGroup->jurisdiction_id !== null && $reviewGroup->jurisdiction_id !== $jurisdiction->id) {
             throw ValidationException::withMessages([
-                'review_group_id' => 'Select a review group that matches the chosen jurisdiction.',
+                'review_group_id' => 'Select an inquiry lead that matches the chosen jurisdiction.',
             ]);
         }
 
         if ($reviewGroup->country_id !== null && $reviewGroup->country_id !== $country->id) {
             throw ValidationException::withMessages([
-                'review_group_id' => 'Select a review group that matches the chosen country.',
+                'review_group_id' => 'Select an inquiry lead that matches the chosen country.',
             ]);
         }
     }

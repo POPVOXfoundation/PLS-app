@@ -30,6 +30,20 @@
                 placeholder="email@example.com"
             />
 
+            <flux:select
+                name="country_id"
+                :label="__('Country')"
+                :description="__('Choose the country where you will create and manage PLS inquiries.')"
+                :placeholder="__('Select a country')"
+                required
+            >
+                @foreach ($countries as $country)
+                    <flux:select.option :value="$country->id" :selected="(string) old('country_id') === (string) $country->id">
+                        {{ $country->name }}
+                    </flux:select.option>
+                @endforeach
+            </flux:select>
+
             <!-- Password -->
             <flux:input
                 name="password"

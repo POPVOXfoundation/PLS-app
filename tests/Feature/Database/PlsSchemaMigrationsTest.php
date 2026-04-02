@@ -40,6 +40,9 @@ it('creates the critical prompt two workflow and foreign key columns', function 
         'jurisdiction_type',
         'parent_id',
     ]))->toBeTrue()
+        ->and(Schema::hasColumns('users', [
+            'country_id',
+        ]))->toBeTrue()
         ->and(Schema::hasColumns('pls_reviews', [
             'review_group_id',
             'legislature_id',

@@ -542,9 +542,13 @@ test('email mismatch prevents invitation acceptance', function () {
 });
 
 test('review group does not grant access by itself', function () {
-    $owner = User::factory()->reviewer()->create();
-    $outsider = User::factory()->reviewer()->create();
-    ['reviewGroup' => $reviewGroup, 'legislature' => $legislature] = plsHierarchy();
+    ['country' => $country, 'reviewGroup' => $reviewGroup, 'legislature' => $legislature] = plsHierarchy();
+    $owner = User::factory()->reviewer()->create([
+        'country_id' => $country->id,
+    ]);
+    $outsider = User::factory()->reviewer()->create([
+        'country_id' => $country->id,
+    ]);
 
     $ownersReview = plsReview([
         'created_by' => $owner->id,
@@ -572,8 +576,10 @@ test('review group does not grant access by itself', function () {
 });
 
 test('reviewer can access create page and create reviews', function () {
-    $reviewer = User::factory()->reviewer()->create();
     $hierarchy = plsHierarchy();
+    $reviewer = User::factory()->reviewer()->create([
+        'country_id' => $hierarchy['country']->id,
+    ]);
 
     $this->actingAs($reviewer)
         ->get(route('pls.reviews.create'))
@@ -581,6 +587,7 @@ test('reviewer can access create page and create reviews', function () {
 
     Livewire::actingAs($reviewer)
         ->test(CreateReviewPage::class)
+        ->set('jurisdiction_id', (string) $hierarchy['jurisdiction']->id)
         ->set('legislature_id', (string) $hierarchy['legislature']->id)
         ->set('review_group_id', (string) $hierarchy['reviewGroup']->id)
         ->set('title', 'Reviewer-created PLS review')
