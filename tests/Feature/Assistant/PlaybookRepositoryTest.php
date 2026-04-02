@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Assistant\Actions\ImportAssistantTabPlaybooksFromDocs;
 use App\Domain\Assistant\AssistantTabPlaybook;
 use App\Domain\Assistant\AssistantTabPlaybookVersion;
 use App\Models\User;
@@ -103,4 +104,36 @@ test('context builder uses the active db playbook and changes version metadata w
         ->and($updatedContext['intro'])->toContain('This intro should now come from the active database version.')
         ->and($updatedContext['playbook_version'])->toBe('db:v2:workflow')
         ->and($updatedContext['context'])->toContain('Active tab: Workflow');
+});
+
+test('compiled playbook seed data can be imported without the source docs being present', function () {
+    $docsPath = base_path('.codex/PLS Docs');
+    $hiddenDocsPath = base_path('.codex/PLS Docs.__tmp_for_test');
+
+    if (is_dir($hiddenDocsPath)) {
+        rename($hiddenDocsPath, $docsPath);
+    }
+
+    expect(is_dir($docsPath))->toBeTrue();
+
+    rename($docsPath, $hiddenDocsPath);
+
+    try {
+        AssistantTabPlaybookVersion::query()->delete();
+        AssistantTabPlaybook::query()->delete();
+
+        app(ImportAssistantTabPlaybooksFromDocs::class)->handle();
+
+        $playbook = AssistantTabPlaybook::query()
+            ->with('activeVersion')
+            ->where('tab_key', 'workflow')
+            ->firstOrFail();
+
+        expect($playbook->label)->toBe('Workflow')
+            ->and($playbook->activeVersion)->not->toBeNull()
+            ->and($playbook->activeVersion->role)->toBe('Process Guide')
+            ->and($playbook->activeVersion->intro)->toContain("You're in Workflow.");
+    } finally {
+        rename($hiddenDocsPath, $docsPath);
+    }
 });
