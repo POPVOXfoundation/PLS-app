@@ -23,6 +23,7 @@ class ReviewAssistantAgent implements Agent, Conversational
      *     rules: list<string>,
      *     guardrails: list<string>,
      *     allowed_capabilities: list<string>,
+     *     disallowed_capabilities: list<string>,
      *     response_style: list<string>
      * }  $playbook
      */
@@ -44,6 +45,9 @@ class ReviewAssistantAgent implements Agent, Conversational
             'System rules:'.PHP_EOL.$this->bullets($this->systemRules),
             'Tab objectives:'.PHP_EOL.$this->bullets($this->playbook['objectives']),
             'Allowed capabilities:'.PHP_EOL.$this->bullets($this->playbook['allowed_capabilities']),
+            $this->playbook['disallowed_capabilities'] !== []
+                ? 'Disallowed capabilities:'.PHP_EOL.$this->bullets($this->playbook['disallowed_capabilities'])
+                : null,
             'Tab rules:'.PHP_EOL.$this->bullets($this->playbook['rules']),
             'Guardrails:'.PHP_EOL.$this->bullets($this->playbook['guardrails']),
             'Response style:'.PHP_EOL.$this->bullets($this->playbook['response_style']),

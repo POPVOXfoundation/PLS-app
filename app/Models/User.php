@@ -80,6 +80,11 @@ class User extends Authenticatable
         return in_array($this->role, UserRole::cases(), true);
     }
 
+    public function canManageAssistantPlaybooks(): bool
+    {
+        return $this->role === UserRole::Admin;
+    }
+
     public function ownedPlsReviews(): BelongsToMany
     {
         return $this->belongsToMany(PlsReview::class, 'pls_review_memberships')

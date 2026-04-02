@@ -3,6 +3,7 @@
 use App\Domain\Reviews\PlsReview;
 use App\Http\Controllers\AcceptReviewInvitationController;
 use App\Livewire\Dashboard;
+use App\Livewire\Pls\Assistant\TabPlaybooks;
 use App\Livewire\Pls\Reviews\AnalysisPage;
 use App\Livewire\Pls\Reviews\CollaboratorsPage;
 use App\Livewire\Pls\Reviews\ConsultationsPage;
@@ -21,6 +22,9 @@ Route::get('pls/invitations/{token}/accept', AcceptReviewInvitationController::c
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', Dashboard::class)->name('dashboard');
+    Route::get('pls/assistant/playbooks', TabPlaybooks::class)
+        ->middleware('can:manageAssistantPlaybooks')
+        ->name('pls.assistant.playbooks');
     Route::get('pls/reviews', Index::class)->can('viewAny', PlsReview::class)->name('pls.reviews.index');
     Route::get('pls/reviews/create', Create::class)->can('create', PlsReview::class)->name('pls.reviews.create');
     Route::prefix('pls/reviews/{review}')->group(function () {

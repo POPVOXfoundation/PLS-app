@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Domain\Reviews\PlsReview;
+use App\Models\User;
 use App\Policies\PlsReviewPolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
@@ -35,6 +36,7 @@ class AppServiceProvider extends ServiceProvider
     protected function configureDefaults(): void
     {
         Gate::policy(PlsReview::class, PlsReviewPolicy::class);
+        Gate::define('manageAssistantPlaybooks', fn (User $user): bool => $user->canManageAssistantPlaybooks());
 
         Date::use(CarbonImmutable::class);
 

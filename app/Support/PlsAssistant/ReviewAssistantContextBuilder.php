@@ -32,6 +32,7 @@ class ReviewAssistantContextBuilder
      *     intro: string,
      *     playbook: array{
      *         allowed_capabilities: list<string>,
+     *         disallowed_capabilities: list<string>,
      *         guardrails: list<string>,
      *         intro: string,
      *         objectives: list<string>,
@@ -113,6 +114,7 @@ class ReviewAssistantContextBuilder
     /**
      * @return array{
      *     allowed_capabilities: list<string>,
+     *     disallowed_capabilities: list<string>,
      *     guardrails: list<string>,
      *     intro: string,
      *     objectives: list<string>,
@@ -134,17 +136,7 @@ class ReviewAssistantContextBuilder
 
     public function workspaceLabel(string $workspaceKey): string
     {
-        return match ($this->resolveWorkspaceKey($workspaceKey)) {
-            'workflow' => 'Workflow',
-            'collaborators' => 'Collaborators',
-            'legislation' => 'Legislation',
-            'documents' => 'Documents',
-            'stakeholders' => 'Stakeholders',
-            'consultations' => 'Consultations',
-            'analysis' => 'Analysis',
-            'reports' => 'Reports',
-            default => Str::headline($workspaceKey),
-        };
+        return $this->playbooks->workspaceLabel($workspaceKey);
     }
 
     public function resolveWorkspaceKey(string $workspaceKey): string
