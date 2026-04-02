@@ -48,5 +48,14 @@
                 </flux:menu.item>
             </form>
         </flux:menu.radio.group>
+
+        @can('manageAssistantPlaybooks')
+            <flux:menu.separator />
+            <flux:menu.radio.group>
+                <flux:menu.item :href="route('pls.assistant.playbooks')" icon="sparkles" wire:navigate>
+                    {{ __('Assistant playbooks') }}
+                </flux:menu.item>
+            </flux:menu.radio.group>
+        @endcan
     </flux:menu>
 </flux:dropdown>
