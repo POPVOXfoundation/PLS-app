@@ -124,7 +124,9 @@ function makeValidationReview(): PlsReview
         'name' => 'Governance and Oversight Office',
         'type' => ReviewGroupType::Committee,
     ]);
-    $owner = User::factory()->reviewer()->create();
+    $owner = User::factory()->reviewer()->create([
+        'country_id' => $country->id,
+    ]);
 
     return app(CreatePlsReview::class)->create(
         CreatePlsReviewData::from([

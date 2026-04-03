@@ -184,7 +184,9 @@ function createReviewHierarchy(): array
         'name' => 'Legal and Parliamentary Affairs Office',
         'type' => ReviewGroupType::Committee,
     ]);
-    $owner = User::factory()->reviewer()->create();
+    $owner = User::factory()->reviewer()->create([
+        'country_id' => $country->id,
+    ]);
 
     $review = app(CreatePlsReview::class)->create(
         new CreatePlsReviewData(

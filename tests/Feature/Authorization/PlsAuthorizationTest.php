@@ -1,55 +1,36 @@
 <?php
 
 use App\Ai\Agents\ReviewDocumentExtractorAgent;
-use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Domain\Reviews\PlsReviewMembership;
+use App\Jobs\ProcessReviewDocument;
 use App\Livewire\Pls\Reviews\CollaboratorsPage;
 use App\Livewire\Pls\Reviews\Create as CreateReviewPage;
 use App\Livewire\Pls\Reviews\DocumentsPage;
 use App\Models\User;
-use App\Support\PlsAssistant\AssistantSourceExtractionResult;
-use App\Support\PlsAssistant\AssistantSourceTextExtractor;
+use App\Notifications\ReviewInvitationNotification;
 use App\Support\PlsAssistant\AssistantSourceTextExtractorFactory;
 use App\Support\Toast;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
 test('creator can access and edit their review workspace', function () {
     Storage::fake(config('filesystems.default'));
+    Queue::fake();
 
     $owner = User::factory()->reviewer()->create();
     $review = plsReview([
         'created_by' => $owner->id,
     ]);
 
-    $extractor = new class implements AssistantSourceTextExtractor
-    {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
-        {
-            return AssistantSourceExtractionResult::completed(
-                driver: 'stub',
-                method: 'stubbed shared extractor',
-                content: 'Owner working paper content.',
-            );
-        }
-    };
-
     $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
-    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    $factory->shouldReceive('make')->never();
     app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
-    ReviewDocumentExtractorAgent::fake([[
-        'title' => 'Owner working paper',
-        'document_type' => DocumentType::GroupReport->value,
-        'summary' => 'Owner workspace upload.',
-        'key_themes' => ['owner upload'],
-        'notable_excerpts' => [],
-        'important_dates' => [],
-        'warnings' => [],
-    ]]);
+    ReviewDocumentExtractorAgent::fake();
 
     $this->actingAs($owner)
         ->get(route('pls.reviews.workflow', $review))
@@ -61,7 +42,9 @@ test('creator can access and edit their review workspace', function () {
             UploadedFile::fake()->create('owner-working-paper.pdf', 256, 'application/pdf'),
         ])
         ->assertHasNoErrors()
-        ->assertSee('Owner working paper');
+        ->assertSee('Queued');
+
+    Queue::assertPushed(ProcessReviewDocument::class);
 });
 
 test('created_by alone does not grant access without a membership record', function () {
@@ -103,6 +86,7 @@ test('non-member cannot access a review', function () {
 
 test('contributor can access and edit a review', function () {
     Storage::fake(config('filesystems.default'));
+    Queue::fake();
 
     $owner = User::factory()->reviewer()->create();
     $contributor = User::factory()->reviewer()->create();
@@ -116,30 +100,10 @@ test('contributor can access and edit a review', function () {
         'invited_by' => $owner->id,
     ]);
 
-    $extractor = new class implements AssistantSourceTextExtractor
-    {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
-        {
-            return AssistantSourceExtractionResult::completed(
-                driver: 'stub',
-                method: 'stubbed shared extractor',
-                content: 'Contributor working paper content.',
-            );
-        }
-    };
-
     $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
-    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    $factory->shouldReceive('make')->never();
     app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
-    ReviewDocumentExtractorAgent::fake([[
-        'title' => 'Contributor working paper',
-        'document_type' => DocumentType::GroupReport->value,
-        'summary' => 'Contributor workspace upload.',
-        'key_themes' => ['contributor upload'],
-        'notable_excerpts' => [],
-        'important_dates' => [],
-        'warnings' => [],
-    ]]);
+    ReviewDocumentExtractorAgent::fake();
 
     $this->actingAs($contributor)
         ->get(route('pls.reviews.workflow', $review))
@@ -151,7 +115,9 @@ test('contributor can access and edit a review', function () {
             UploadedFile::fake()->create('contributor-working-paper.pdf', 256, 'application/pdf'),
         ])
         ->assertHasNoErrors()
-        ->assertSee('Contributor working paper');
+        ->assertSee('Queued');
+
+    Queue::assertPushed(ProcessReviewDocument::class);
 });
 
 test('viewer can access but cannot edit a review', function () {
@@ -255,7 +221,7 @@ test('owner can invite unknown email as contributor', function () {
         'invited_by' => $owner->id,
     ]);
 
-    Notification::assertSentOnDemand(\App\Notifications\ReviewInvitationNotification::class);
+    Notification::assertSentOnDemand(ReviewInvitationNotification::class);
 });
 
 test('owner can invite unknown email as viewer', function () {
