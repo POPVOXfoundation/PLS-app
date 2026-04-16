@@ -10,7 +10,7 @@ This structure is intentional. It keeps the model focused on the real unit of wo
 
 ## Ownership Model
 
-A `PlsReview` is owned by the user who creates it.
+A `PlsReview` has memberships (`PlsReviewMembership`) with roles: **Owner**, **Contributor**, and **Viewer**. The Owner role controls management access to the review. The `created_by` field is kept in sync with the Owner membership, but access control is membership-based rather than derived from the creator field alone.
 
 Ownership is distinct from organizational context. A review may be associated with a `ReviewGroup`, but that group does not own the review. It represents where the review is situated within an institution, not who is responsible for it.
 
@@ -19,6 +19,20 @@ This separation allows:
 - reviews to exist before being assigned to a group
 - reviews to be managed by individuals or teams outside formal review-group structures
 - flexibility across different parliamentary and organizational models
+
+## Collaborators and Access Control
+
+Access to a review is managed through `PlsReviewMembership`.
+
+Each membership links a user to a review with one of three roles:
+
+- **Owner**: full management access to the review. There is exactly one Owner per review. The Owner cannot be demoted or removed.
+- **Contributor**: can view and edit review content but cannot manage membership or delete the review.
+- **Viewer**: read-only access to the review and its contents.
+
+Visibility is membership-based: only users with a membership record can view a review.
+
+New collaborators are added through `PlsReviewInvitation`. An invitation stores the invitee's email, the intended role, and a unique token. The invitee accepts the invitation via a token-based acceptance flow, which creates the corresponding membership record.
 
 ## Core Entity: PlsReview
 
@@ -84,7 +98,7 @@ Documents belong to a review because source material only makes sense in the con
 
 `DocumentChunk` represents a smaller piece of a document.
 
-Documents may be chunked after upload so the system can work with them in smaller units for search, retrieval, summarization, or later AI features. A chunk is not a standalone business record. It exists only as part of a document.
+Documents are chunked after upload so the system can work with them in smaller units. This is fully operational: chunks are used for relevance-scored retrieval by the AI assistant, which matches chunk content against user prompts to surface the most relevant passages. A chunk is not a standalone business record. It exists only as part of a document.
 
 ### EvidenceItem
 
@@ -180,6 +194,30 @@ Together, these records support engagement tracking:
 - consultations record planned or completed engagement activities
 - submissions capture what participants actually provided
 
+## AI Grounding Layer
+
+This layer captures reference material used by the AI assistant for grounded, evidence-based responses.
+
+### AssistantSourceDocument
+
+`AssistantSourceDocument` represents a reference document used for AI grounding.
+
+Each source document has one of three scopes:
+
+- **Global**: WFD methodology documents that apply across all reviews
+- **Jurisdiction**: country and parliament-specific guidance tied to a particular institutional context
+- **Review**: documents specific to a single review
+
+Key fields include:
+
+- `title`: the name of the source document
+- `scope`: global, jurisdiction, or review
+- `content`: the full text of the source material
+- `summary`: a shorter description of what the document covers
+- optional institutional context: `country_id`, `jurisdiction_id`, `legislature_id`
+
+This structure allows the AI assistant to draw from a three-layer grounding model: global methodology, jurisdiction-specific guidance, and review-specific uploaded documents.
+
 ## Legislation
 
 This layer captures what law is under review and what that law was meant to achieve.
@@ -201,6 +239,9 @@ Objectives belong to both the legislation record and the review context so they 
 ## Relationships Overview
 
 - A `PlsReview` has many `PlsReviewStep` records.
+- A `PlsReview` has many `PlsReviewMembership` records.
+- A `PlsReviewMembership` belongs to a `User` and a `PlsReview`.
+- A `PlsReview` has many `PlsReviewInvitation` records.
 - A `PlsReview` has many `Document` records.
 - A `Document` has many `DocumentChunk` records.
 - A `PlsReview` has many `EvidenceItem` records.
@@ -232,6 +273,7 @@ The basic rule is that the review is the required anchor. Most records are not m
 Required relationships:
 
 - `PlsReviewStep` requires a `PlsReview`
+- `PlsReviewMembership` requires both a `PlsReview` and a `User`
 - `Document` requires a `PlsReview`
 - `DocumentChunk` requires a `Document`
 - `EvidenceItem` requires a `PlsReview`
@@ -282,21 +324,21 @@ Separation of evidence, analysis, and reporting:
 
 Documents and evidence are not the same as findings. Findings are not the same as recommendations. Reports are not the same as government responses. Keeping these layers separate preserves traceability.
 
-Designed for future AI features:
+Designed for AI features:
 
-The model is organized so an AI system can understand what stage the review is in, what source material exists, what conclusions have already been reached, and what outputs still need to be drafted.
+The model is organized so the AI system can understand what stage the review is in, what source material exists, what conclusions have already been reached, and what outputs still need to be drafted. These capabilities are now operational.
 
 ## Why This Model Supports AI
 
-This structure is useful for future AI work because it gives the system clear anchors instead of one large blob of text.
+This structure is useful for AI work because it gives the system clear anchors instead of one large blob of text.
 
 Document retrieval:
 
-Documents and document chunks create a clean foundation for search, summarization, and retrieval of relevant source passages.
+Documents and document chunks provide a clean foundation for search, summarization, and retrieval of relevant source passages. Chunk-based relevance scoring is operational and used by the AI assistant.
 
 Step-aware assistance:
 
-Because each review has explicit workflow steps and a current step, AI assistance can be tailored to the phase of work the team is actually in.
+Because each review has explicit workflow steps and a current step, AI assistance is tailored to the phase of work the team is actually in.
 
 Generating findings and recommendations:
 
@@ -304,8 +346,8 @@ Evidence items, findings, and recommendations are distinct records, which makes 
 
 Drafting reports:
 
-Reports sit on top of the earlier layers, so AI can draw from legislation, consultation activity, evidence, findings, and recommendations when helping draft formal outputs.
+Reports sit on top of the earlier layers, so the AI draws from legislation, consultation activity, evidence, findings, and recommendations when helping draft formal outputs.
 
 ## Summary
 
-This document defines the core domain model for the PLS Bot prototype with `PlsReview` as the central record. It explains the main entities, how they relate to one another, which links are required or optional, and how the overall structure supports both the current PLS workflow and future AI-assisted features.
+This document defines the core domain model for the PLS Bot prototype with `PlsReview` as the central record. It explains the main entities, how they relate to one another, which links are required or optional, and how the overall structure supports both the current PLS workflow and the operational AI-assisted features.

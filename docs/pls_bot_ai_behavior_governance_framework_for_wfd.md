@@ -40,6 +40,7 @@ The AI is intended to help users:
 - map stakeholders and consultation needs
 - organize evidence into draft findings
 - support report drafting in a clearly provisional way
+- provide responses grounded in a three-layer evidence model: global methodology (WFD guides), jurisdiction-specific guidance, and review-specific uploaded documents
 
 The AI is therefore a support layer for inquiry design, evidence organization, and workflow guidance.
 
@@ -61,6 +62,8 @@ This is a design requirement, not an edge case.
 ---
 
 ## 5. Tab-Aware AI Behavior
+
+This capability is fully implemented. Each tab has a configured playbook that defines the assistant's role, objectives, allowed and disallowed capabilities, rules, guardrails, and response style for that context.
 
 A core design feature of the PLS Bot is that the AI panel remains present throughout the application but changes its behavior depending on the active tab.
 
@@ -91,7 +94,9 @@ In the analysis and reporting area, the AI behaves as a drafting and structuring
 
 ## 6. Allowed vs. Not Allowed by Tab
 
-To support trust and consistency, the AI will operate within explicit capability boundaries in each tab.
+To support trust and consistency, the AI operates within explicit capability boundaries in each tab.
+
+These boundaries are enforced by a pre-LLM refusal guard that blocks out-of-scope requests before they reach the AI model. This reduces token usage and ensures safety by preventing disallowed interactions at the earliest possible point.
 
 For example:
 - in the workflow tab, it may explain stages and suggest next steps, but it should not generate findings
@@ -110,6 +115,12 @@ This means:
 - the AI should rely on uploaded documents and approved source materials
 - the AI should distinguish between what is present and what is missing
 - the AI should not infer certainty where evidence is incomplete
+
+The AI assistant uses a three-layer grounding model to anchor its responses in available evidence:
+
+- **Global layer**: WFD methodology documents that provide the foundational PLS framework
+- **Jurisdiction layer**: country and parliament-specific guidance tailored to the institutional context of the review
+- **Review layer**: uploaded documents that have been extracted and chunked for relevance-scored retrieval, with a token budget per document to manage context size
 
 If a user asks the AI for something the system cannot responsibly provide, the expected behavior is explicit limitation language, such as:
 
@@ -141,7 +152,9 @@ The final result remains the responsibility of the practitioner or inquiry team.
 
 ## 9. Administrative Control and Continuous Improvement
 
-A key feature of the design is that certain aspects of AI behavior will be configurable by admin users.
+A key feature of the design is that AI behavior is configurable by admin users.
+
+The playbook system is now database-driven, allowing admin users to update AI behavior per tab without code changes. Playbook versions are tracked for audit purposes.
 
 This means that over time, the system can reflect:
 - institutional learning
@@ -151,7 +164,7 @@ This means that over time, the system can reflect:
 
 Importantly, this is not intended to create an uncontrolled prompt-editing environment.
 
-Instead, the system is designed around structured, versioned configuration by tab. Admin users will be able to update defined fields such as:
+Instead, the system is designed around structured, versioned configuration by tab. Admin users can update defined fields such as:
 - role description
 - objectives
 - suggested prompts
@@ -221,4 +234,18 @@ Its defining characteristics are:
 - admin-configurable evolution over time
 
 This approach is intended to make the assistant more useful, more trustworthy, and more adaptable to the needs of practitioners and institutions working in PLS.
+
+---
+
+## 14. Feedback Collection
+
+The PLS Bot includes a feedback collection mechanism through the Volet feedback widget.
+
+This is a floating widget available on every page that allows users to submit feedback at any time. Users can submit:
+
+- bug reports
+- improvement suggestions
+- general feedback
+
+Submitted feedback is stored in the database and triggers email notifications to administrators. This provides a continuous channel for user input without interrupting the workflow.
 

@@ -6,12 +6,14 @@ This repository contains the prototype implementation of the **AI‑powered Post
 
 The PLS Bot is a practical digital assistant designed to help parliamentary staff and legislative researchers conduct post‑legislative scrutiny exercises more efficiently and with greater confidence.
 
-The system supports the early stages of PLS work by helping users:
+The system supports PLS work by helping users:
 
-- Identify the original **intent of legislation**
-- Suggest **evaluation questions** for scrutiny
-- Generate draft **Terms of Reference** for reviews
-- Outline **implementation milestones** and review workflows
+- Move through a structured **11‑step PLS workflow**
+- Upload and analyze **legislation and supporting documents**
+- Map **stakeholders** and track **consultation activity**
+- Organize evidence into **findings and recommendations**
+- Draft and manage **review reports**
+- Interact with a **tab‑aware AI assistant** grounded in uploaded documents, jurisdiction‑specific guidance, and WFD methodology
 
 The goal of this prototype is to demonstrate how AI can support structured oversight of legislation while keeping human experts firmly in control of the process.
 
@@ -19,7 +21,7 @@ The goal of this prototype is to demonstrate how AI can support structured overs
 
 ## Project Directive
 
-POPVOX Foundation is engaged to design and deliver a functional prototype of the AI powered Post‑Legislative Scrutiny (PLS) Bot in collaboration with WFD staff and POPVOX Inc. The PLS Bot is a practical digital assistant intended to help parliamentary staff and researchers structure post‑legislative scrutiny exercises faster and more confidently, by identifying legislative intent, suggesting evaluation questions, generating draft Terms of Reference, and outlining implementation milestones.
+POPVOX Foundation is engaged to design and deliver a functional prototype of the AI powered Post‑Legislative Scrutiny (PLS) Bot in collaboration with WFD staff and POPVOX Inc. The PLS Bot is a practical digital assistant intended to help parliamentary staff and researchers structure post‑legislative scrutiny exercises faster and more confidently, guided by a structured workflow and supported by an AI assistant that adapts to each phase of the review.
 
 ---
 
@@ -27,14 +29,14 @@ POPVOX Foundation is engaged to design and deliver a functional prototype of the
 
 This application is not intended to replace parliamentary judgement. Instead, it provides tools that assist staff with organizing and structuring review processes.
 
-The prototype focuses on:
+The prototype includes:
 
-- Structuring PLS reviews and review workspaces
-- Tracking review workflow steps
-- Capturing evidence, findings, and recommendations
-- Generating structured outputs for legislative scrutiny
-
-The interface is designed to support a typical PLS workflow from review initiation through evidence gathering and reporting.
+- **Review workspaces** organized into tabs: Workflow, Collaborators, Legislation, Documents, Stakeholders, Consultations, Analysis, and Reports
+- **Membership‑based access control** with Owner, Contributor, and Viewer roles
+- **Document processing** with text extraction (pdftotext / AWS Textract) and chunking for AI retrieval
+- **Tab‑aware AI assistant** with per‑tab playbooks, a pre‑LLM refusal guard, and a three‑layer grounding model (global WFD methodology, jurisdiction guidance, review documents)
+- **Configurable AI behavior** through a database‑driven playbook system with version tracking
+- **Feedback collection** via an integrated widget for bug reports, improvement suggestions, and general feedback
 
 ---
 
@@ -44,33 +46,21 @@ This prototype is built using the Laravel ecosystem and modern server‑driven U
 
 Core components:
 
-- **Laravel** – application framework
-- **Livewire** – reactive UI without a JavaScript SPA
+- **Laravel 13** – application framework
+- **Livewire 4** – reactive UI without a JavaScript SPA
 - **Flux UI** – component library used for interface elements
-- **Tailwind CSS** – styling system
-- **TypeScript** – frontend enhancements
-
-This prototype is designed so the POPVOX team can quickly test ideas and improve the tool as we learn more about how parliamentary staff actually conduct post‑legislative scrutiny.
+- **Tailwind CSS 4** – styling system
+- **Laravel AI** – LLM integration for the AI assistant
 
 ---
 
-## Development Goals
+## Documentation
 
-The prototype aims to explore how AI can support legislative oversight workflows while maintaining transparency and human control.
+Additional documentation is available in the `docs/` directory:
 
-Current development focuses on:
-
-- Review workflow management
-- Document and evidence organization
-- Analytical support tools for PLS research
-- Draft generation for review planning
-
-Future phases may expand capabilities around:
-
-- automated extraction of legislative intent
-- evidence summarization
-- guided review planning
-- AI‑assisted report drafting
+- **[Domain Model](docs/pls-domain-model.md)** – core entities, relationships, and data architecture
+- **[Workflow Model](docs/pls-workflow.md)** – the 11‑step PLS process and how it is modeled
+- **[AI Behavior & Governance](docs/pls_bot_ai_behavior_governance_framework_for_wfd.md)** – how the AI assistant behaves, its boundaries, and the governance framework
 
 ---
 

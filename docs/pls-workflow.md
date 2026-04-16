@@ -8,19 +8,20 @@ The central record is `PlsReview`.
 
 A review represents one PLS inquiry and stores:
 
-- ownership via `created_by_user_id`
+- ownership via `created_by`
 - optional organizational context via `review_group_id`
 - broader institutional context through `legislature_id`, `jurisdiction_id`, and `country_id`
 - review metadata such as `title`, `slug`, `description`, and `start_date`
 - lifecycle state through `status`, `current_step_number`, and `completed_at`
 
-A review is **owned by the user who creates it**.
+Ownership is managed through `PlsReviewMembership` with an **Owner** role. The `created_by` field is kept in sync with the Owner membership, but access control is membership-based rather than derived from the creator field alone.
 
-Review status is modeled with three operational states:
+Review status is modeled with four operational states:
 
 - `draft`
 - `active`
 - `completed`
+- `archived`
 
 When a review is created, it starts as:
 
@@ -209,7 +210,7 @@ Each document stores metadata such as:
 
 The workspace supports direct file uploads for review documents.
 
-Documents may also be chunked into `document_chunks` as part of future retrieval and AI features.
+Documents are extracted (via pdftotext or AWS Textract), chunked into approximately 1,200 character segments stored in `document_chunks`, and used for AI-assisted retrieval with relevance scoring against user prompts.
 
 ## Reporting and Government Response
 
@@ -236,7 +237,7 @@ The system is designed around a few core principles:
 - Separation of concerns: evidence, analysis, and reporting are distinct layers
 - Human-led, AI-assisted: the system supports users without replacing judgment
 
-## Why This Structure Helps Future AI Features
+## Why This Structure Supports AI Features
 
 The model provides strong anchors for AI features:
 
@@ -245,7 +246,13 @@ The model provides strong anchors for AI features:
 - uploaded and chunked documents for retrieval
 - findings, recommendations, and reports as semantic layers
 
-This supports future capabilities such as:
+Tab-aware assistance is live, with the AI assistant adapting its behavior based on the active workspace tab. Document retrieval with chunk-based relevance scoring is operational, allowing the assistant to surface the most relevant passages in response to user prompts. The assistant uses a three-layer grounding model:
+
+- **Global layer**: WFD methodology documents
+- **Jurisdiction layer**: country and parliament-specific guidance
+- **Review layer**: review-specific uploaded documents
+
+These capabilities support:
 
 - step-specific assistance
 - document summarization and retrieval
