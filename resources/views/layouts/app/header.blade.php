@@ -95,16 +95,24 @@
             @endif
         </div>
 
-        @volet
-        <script>
-            document.addEventListener('DOMContentLoaded', () => {
+        <div id="volet"
+             data-icon="{{ config('volet.icon') }}"
+             data-close-icon="{{ config('volet.close-icon') }}"
+        ></div>
+        <script data-navigate-once>
+            document.getElementById('volet')?.setAttribute('data-labels', @js(json_encode(trans('volet::volet'))));
+        </script>
+        <script src="{{ asset('vendor/volet/volet-app.js') }}" data-navigate-once></script>
+        <script data-navigate-once>
+            (function() {
                 const voletEl = document.getElementById('volet');
-                if (!voletEl) return;
-                new MutationObserver(() => {
-                    const buttons = voletEl.querySelectorAll('.volet-feature-button');
-                    if (buttons.length === 1) buttons[0].click();
-                }).observe(voletEl, { childList: true, subtree: true });
-            });
+                if (voletEl) {
+                    new MutationObserver(() => {
+                        const buttons = voletEl.querySelectorAll('.volet-feature-button');
+                        if (buttons.length === 1) buttons[0].click();
+                    }).observe(voletEl, { childList: true, subtree: true });
+                }
+            })();
         </script>
         @fluxScripts
     </body>

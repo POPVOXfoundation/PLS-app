@@ -14,7 +14,7 @@
 
 @vite(['resources/css/app.css', 'resources/js/app.js'])
 @fluxAppearance
-@voletStyles
+<link rel="stylesheet" href="{{ asset('vendor/volet/volet-default.css') }}">
 <style>
     :root {
         --volet-primary: rgb(124 58 237);
@@ -65,5 +65,8 @@
     #volet .volet-feedback-textarea:focus {
         border-color: rgb(124 58 237);
         box-shadow: 0 0 0 1px rgb(124 58 237);
+    }
+    #volet .volet-panel-header-back {
+        display: none;
     }
 </style>
