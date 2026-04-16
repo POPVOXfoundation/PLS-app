@@ -95,10 +95,12 @@
             @endif
         </div>
 
-        <div id="volet"
-             data-icon="{{ config('volet.icon') }}"
-             data-close-icon="{{ config('volet.close-icon') }}"
-        ></div>
+        @persist('volet-widget')
+            <div id="volet"
+                 data-icon="{{ config('volet.icon') }}"
+                 data-close-icon="{{ config('volet.close-icon') }}"
+            ></div>
+        @endpersist
         <script data-navigate-once>
             document.getElementById('volet')?.setAttribute('data-labels', @js(json_encode(trans('volet::volet'))));
         </script>
