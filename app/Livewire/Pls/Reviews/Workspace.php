@@ -8,10 +8,12 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Attributes\On;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
 class Workspace extends Component
 {
     use AuthorizesRequests;
+    use WithFileUploads;
 
     public PlsReview $review;
 
