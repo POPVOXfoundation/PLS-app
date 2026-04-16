@@ -160,19 +160,35 @@ class ReviewAssistantGroundingRepository
         return $review->documents
             ->reject(fn (Document $document): bool => $excludeLegislationSources && $document->document_type === DocumentType::LegislationText)
             ->map(function (Document $document) use ($tokens): array {
-                $chunk = $document->relationLoaded('chunks')
+                $scoredChunks = $document->relationLoaded('chunks') && $document->chunks->isNotEmpty()
                     ? $document->chunks
-                        ->sortByDesc(fn ($chunk) => $this->scoreText((string) $chunk->content, $tokens))
-                        ->first()
-                    : null;
+                        ->map(fn ($chunk) => [
+                            'content' => (string) $chunk->content,
+                            'score' => $this->scoreText((string) $chunk->content, $tokens),
+                            'token_count' => $chunk->token_count ?: (int) ceil(mb_strlen((string) $chunk->content) / 4),
+                        ])
+                        ->sortByDesc('score')
+                    : collect();
 
-                $excerpt = $chunk?->content ?: ($document->summary ?? '');
+                $budget = 4000;
+                $used = 0;
+                $selectedChunks = [];
+
+                foreach ($scoredChunks as $chunk) {
+                    if ($used + $chunk['token_count'] > $budget) {
+                        break;
+                    }
+                    $selectedChunks[] = $chunk['content'];
+                    $used += $chunk['token_count'];
+                }
+
+                $excerpt = $selectedChunks !== [] ? implode("\n\n", $selectedChunks) : ($document->summary ?? '');
                 $score = $this->scoreText($document->title.' '.$excerpt, $tokens);
 
                 return [
                     'label' => $document->title,
                     'source' => 'review',
-                    'excerpt' => Str::limit(trim($excerpt), 280),
+                    'excerpt' => trim($excerpt),
                     'score' => $score,
                 ];
             })
@@ -219,7 +235,7 @@ class ReviewAssistantGroundingRepository
             ->sortByDesc(fn (string $section): int => $this->scoreText($section, $tokens))
             ->first();
 
-        return Str::limit($excerpt, 280);
+        return Str::limit($excerpt, 1200);
     }
 
     private function jurisdictionContextScore(AssistantSourceDocument $document, PlsReview $review): int

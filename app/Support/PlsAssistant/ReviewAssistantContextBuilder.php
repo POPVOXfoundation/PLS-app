@@ -659,7 +659,7 @@ class ReviewAssistantContextBuilder
             ->map(fn (array $reference): string => sprintf(
                 '%s: %s',
                 $reference['label'],
-                Str::limit($reference['excerpt'], 180),
+                $reference['excerpt'],
             ))
             ->implode(' | ');
     }
