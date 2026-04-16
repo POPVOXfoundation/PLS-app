@@ -95,6 +95,17 @@
             @endif
         </div>
 
+        @volet
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const voletEl = document.getElementById('volet');
+                if (!voletEl) return;
+                new MutationObserver(() => {
+                    const buttons = voletEl.querySelectorAll('.volet-feature-button');
+                    if (buttons.length === 1) buttons[0].click();
+                }).observe(voletEl, { childList: true, subtree: true });
+            });
+        </script>
         @fluxScripts
     </body>
 </html>
