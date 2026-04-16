@@ -49,12 +49,12 @@
                     </div>
                 </header>
 
-                <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] 2xl:grid-cols-[minmax(0,1fr)_26rem]">
+                <div class="grid gap-6 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
                     <main class="min-w-0 space-y-6">
                         {{ $slot }}
                     </main>
 
-                    <aside class="xl:sticky xl:top-24 xl:self-start">
+                    <aside class="xl:sticky xl:top-[6.5rem] xl:self-start">
                         <livewire:pls.reviews.assistant-sidebar
                             :review="$review"
                             :workspace-key="$currentWorkspaceKey"

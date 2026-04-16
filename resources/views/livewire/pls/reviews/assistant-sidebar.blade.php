@@ -1,4 +1,4 @@
-<div class="flex max-h-[calc(100vh-16rem)] min-h-0 flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_18px_45px_-28px_rgba(15,23,42,0.16)] dark:border-zinc-700 dark:bg-zinc-900 dark:shadow-none" data-assistant-sidebar x-data="{ pendingMessage: '' }">
+<div class="flex h-[calc(100vh-16rem)] min-h-0 flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_18px_45px_-28px_rgba(15,23,42,0.16)] dark:border-zinc-700 dark:bg-zinc-900 dark:shadow-none" data-assistant-sidebar x-data="{ pendingMessage: '' }">
     <div class="border-b border-violet-300/30 bg-gradient-to-r from-slate-500 via-indigo-500 to-violet-500 px-4 py-2.5">
         <div class="flex items-center gap-2">
             <flux:heading size="base" class="!text-white">{{ __('PLS Assistant') }}</flux:heading>

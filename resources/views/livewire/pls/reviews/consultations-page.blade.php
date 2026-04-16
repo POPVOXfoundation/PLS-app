@@ -1,5 +1,5 @@
 <div class="space-y-8">
-    <div class="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.95fr)]">
+    <div class="grid gap-8 xl:grid-cols-1">
         <flux:card class="space-y-6">
             <div class="flex items-center justify-between gap-4">
                 <flux:heading size="lg">{{ __('Consultation activity') }}</flux:heading>
