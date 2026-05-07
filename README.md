@@ -1,5 +1,5 @@
 # PLS Bot Prototype
-![Build Status](https://app.chipperci.com/projects/eb59b92e-aa7f-4a5d-a79b-e21c8f530a9b/status/main?v=2)
+![Build Status](https://img.shields.io/endpoint?url=https://app.chipperci.com/projects/eb59b92e-aa7f-4a5d-a79b-e21c8f530a9b/status/main)
 
 ## Overview
 
