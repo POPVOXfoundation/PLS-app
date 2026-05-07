@@ -1,0 +1,97 @@
+version: 1
+
+# Pick your PHP version (and Node if you need it)
+environment:
+  php: 8.4
+  node: 20
+
+# Bring up PostgreSQL and Redis services
+services:
+  - postgres: 16   # PostgreSQL 16.x with pgvector support
+  - redis:         # Redis latest
+
+# Only build on pushes or PRs to main
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: main
+
+pipeline:
+  - name: Setup & Install
+    cmd: |
+      # copy and adjust .env
+      cp .env.example .env
+      sed -i 's/DB_CONNECTION=sqlite/DB_CONNECTION=pgsql/' .env
+      sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=pgsql/' .env
+
+      # configure Flux Pro license (via secrets you set in Chipper project settings)
+      composer config http-basic.composer.fluxui.dev "$FLUX_USERNAME" "$FLUX_LICENSE_KEY"
+
+      # install PHP deps and generate key
+      composer install --no-interaction --prefer-dist --optimize-autoloader
+      php artisan key:generate --ansi --force
+
+      # install Node deps and build assets
+      npm ci
+      npm run build
+
+  - name: Wait for PostgreSQL
+    cmd: |
+      for i in {1..10}; do
+        pg_isready -h $POSTGRES_HOST -U $POSTGRES_USER &>/dev/null && break
+        sleep 3
+      done
+
+  - name: Setup Database
+    cmd: |
+      # Create a dedicated test database (safety guard requires 'test' in the name)
+      PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DB -c "CREATE DATABASE chipperci_test;" 2>/dev/null || true
+
+      # Try to create pgvector extension
+      PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -U $POSTGRES_USER -d chipperci_test -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>/dev/null || echo "⚠️  pgvector extension not available - vector-related tests may be skipped"
+
+      # Set up database environment variables — use chipperci_test so safety guards pass
+      echo "DB_CONNECTION=pgsql" >> .env
+      echo "DB_HOST=$POSTGRES_HOST" >> .env
+      echo "DB_PORT=5432" >> .env
+      echo "DB_USERNAME=$POSTGRES_USER" >> .env
+      echo "DB_PASSWORD=$POSTGRES_PASSWORD" >> .env
+      echo "DB_DATABASE=chipperci_test" >> .env
+
+      # Export as real env vars so they override ChipperCI's defaults in $_SERVER/getenv()
+      export DB_DATABASE=chipperci_test
+      export PG_DATABASE=chipperci_test
+
+      # Set up tenant database connection to use the same credentials
+      echo "PG_TENANT_HOST=$POSTGRES_HOST" >> .env
+      echo "PG_TENANT_PORT=5432" >> .env
+      echo "PG_TENANT_USERNAME=$POSTGRES_USER" >> .env
+      echo "PG_TENANT_PASSWORD=$POSTGRES_PASSWORD" >> .env
+
+      # Set up Redis environment variables to match local
+      echo "REDIS_HOST=$REDIS_HOST" >> .env
+      echo "SESSION_DRIVER=redis" >> .env
+      echo "CACHE_STORE=redis" >> .env
+
+      # Baseline seeder boot path
+      echo "TEST_BOOTSTRAP_MODE=baseline" >> .env
+
+      # Run initial migrations against the test database
+      php artisan migrate --force
+      php artisan migrate --path=database/migrations/tenant --database=pgsql --force
+
+  - name: Run Tests
+    cmd: |
+      # Override ChipperCI's default DB_DATABASE so safety guards see 'test' in the name
+      export DB_DATABASE=chipperci_test
+      export PG_DATABASE=chipperci_test
+
+      # Show environment info
+      echo "PHP Version: $(php -v | head -1)"
+      echo "Memory Limit: $(php -r 'echo ini_get("memory_limit");')"
+      echo "CPU Count: $(nproc)"
+      echo "DB_DATABASE: $DB_DATABASE"
+            
+      # Try parallel with verbose output to see what's happening
+      php artisan test --parallel --processes=6
