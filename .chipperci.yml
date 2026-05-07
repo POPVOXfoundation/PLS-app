@@ -69,6 +69,9 @@ pipeline:
       echo "PG_TENANT_USERNAME=$POSTGRES_USER" >> .env
       echo "PG_TENANT_PASSWORD=$POSTGRES_PASSWORD" >> .env
 
+      # configure Flux Pro license (via secrets you set in Chipper project settings)
+      composer config http-basic.composer.fluxui.dev "$FLUX_USERNAME" "$FLUX_LICENSE_KEY"
+
       # Set up Redis environment variables to match local
       echo "REDIS_HOST=$REDIS_HOST" >> .env
       echo "SESSION_DRIVER=redis" >> .env
