@@ -110,13 +110,15 @@ test('compiled playbook seed data can be imported without the source docs being 
     $docsPath = base_path('.codex/PLS Docs');
     $hiddenDocsPath = base_path('.codex/PLS Docs.__tmp_for_test');
 
-    if (is_dir($hiddenDocsPath)) {
+    if (is_dir($hiddenDocsPath) && ! is_dir($docsPath)) {
         rename($hiddenDocsPath, $docsPath);
     }
 
-    expect(is_dir($docsPath))->toBeTrue();
+    $docsWerePresent = is_dir($docsPath);
 
-    rename($docsPath, $hiddenDocsPath);
+    if ($docsWerePresent) {
+        rename($docsPath, $hiddenDocsPath);
+    }
 
     try {
         AssistantTabPlaybookVersion::query()->delete();
@@ -134,6 +136,8 @@ test('compiled playbook seed data can be imported without the source docs being 
             ->and($playbook->activeVersion->role)->toBe('Process Guide')
             ->and($playbook->activeVersion->intro)->toContain("You're in Workflow.");
     } finally {
-        rename($hiddenDocsPath, $docsPath);
+        if ($docsWerePresent) {
+            rename($hiddenDocsPath, $docsPath);
+        }
     }
 });

@@ -7,7 +7,6 @@ use App\Domain\Documents\Document;
 use Aws\Result;
 use Aws\Textract\TextractClient;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -79,7 +78,7 @@ class TextractPdfExtractor implements AssistantSourceTextExtractor
             'DocumentLocation' => [
                 'S3Object' => [
                     'Bucket' => $bucket,
-                    'Name' => Storage::disk($diskName)->path($document->storage_path),
+                    'Name' => $this->s3ObjectName($diskName, $document),
                 ],
             ],
             'ClientRequestToken' => sha1($document->getKey().'|'.$document->updated_at?->toIso8601String().'|'.$document->storage_path),
@@ -94,6 +93,18 @@ class TextractPdfExtractor implements AssistantSourceTextExtractor
         }
 
         return $payload;
+    }
+
+    private function s3ObjectName(string $diskName, AssistantSourceDocument|Document $document): string
+    {
+        $prefix = trim((string) config("filesystems.disks.{$diskName}.prefix"), '/');
+        $storagePath = ltrim((string) $document->storage_path, '/');
+
+        if ($prefix === '') {
+            return $storagePath;
+        }
+
+        return $prefix.'/'.$storagePath;
     }
 
     private function pollDocument(string $jobId): AssistantSourceExtractionResult
