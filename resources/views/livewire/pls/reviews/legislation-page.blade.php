@@ -10,24 +10,39 @@
     }"
     class="space-y-6"
 >
-    <flux:card class="space-y-6">
+    <flux:card>
         <div
-            x-data="{ uploading: false, progress: 0 }"
-            x-on:livewire-upload-start="uploading = true; progress = 0"
+            x-data="{ uploadOpen: @js(! $hasUploadedLegislationSource), uploading: false, progress: 0 }"
+            x-on:livewire-upload-start="uploadOpen = true; uploading = true; progress = 0"
             x-on:livewire-upload-finish="uploading = false; progress = 100"
             x-on:livewire-upload-cancel="uploading = false; progress = 0"
             x-on:livewire-upload-error="uploading = false"
             x-on:livewire-upload-progress="progress = $event.detail.progress"
             class="space-y-5"
         >
-            <div class="space-y-2">
-                <flux:heading size="lg">{{ __('Legislation') }}</flux:heading>
-                <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                    {{ __('Upload the law, bill, regulation, or source text. PLSAssist will read it and prepare a structured record for you to review.') }}
-                </flux:text>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="space-y-2">
+                    <flux:heading size="lg">{{ __('Upload legislation') }}</flux:heading>
+                    <flux:text x-show="uploadOpen" x-cloak class="text-sm text-zinc-500 dark:text-zinc-400">
+                        {{ __('Add the law, bill, regulation, or source text. PLSAssist will read it and prepare a structured record for you to review.') }}
+                    </flux:text>
+
+                    @if ($hasUploadedLegislationSource)
+                        <flux:text x-show="! uploadOpen" x-cloak class="text-sm text-zinc-500 dark:text-zinc-400">
+                            {{ __('A legislation source has been uploaded. Expand this panel to add another source.') }}
+                        </flux:text>
+                    @endif
+                </div>
+
+                @if ($hasUploadedLegislationSource)
+                    <flux:button type="button" size="sm" variant="subtle" x-on:click="uploadOpen = ! uploadOpen">
+                        <span x-show="! uploadOpen">{{ __('Add another source') }}</span>
+                        <span x-show="uploadOpen" x-cloak>{{ __('Collapse') }}</span>
+                    </flux:button>
+                @endif
             </div>
 
-            <div class="space-y-4">
+            <div class="space-y-4" x-show="uploadOpen" x-cloak x-transition>
                 <flux:file-upload
                     wire:model="sourceUpload"
                     accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"

@@ -99,6 +99,7 @@ class LegislationPage extends Workspace
             'review' => $review,
             'legislationTypes' => LegislationType::cases(),
             'legislationRelationshipTypes' => ReviewLegislationRelationshipType::cases(),
+            'hasUploadedLegislationSource' => $this->hasUploadedLegislationSource($review),
             'hasProcessingRecords' => $this->hasProcessingRecords($review),
             'recordRows' => $this->recordRows($review),
         ], $review);
@@ -527,6 +528,12 @@ class LegislationPage extends Workspace
         return $review->documents
             ->filter(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
             ->contains(fn (Document $document): bool => $this->sourceRecordStatus($document) === 'processing');
+    }
+
+    private function hasUploadedLegislationSource(PlsReview $review): bool
+    {
+        return $review->documents
+            ->contains(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText);
     }
 
     /**
