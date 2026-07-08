@@ -397,6 +397,15 @@ class LegislationPage extends Workspace
         return __('50 MB max');
     }
 
+    public function legislationTypeLabel(LegislationType|string $type): string
+    {
+        $value = $type instanceof LegislationType ? $type->value : $type;
+
+        return $value === LegislationType::Law->value
+            ? __('Legislation')
+            : Str::headline($value);
+    }
+
     public function highlightedSourceSnippet(string $snippet): HtmlString
     {
         $html = e($snippet);
@@ -660,8 +669,8 @@ class LegislationPage extends Workspace
                     ? Str::headline((string) $savedLegislation->pivot?->relationship_type)
                     : Str::headline((string) ($storedAnalysis['relationship_type'] ?? '')),
                 'legislation_type' => $savedLegislation instanceof Legislation
-                    ? Str::headline($savedLegislation->legislation_type->value)
-                    : Str::headline((string) ($storedAnalysis['legislation_type'] ?? '')),
+                    ? $this->legislationTypeLabel($savedLegislation->legislation_type)
+                    : $this->legislationTypeLabel((string) ($storedAnalysis['legislation_type'] ?? '')),
                 'date_enacted' => $savedLegislation?->date_enacted?->toFormattedDateString()
                     ?? ($this->blankToNull((string) ($storedAnalysis['date_enacted'] ?? '')) ?? '—'),
                 'summary' => $savedLegislation?->summary
@@ -701,7 +710,7 @@ class LegislationPage extends Workspace
                 'title' => $legislation->title,
                 'subtitle' => null,
                 'relationship' => Str::headline((string) $legislation->pivot->relationship_type),
-                'legislation_type' => Str::headline($legislation->legislation_type->value),
+                'legislation_type' => $this->legislationTypeLabel($legislation->legislation_type),
                 'date_enacted' => $legislation->date_enacted?->toFormattedDateString() ?? '—',
                 'summary' => $legislation->summary,
                 'key_themes' => [],
@@ -974,7 +983,7 @@ class LegislationPage extends Workspace
 
     private function assistantPromptForSourceInsight(Document $document, string $query, string $kind): string
     {
-        return __('Using the uploaded legislation source ":source", explain where this :kind appears in the law and why it matters for post-legislative scrutiny: ":query". Cite the relevant passages or clauses from the uploaded text where possible.', [
+        return __('Using the uploaded legislation source ":source", explain where this :kind appears in the legislation and why it matters for post-legislative scrutiny: ":query". Cite the relevant passages or clauses from the uploaded text where possible.', [
             'source' => $document->title,
             'kind' => Str::headline($kind),
             'query' => $this->normalizeInsightText($query),

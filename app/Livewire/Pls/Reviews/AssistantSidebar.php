@@ -141,7 +141,7 @@ class AssistantSidebar extends Component
     public function assistantPlaceholder(string $workspaceKey): string
     {
         return match ($workspaceKey) {
-            'legislation' => __('Ask about this law...'),
+            'legislation' => __('Ask about this legislation...'),
             'documents' => __('Ask about these documents...'),
             'stakeholders' => __('Ask about stakeholder coverage...'),
             'consultations' => __('Ask about this consultation process...'),

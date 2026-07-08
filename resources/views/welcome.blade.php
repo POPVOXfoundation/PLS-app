@@ -474,7 +474,7 @@
                     <div>
                         <p class="eyebrow">{{ __('PLSAssist app') }}</p>
 
-                        <h1>{{ __('PLSAssist helps parliaments review whether laws work after adoption') }}</h1>
+                        <h1>{{ __('PLSAssist helps parliaments review whether legislation works after adoption') }}</h1>
 
                         <p class="hero-copy">
                             {{ __('PLSAssist is an AI-supported workspace for post-legislative scrutiny. It helps parliamentary teams organise a review, work through WFD methodology, analyse supporting documents, and draft grounded outputs while keeping human judgement in control.') }}
@@ -533,9 +533,9 @@
                 <div class="landing-shell info-grid">
                     <article class="info-card">
                         <p class="card-label">{{ __('What is PLS?') }}</p>
-                        <h2>{{ __('Checking whether laws work after adoption') }}</h2>
+                        <h2>{{ __('Checking whether legislation works after adoption') }}</h2>
                         <p>
-                            {{ __('Post-legislative scrutiny is the practice of monitoring how laws are implemented and evaluating whether they achieve their intended impact for citizens. It helps parliaments learn what happened after a law passed and where follow-up may be needed.') }}
+                            {{ __('Post-legislative scrutiny is the practice of monitoring how legislation is implemented and evaluating whether it achieves its intended impact for citizens. It helps parliaments learn what happened after legislation passed and where follow-up may be needed.') }}
                         </p>
                     </article>
 

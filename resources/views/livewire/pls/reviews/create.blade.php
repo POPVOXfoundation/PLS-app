@@ -324,7 +324,7 @@
             <flux:card class="space-y-4">
                 <div class="space-y-2">
                     <flux:heading size="lg">{{ __('What happens next') }}</flux:heading>
-                    <flux:text>{{ __('After the workspace is created, PLSAssist will take you to the legislation page so you can upload the law or source text.') }}</flux:text>
+                    <flux:text>{{ __('After the workspace is created, PLSAssist will take you to the legislation page so you can upload the legislation or source text.') }}</flux:text>
                 </div>
 
                 <div class="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-950 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-100">

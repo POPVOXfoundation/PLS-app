@@ -14,7 +14,7 @@ class PlsReviewStepGuidance
             'title' => 'Define the review scope',
             'summary' => 'Start by linking the legislation under review and adding the first working papers or briefing documents for the inquiry team.',
             'tab' => 'Legislation and documents',
-            'action' => 'Link the governing law and upload the initial briefing, bill text, or background pack.',
+            'action' => 'Link the governing legislation and upload the initial briefing, bill text, or background pack.',
         ],
         'background_data_plan' => [
             'title' => 'Build the evidence base',
@@ -30,7 +30,7 @@ class PlsReviewStepGuidance
         ],
         'implementation_review' => [
             'title' => 'Assess implementation delivery',
-            'summary' => 'Keep agencies, supporting documents, and early findings in sync while the review examines how the law is working in practice.',
+            'summary' => 'Keep agencies, supporting documents, and early findings in sync while the review examines how the legislation is working in practice.',
             'tab' => 'Stakeholders and analysis',
             'action' => 'Record implementing agencies, then capture the first findings that emerge from implementation evidence.',
         ],

@@ -24,7 +24,7 @@
                 <div class="space-y-2">
                     <flux:heading size="lg">{{ __('Upload legislation') }}</flux:heading>
                     <flux:text x-show="uploadOpen" x-cloak class="text-sm text-zinc-500 dark:text-zinc-400">
-                        {{ __('Add the law, bill, regulation, or source text. PLSAssist will read it and prepare a structured record for you to review.') }}
+                        {{ __('Add the legislation, bill, regulation, or source text. PLSAssist will read it and prepare a structured record for you to review.') }}
                     </flux:text>
 
                     @if ($hasUploadedLegislationSource)
@@ -594,7 +594,7 @@
                 <div class="grid gap-4 sm:grid-cols-3">
                     <flux:select wire:model="analysisType" :invalid="$errors->has('analysisType')" :label="__('Type')">
                         @foreach ($legislationTypes as $legislationType)
-                            <flux:select.option :value="$legislationType->value">{{ \Illuminate\Support\Str::headline($legislationType->value) }}</flux:select.option>
+                            <flux:select.option :value="$legislationType->value">{{ $this->legislationTypeLabel($legislationType) }}</flux:select.option>
                         @endforeach
                     </flux:select>
 
