@@ -391,11 +391,13 @@
                                     @if ($row['kind'] === 'source' && $row['source_document_id'] !== null)
                                         <flux:modal.trigger name="confirm-source-delete">
                                             <flux:button
-                                                variant="ghost"
+                                                variant="subtle"
                                                 size="sm"
                                                 icon="trash"
                                                 x-on:click="setDeleteConfirmation({{ $row['source_document_id'] }}, @js($row['title']), @js(__('source')))"
-                                            />
+                                            >
+                                                {{ __('Delete') }}
+                                            </flux:button>
                                         </flux:modal.trigger>
                                     @endif
                                 </div>
@@ -418,6 +420,9 @@
                     ></span>
                     <span x-show="! deleteConfirmation.title">{{ __('This will permanently remove the selected item from records.') }}</span>
                 </flux:text>
+                <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                    {{ __('This action cannot be undone.') }}
+                </flux:text>
             </div>
 
             <div class="flex justify-end gap-2">
@@ -433,6 +438,8 @@
                         type="button"
                         x-on:click="$wire.confirmDeletion(deleteConfirmation.id); resetDeleteConfirmation()"
                         x-bind:disabled="! deleteConfirmation.id"
+                        wire:loading.attr="disabled"
+                        wire:target="confirmDeletion"
                     >
                         <span x-text="`${@js(__('Delete'))} ${deleteConfirmation.noun || @js(__('record'))}`"></span>
                     </flux:button>

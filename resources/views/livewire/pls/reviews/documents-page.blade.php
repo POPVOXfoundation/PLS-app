@@ -167,11 +167,13 @@
 
                                         <flux:modal.trigger name="confirm-document-delete">
                                             <flux:button
-                                                variant="ghost"
+                                                variant="subtle"
                                                 size="sm"
                                                 icon="trash"
                                                 x-on:click="setDeleteConfirmation({{ $row['id'] }}, @js($row['title']), @js(__('document')))"
-                                            />
+                                            >
+                                                {{ __('Delete') }}
+                                            </flux:button>
                                         </flux:modal.trigger>
                                     @endcan
                                 </div>
@@ -323,6 +325,8 @@
                         type="button"
                         x-on:click="$wire.confirmDeletion(deleteConfirmation.id); resetDeleteConfirmation()"
                         x-bind:disabled="! deleteConfirmation.id"
+                        wire:loading.attr="disabled"
+                        wire:target="confirmDeletion"
                     >
                         <span x-text="`${@js(__('Delete'))} ${deleteConfirmation.noun || @js(__('record'))}`"></span>
                     </flux:button>

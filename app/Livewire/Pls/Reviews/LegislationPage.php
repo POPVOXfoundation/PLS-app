@@ -1052,7 +1052,7 @@ class LegislationPage extends Workspace
                 $legislation->delete();
             }
 
-            if ($document->storage_path !== '') {
+            if (filled($document->storage_path)) {
                 Storage::disk((string) data_get($document->metadata, 'disk', config('filesystems.default')))
                     ->delete($document->storage_path);
             }
