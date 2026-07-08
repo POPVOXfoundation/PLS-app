@@ -549,6 +549,12 @@ class LegislationPage extends Workspace
                     : Str::headline((string) ($storedAnalysis['legislation_type'] ?? '')),
                 'date_enacted' => $savedLegislation?->date_enacted?->toFormattedDateString()
                     ?? ($this->blankToNull((string) ($storedAnalysis['date_enacted'] ?? '')) ?? '—'),
+                'summary' => $savedLegislation?->summary
+                    ?? $this->blankToNull((string) ($storedAnalysis['summary'] ?? '')),
+                'key_themes' => $this->analysisStringList($storedAnalysis, 'key_themes'),
+                'notable_excerpts' => $this->analysisStringList($storedAnalysis, 'notable_excerpts'),
+                'important_dates' => $this->analysisStringList($storedAnalysis, 'important_dates'),
+                'warnings' => $this->analysisStringList($storedAnalysis, 'warnings'),
                 'status' => $status,
                 'progress_stage' => $progressStage = $this->sourceRecordProgressStage($document, $status),
                 'status_label' => $this->statusLabel($status, $progressStage),
@@ -578,6 +584,11 @@ class LegislationPage extends Workspace
                 'relationship' => Str::headline((string) $legislation->pivot->relationship_type),
                 'legislation_type' => Str::headline($legislation->legislation_type->value),
                 'date_enacted' => $legislation->date_enacted?->toFormattedDateString() ?? '—',
+                'summary' => $legislation->summary,
+                'key_themes' => [],
+                'notable_excerpts' => [],
+                'important_dates' => [],
+                'warnings' => [],
                 'status' => 'saved',
                 'progress_stage' => null,
                 'status_label' => $this->statusLabel('saved'),
@@ -684,18 +695,31 @@ class LegislationPage extends Workspace
     {
         if ($status === 'processing') {
             return match ($progressStage) {
-                'queued' => __('Waiting for the background worker.'),
-                'extracting_text' => __('Reading the uploaded file.'),
-                'filling_record' => __('Using AI to draft the record.'),
-                default => __('Work is still running in the background.'),
+                'queued' => __('Your source is queued. PLSAssist will read the file, extract text, and prepare a structured legislation record.'),
+                'extracting_text' => __('PLSAssist is reading the uploaded legislation and extracting text so it can identify the instrument, context, key provisions, and dates.'),
+                'filling_record' => __('PLSAssist is drafting the legislation record: title, summary, type, relationship to the review, key themes, dates, and notable excerpts.'),
+                default => __('PLSAssist is processing this source in the background.'),
             };
         }
 
         return match ($status) {
-            'needs_review' => __('Review before saving.'),
-            'failed' => __('Open retry when you are ready.'),
+            'needs_review' => __('Review the extracted details before saving them to the review.'),
+            'failed' => __('Retry the source when you are ready.'),
             default => __('Saved to this review.'),
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $storedAnalysis
+     * @return list<string>
+     */
+    private function analysisStringList(array $storedAnalysis, string $key): array
+    {
+        return collect($storedAnalysis[$key] ?? [])
+            ->filter(fn (mixed $value): bool => is_string($value) && trim($value) !== '')
+            ->map(fn (mixed $value): string => trim((string) $value))
+            ->values()
+            ->all();
     }
 
     private function performSourceDeletion(int $documentId): void

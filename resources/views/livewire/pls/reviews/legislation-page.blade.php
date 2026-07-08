@@ -23,21 +23,35 @@
             <div class="space-y-2">
                 <flux:heading size="lg">{{ __('Legislation') }}</flux:heading>
                 <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                    {{ __('Add the source text and it will appear in the records table below.') }}
+                    {{ __('Upload the law, bill, regulation, or source text. PLSAssist will read it and prepare a structured record for you to review.') }}
                 </flux:text>
             </div>
 
             <div class="space-y-4">
-                <flux:file-upload
-                    wire:model="sourceUpload"
-                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    :label="__('Source file')"
-                >
-                    <flux:file-upload.dropzone
-                        :heading="__('Choose a file')"
-                        :text="__('PDF or DOCX • :limit', ['limit' => $this->sourceUploadLimitLabel()])"
-                    />
-                </flux:file-upload>
+                <flux:label>{{ __('Source file') }}</flux:label>
+
+                <label class="flex cursor-pointer flex-col gap-3 rounded-lg border border-dashed border-zinc-300 bg-zinc-50/70 px-4 py-3 transition hover:border-violet-300 hover:bg-violet-50/60 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:border-violet-700 dark:hover:bg-violet-950/20 sm:flex-row sm:items-center sm:justify-between">
+                    <span class="flex min-w-0 items-center gap-3">
+                        <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white text-violet-600 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-950 dark:text-violet-300 dark:ring-zinc-800">
+                            <flux:icon icon="arrow-up-tray" class="size-4" />
+                        </span>
+                        <span class="min-w-0">
+                            <span class="block text-sm font-medium text-zinc-900 dark:text-white">{{ __('Upload legislation source') }}</span>
+                            <span class="block text-sm text-zinc-500 dark:text-zinc-400">{{ __('PDF or DOCX, :limit', ['limit' => $this->sourceUploadLimitLabel()]) }}</span>
+                        </span>
+                    </span>
+
+                    <span class="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">
+                        {{ __('Choose file') }}
+                    </span>
+
+                    <input
+                        type="file"
+                        wire:model="sourceUpload"
+                        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        class="sr-only"
+                    >
+                </label>
 
                 <flux:field>
                     <flux:error name="sourceUpload" />
@@ -54,7 +68,7 @@
                     <flux:progress value="0" color="sky" x-bind:value="progress" />
 
                     <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                        {{ __('Moving the source into the review workspace.') }}
+                        {{ __('Moving the source into the review workspace. Once uploaded, PLSAssist will start reading it in the background.') }}
                     </flux:text>
                 </flux:field>
             </div>
@@ -69,9 +83,9 @@
     <flux:card wire:poll.2s.keep-alive="refreshPendingAnalyses" class="space-y-6">
         <div class="flex items-center justify-between gap-4">
             <div class="space-y-1">
-                <flux:heading size="lg">{{ __('Records') }}</flux:heading>
+                <flux:heading size="lg">{{ __('Legislation analysis') }}</flux:heading>
                 <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                    {{ __('Uploads stay here while they process, wait for review, or remain saved to the review.') }}
+                    {{ __('PLSAssist reads each uploaded source, extracts the key legislation details, and keeps the record here for review.') }}
                 </flux:text>
             </div>
 
@@ -85,9 +99,133 @@
 
         @if ($recordRows === [])
             <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                {{ __('No records saved for this review yet.') }}
+                {{ __('No records saved for this review yet. Upload a source file to start legislation analysis.') }}
             </flux:text>
         @else
+            <div class="space-y-4">
+                @foreach ($recordRows as $row)
+                    <section class="rounded-lg border border-zinc-200 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div class="min-w-0 space-y-1">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <flux:heading size="base">{{ $row['title'] }}</flux:heading>
+                                    <flux:badge size="sm" :color="$row['status_color']" :class="$row['status_badge_class']">
+                                        {{ $row['status_label'] }}
+                                    </flux:badge>
+                                </div>
+
+                                @php
+                                    $inlineMeta = collect([
+                                        $row['relationship'] !== '' ? $row['relationship'] : null,
+                                        $row['legislation_type'] !== '' ? $row['legislation_type'] : null,
+                                        $row['date_enacted'] !== '—' ? $row['date_enacted'] : null,
+                                    ])->filter()->implode(' • ');
+                                @endphp
+
+                                @if ($inlineMeta !== '')
+                                    <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">{{ $inlineMeta }}</flux:text>
+                                @endif
+                            </div>
+
+                            @if ($row['action'] === 'review' && $row['source_document_id'] !== null)
+                                <flux:button size="sm" variant="primary" wire:click="startReviewDocument({{ $row['source_document_id'] }})">
+                                    {{ __('Review and save') }}
+                                </flux:button>
+                            @elseif ($row['action'] === 'edit' && $row['source_document_id'] !== null)
+                                <flux:button size="sm" variant="subtle" wire:click="startReviewDocument({{ $row['source_document_id'] }})">
+                                    {{ __('Edit record') }}
+                                </flux:button>
+                            @elseif ($row['action'] === 'retry' && $row['source_document_id'] !== null)
+                                <flux:button size="sm" variant="subtle" wire:click="retrySourceAnalysis({{ $row['source_document_id'] }})">
+                                    {{ __('Retry') }}
+                                </flux:button>
+                            @endif
+                        </div>
+
+                        @if ($row['status'] === 'processing')
+                            <div class="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
+                                <div class="flex items-start gap-3">
+                                    <flux:icon icon="arrow-path" class="mt-0.5 size-4 shrink-0 animate-spin" />
+                                    <div class="space-y-1">
+                                        <div class="font-medium">{{ __('What PLSAssist is doing') }}</div>
+                                        <div>{{ $row['status_detail'] }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        @elseif ($row['status'] === 'failed')
+                            <div class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-100">
+                                {{ $row['status_detail'] }}
+                            </div>
+                        @else
+                            <div class="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+                                <div class="space-y-4">
+                                    <div>
+                                        <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Summary') }}</div>
+                                        <p class="mt-1 text-sm leading-6 text-zinc-700 dark:text-zinc-300">
+                                            {{ $row['summary'] ?: __('No summary extracted yet.') }}
+                                        </p>
+                                    </div>
+
+                                    @if ($row['notable_excerpts'] !== [])
+                                        <div>
+                                            <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Notable excerpts') }}</div>
+                                            <div class="mt-2 space-y-2">
+                                                @foreach (array_slice($row['notable_excerpts'], 0, 2) as $excerpt)
+                                                    <p class="rounded-lg bg-white px-3 py-2 text-sm leading-6 text-zinc-600 ring-1 ring-zinc-200 dark:bg-zinc-950/50 dark:text-zinc-300 dark:ring-zinc-800">
+                                                        "{{ $excerpt }}"
+                                                    </p>
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                    @endif
+                                </div>
+
+                                <div class="space-y-4">
+                                    <div>
+                                        <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Key themes') }}</div>
+                                        @if ($row['key_themes'] === [])
+                                            <flux:text class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{{ __('No themes extracted yet.') }}</flux:text>
+                                        @else
+                                            <div class="mt-2 flex flex-wrap gap-2">
+                                                @foreach ($row['key_themes'] as $theme)
+                                                    <flux:badge size="sm">{{ $theme }}</flux:badge>
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                    </div>
+
+                                    @if ($row['important_dates'] !== [])
+                                        <div>
+                                            <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Dates mentioned') }}</div>
+                                            <div class="mt-2 flex flex-wrap gap-2">
+                                                @foreach ($row['important_dates'] as $date)
+                                                    <flux:badge size="sm">{{ $date }}</flux:badge>
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                    @endif
+
+                                    @if ($row['warnings'] !== [])
+                                        <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                                            <div class="font-medium">{{ __('Needs verification') }}</div>
+                                            <ul class="mt-1 space-y-1">
+                                                @foreach ($row['warnings'] as $warning)
+                                                    <li>{{ $warning }}</li>
+                                                @endforeach
+                                            </ul>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        @endif
+                    </section>
+                @endforeach
+            </div>
+
+            <div class="border-t border-zinc-200 pt-2 dark:border-zinc-800">
+                <flux:heading size="base">{{ __('Source history') }}</flux:heading>
+            </div>
+
             <flux:table>
                 <flux:table.columns>
                     <flux:table.column>{{ __('Record') }}</flux:table.column>
