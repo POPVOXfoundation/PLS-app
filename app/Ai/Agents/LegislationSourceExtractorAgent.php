@@ -43,7 +43,8 @@ Rules:
 - If the date enacted is not clearly visible, return null.
 - If a short title is not explicitly shown, you may derive a sensible short title from the main title.
 - Write a short plain-language summary when the source text gives enough substance.
-- Return warnings only when the user should manually verify something important.
+- Return warnings only for technical extraction issues, such as incomplete OCR, partial text, unclear title/date, unreadable pages, or ambiguous document classification.
+- Do not return warnings that advise the user to assess implementation, effectiveness, impact, compliance, commencement status, or policy outcomes.
 - Do not invent facts that are not visible in the text.
 TEXT;
     }

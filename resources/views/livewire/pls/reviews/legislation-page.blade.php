@@ -262,29 +262,6 @@
                                             </div>
                                         </div>
                                     @endif
-
-                                    @if ($row['warnings'] !== [])
-                                        <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
-                                            <div class="font-medium">{{ __('Needs verification') }}</div>
-                                            <ul class="mt-1 space-y-1">
-                                                @foreach ($row['warnings'] as $warning)
-                                                    <li>
-                                                        @if ($row['source_document_id'] !== null)
-                                                            <button
-                                                                type="button"
-                                                                wire:click="viewSourceInsight({{ $row['source_document_id'] }}, @js($warning), 'verification note')"
-                                                                class="text-left underline decoration-amber-500/40 underline-offset-2 hover:text-amber-700 dark:hover:text-amber-50"
-                                                            >
-                                                                {{ $warning }}
-                                                            </button>
-                                                        @else
-                                                            {{ $warning }}
-                                                        @endif
-                                                    </li>
-                                                @endforeach
-                                            </ul>
-                                        </div>
-                                    @endif
                                 </div>
                             </div>
                         @endif
@@ -546,18 +523,6 @@
                         </flux:text>
                     </div>
                 </div>
-
-                @if ($analysisWarnings !== [])
-                    <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
-                        <flux:heading size="sm">{{ $this->analysisWarningsHeading() }}</flux:heading>
-                        <div class="mt-2 space-y-1">
-                            @foreach ($analysisWarnings as $warning)
-                                <div>{{ $warning }}</div>
-                            @endforeach
-                        </div>
-                    </div>
-                @endif
-
                 @if ($analysisDuplicateCandidates !== [] && $analysisStatus !== 'saved')
                     <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
                         <div class="space-y-3">
