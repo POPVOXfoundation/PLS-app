@@ -24,12 +24,12 @@
                 <div class="space-y-2">
                     <flux:heading size="lg">{{ __('Upload legislation') }}</flux:heading>
                     <flux:text x-show="uploadOpen" x-cloak class="text-sm text-zinc-500 dark:text-zinc-400">
-                        {{ __('Add the legislation, bill, regulation, or source text. PLSAssist will read it and prepare a structured record for you to review.') }}
+                        {{ __('Add primary or secondary legislation, including Acts, bills, regulations, statutory instruments, rules, orders, or ordinances. PLSAssist will read each source and prepare a structured record for review.') }}
                     </flux:text>
 
                     @if ($hasUploadedLegislationSource)
                         <flux:text x-show="! uploadOpen" x-cloak class="text-sm text-zinc-500 dark:text-zinc-400">
-                            {{ __('A legislation source has been uploaded. Expand this panel to add another source.') }}
+                            {{ __('One or more legislation sources have been uploaded. Expand this panel to add another Act, regulation, or related source.') }}
                         </flux:text>
                     @endif
                 </div>
@@ -50,7 +50,7 @@
                 >
                     <flux:file-upload.dropzone
                         class="!min-h-28 !py-4"
-                        :heading="__('Drag source here or choose a file')"
+                        :heading="__('Drag a legislation source here or choose a file')"
                         :text="__('PDF or DOCX, :limit', ['limit' => $this->sourceUploadLimitLabel()])"
                     />
                 </flux:file-upload>
@@ -70,14 +70,14 @@
                     <flux:progress value="0" color="sky" x-bind:value="progress" />
 
                     <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                        {{ __('Moving the source into the review workspace. Once uploaded, PLSAssist will start reading it in the background.') }}
+                        {{ __('Moving the legislation source into the review workspace. Once uploaded, PLSAssist will start reading it in the background.') }}
                     </flux:text>
                 </flux:field>
             </div>
 
             <div class="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400" wire:loading.flex wire:target="sourceUpload">
                 <flux:icon icon="arrow-path" class="size-4 animate-spin text-sky-500" />
-                <span>{{ __('Adding the source to records...') }}</span>
+                <span>{{ __('Adding the legislation source to records...') }}</span>
             </div>
         </div>
     </flux:card>
@@ -87,7 +87,7 @@
             <div class="space-y-1">
                 <flux:heading size="lg">{{ __('Legislation analysis') }}</flux:heading>
                 <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                    {{ __('PLSAssist reads each uploaded source, extracts the key legislation details, and keeps the record here for review.') }}
+                    {{ __('PLSAssist reads each uploaded Act, bill, regulation, or delegated instrument, extracts the key details, and keeps each record here for review.') }}
                 </flux:text>
             </div>
 
@@ -101,7 +101,7 @@
 
         @if ($recordRows === [])
             <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                {{ __('No records saved for this review yet. Upload a source file to start legislation analysis.') }}
+                {{ __('No records saved for this review yet. Upload a primary or secondary legislation source to start analysis.') }}
             </flux:text>
         @else
             <div class="space-y-4">
@@ -566,7 +566,7 @@
                 </div>
 
                 <div class="grid gap-4 sm:grid-cols-3">
-                    <flux:select wire:model="analysisType" :invalid="$errors->has('analysisType')" :label="__('Type')">
+                    <flux:select wire:model="analysisType" :invalid="$errors->has('analysisType')" :label="__('Instrument type')">
                         @foreach ($legislationTypes as $legislationType)
                             <flux:select.option :value="$legislationType->value">{{ $this->legislationTypeLabel($legislationType) }}</flux:select.option>
                         @endforeach
@@ -574,7 +574,7 @@
 
                     <flux:input wire:model="analysisDateEnacted" :invalid="$errors->has('analysisDateEnacted')" :label="__('Date enacted')" type="date" />
 
-                    <flux:select wire:model="analysisRelationshipType" :invalid="$errors->has('analysisRelationshipType')" :label="__('Relationship')">
+                    <flux:select wire:model="analysisRelationshipType" :invalid="$errors->has('analysisRelationshipType')" :label="__('Role in review')">
                         @foreach ($legislationRelationshipTypes as $relationshipType)
                             <flux:select.option :value="$relationshipType->value">{{ \Illuminate\Support\Str::headline($relationshipType->value) }}</flux:select.option>
                         @endforeach
