@@ -126,6 +126,20 @@ class AssistantSidebar extends Component
         $this->submitAssistantPrompt();
     }
 
+    public function assistantPlaceholder(string $workspaceKey): string
+    {
+        return match ($workspaceKey) {
+            'legislation' => __('Ask about this law...'),
+            'documents' => __('Ask about these documents...'),
+            'stakeholders' => __('Ask about stakeholder coverage...'),
+            'consultations' => __('Ask about this consultation process...'),
+            'analysis' => __('Ask about findings or recommendations...'),
+            'reports' => __('Ask about report drafting...'),
+            'settings' => __('Ask about workspace access...'),
+            default => __('Ask about this review...'),
+        };
+    }
+
     public function resetAssistantConversation(): void
     {
         $conversationIds = DB::table('agent_conversations')

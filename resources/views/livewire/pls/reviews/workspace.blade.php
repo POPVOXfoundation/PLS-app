@@ -55,20 +55,16 @@
                     </div>
                 </header>
 
-                <div class="grid gap-6 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-                    <main class="min-w-0 space-y-6">
-                        {{ $slot }}
-                    </main>
-
-                    <aside class="xl:sticky xl:top-[6.5rem] xl:self-start">
-                        <livewire:pls.reviews.assistant-sidebar
-                            :review="$review"
-                            :workspace-key="$currentWorkspaceKey"
-                            :wire:key="'assistant-'.$review->getKey().'-'.$currentWorkspaceKey"
-                        />
-                    </aside>
-                </div>
+                <main class="min-w-0 space-y-6 pb-36">
+                    {{ $slot }}
+                </main>
             </div>
         </div>
+
+        <livewire:pls.reviews.assistant-sidebar
+            :review="$review"
+            :workspace-key="$currentWorkspaceKey"
+            :wire:key="'assistant-'.$review->getKey().'-'.$currentWorkspaceKey"
+        />
     </div>
 </x-layouts::app.header>
