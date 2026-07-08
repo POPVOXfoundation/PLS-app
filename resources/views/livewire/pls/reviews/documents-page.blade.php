@@ -36,8 +36,9 @@
                         :label="__('Document file')"
                     >
                         <flux:file-upload.dropzone
-                            :heading="__('Choose files')"
-                            :text="__('PDF, DOCX, TXT, or MD • :limit', ['limit' => $this->uploadLimitLabel()])"
+                            class="!min-h-28 !py-4"
+                            :heading="__('Drag documents here or choose files')"
+                            :text="__('PDF, DOCX, TXT, or MD, :limit', ['limit' => $this->uploadLimitLabel()])"
                         />
                     </flux:file-upload>
 
@@ -57,7 +58,7 @@
                         <flux:progress value="0" color="sky" x-bind:value="progress" />
 
                         <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                            {{ __('Moving the document into the review workspace.') }}
+                            {{ __('Moving documents into the review workspace. Once uploaded, PLSAssist will start reading them in the background.') }}
                         </flux:text>
                     </flux:field>
                 </div>
