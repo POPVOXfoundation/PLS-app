@@ -55,6 +55,12 @@ class LegislationPage extends Workspace
 
     public string $analysisExistingLegislationId = '';
 
+    public string $sourceTextTitle = '';
+
+    public string $sourceTextContent = '';
+
+    public string $sourceTextOriginalUrl = '';
+
     /**
      * @var list<string>
      */
@@ -248,6 +254,31 @@ class LegislationPage extends Workspace
 
         $this->fillAnalysisStateFromStored($document, $storedAnalysis, $linkedLegislationId);
         $this->dispatch('modal-show', name: 'review-record');
+    }
+
+    public function viewSourceText(int $documentId): void
+    {
+        $this->authorize('view', $this->review);
+
+        $document = $this->review->documents()
+            ->where('document_type', DocumentType::LegislationText->value)
+            ->findOrFail($documentId);
+
+        $text = trim($document->chunks()
+            ->orderBy('chunk_index')
+            ->pluck('content')
+            ->implode("\n\n"));
+
+        $this->sourceTextTitle = $document->title;
+        $this->sourceTextContent = $text !== ''
+            ? $text
+            : __('Extracted text is not available yet. If this source is still processing, check again after PLSAssist finishes reading the file.');
+        $this->sourceTextOriginalUrl = route('pls.reviews.legislation.sources.original', [
+            'review' => $this->review,
+            'document' => $document,
+        ]);
+
+        $this->dispatch('modal-show', name: 'source-text');
     }
 
     public function retrySourceAnalysis(int $documentId): void
@@ -514,7 +545,8 @@ class LegislationPage extends Workspace
      *     status_color: string,
      *     status_badge_class: string,
      *     status_detail: string|null,
-     *     action: string|null
+     *     action: string|null,
+     *     original_url: string|null
      * }>
      */
     private function recordRows(PlsReview $review): array
@@ -567,6 +599,10 @@ class LegislationPage extends Workspace
                     'failed' => 'retry',
                     default => null,
                 },
+                'original_url' => route('pls.reviews.legislation.sources.original', [
+                    'review' => $review,
+                    'document' => $document,
+                ]),
             ];
         }
 
@@ -596,6 +632,7 @@ class LegislationPage extends Workspace
                 'status_badge_class' => $this->statusBadgeClass('saved'),
                 'status_detail' => $this->statusDetail('saved'),
                 'action' => null,
+                'original_url' => null,
             ];
         }
 

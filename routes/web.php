@@ -2,6 +2,7 @@
 
 use App\Domain\Reviews\PlsReview;
 use App\Http\Controllers\AcceptReviewInvitationController;
+use App\Http\Controllers\Pls\ReviewLegislationSourceOriginalController;
 use App\Livewire\Dashboard;
 use App\Livewire\Pls\Assistant\TabPlaybooks;
 use App\Livewire\Pls\Reviews\AnalysisPage;
@@ -37,6 +38,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->can('view', 'review')
             ->name('pls.reviews.collaborators');
         Route::get('/legislation', LegislationPage::class)->can('view', 'review')->name('pls.reviews.legislation');
+        Route::get('/legislation/sources/{document}/original', ReviewLegislationSourceOriginalController::class)
+            ->can('view', 'review')
+            ->name('pls.reviews.legislation.sources.original');
         Route::get('/documents', DocumentsPage::class)->can('view', 'review')->name('pls.reviews.documents');
         Route::get('/stakeholders', StakeholdersPage::class)->can('view', 'review')->name('pls.reviews.stakeholders');
         Route::get('/consultations', ConsultationsPage::class)->can('view', 'review')->name('pls.reviews.consultations');

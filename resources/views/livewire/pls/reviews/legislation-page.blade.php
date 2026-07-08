@@ -114,19 +114,33 @@
                                 @endif
                             </div>
 
-                            @if ($row['action'] === 'review' && $row['source_document_id'] !== null)
-                                <flux:button size="sm" variant="primary" wire:click="startReviewDocument({{ $row['source_document_id'] }})">
-                                    {{ __('Review and save') }}
-                                </flux:button>
-                            @elseif ($row['action'] === 'edit' && $row['source_document_id'] !== null)
-                                <flux:button size="sm" variant="subtle" wire:click="startReviewDocument({{ $row['source_document_id'] }})">
-                                    {{ __('Edit record') }}
-                                </flux:button>
-                            @elseif ($row['action'] === 'retry' && $row['source_document_id'] !== null)
-                                <flux:button size="sm" variant="subtle" wire:click="retrySourceAnalysis({{ $row['source_document_id'] }})">
-                                    {{ __('Retry') }}
-                                </flux:button>
-                            @endif
+                            <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+                                @if ($row['source_document_id'] !== null)
+                                    <flux:button size="sm" variant="subtle" icon="document-text" wire:click="viewSourceText({{ $row['source_document_id'] }})">
+                                        {{ __('View text') }}
+                                    </flux:button>
+
+                                    @if ($row['original_url'] !== null)
+                                        <flux:button size="sm" variant="ghost" icon="arrow-top-right-on-square" :href="$row['original_url']" target="_blank" rel="noopener">
+                                            {{ __('Original file') }}
+                                        </flux:button>
+                                    @endif
+                                @endif
+
+                                @if ($row['action'] === 'review' && $row['source_document_id'] !== null)
+                                    <flux:button size="sm" variant="primary" wire:click="startReviewDocument({{ $row['source_document_id'] }})">
+                                        {{ __('Review and save') }}
+                                    </flux:button>
+                                @elseif ($row['action'] === 'edit' && $row['source_document_id'] !== null)
+                                    <flux:button size="sm" variant="subtle" wire:click="startReviewDocument({{ $row['source_document_id'] }})">
+                                        {{ __('Edit record') }}
+                                    </flux:button>
+                                @elseif ($row['action'] === 'retry' && $row['source_document_id'] !== null)
+                                    <flux:button size="sm" variant="subtle" wire:click="retrySourceAnalysis({{ $row['source_document_id'] }})">
+                                        {{ __('Retry') }}
+                                    </flux:button>
+                                @endif
+                            </div>
                         </div>
 
                         @if ($row['status'] === 'processing')
@@ -258,6 +272,30 @@
                             </flux:table.cell>
                             <flux:table.cell>
                                 <div class="flex min-w-28 items-center justify-end gap-1">
+                                    @if ($row['source_document_id'] !== null)
+                                        <flux:button
+                                            size="sm"
+                                            variant="ghost"
+                                            icon="document-text"
+                                            wire:click="viewSourceText({{ $row['source_document_id'] }})"
+                                        >
+                                            {{ __('Text') }}
+                                        </flux:button>
+
+                                        @if ($row['original_url'] !== null)
+                                            <flux:button
+                                                size="sm"
+                                                variant="ghost"
+                                                icon="arrow-top-right-on-square"
+                                                :href="$row['original_url']"
+                                                target="_blank"
+                                                rel="noopener"
+                                            >
+                                                {{ __('Original') }}
+                                            </flux:button>
+                                        @endif
+                                    @endif
+
                                     @if ($row['action'] === 'review' && $row['source_document_id'] !== null)
                                         <flux:button
                                             size="sm"
@@ -333,6 +371,27 @@
                         <span x-text="`${@js(__('Delete'))} ${deleteConfirmation.noun || @js(__('record'))}`"></span>
                     </flux:button>
                 </flux:modal.close>
+            </div>
+        </div>
+    </flux:modal>
+
+    <flux:modal name="source-text" class="!max-w-[64rem] w-[calc(100vw-2rem)] lg:!w-[64rem]">
+        <div class="space-y-5">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0 space-y-1">
+                    <flux:heading size="lg">{{ __('Extracted source text') }}</flux:heading>
+                    <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">{{ $sourceTextTitle }}</flux:text>
+                </div>
+
+                @if ($sourceTextOriginalUrl !== '')
+                    <flux:button size="sm" variant="subtle" icon="arrow-top-right-on-square" :href="$sourceTextOriginalUrl" target="_blank" rel="noopener">
+                        {{ __('Open original') }}
+                    </flux:button>
+                @endif
+            </div>
+
+            <div class="max-h-[65vh] overflow-y-auto rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/60">
+                <pre class="whitespace-pre-wrap break-words font-mono text-xs leading-5 text-zinc-700 dark:text-zinc-200">{{ $sourceTextContent }}</pre>
             </div>
         </div>
     </flux:modal>
