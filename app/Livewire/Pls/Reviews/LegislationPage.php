@@ -620,6 +620,7 @@ class LegislationPage extends Workspace
      *     id: string,
      *     kind: string,
      *     source_document_id: int|null,
+     *     record_label: string,
      *     title: string,
      *     subtitle: string|null,
      *     relationship: string,
@@ -652,19 +653,23 @@ class LegislationPage extends Workspace
                 ? 'saved'
                 : $this->sourceRecordStatus($document);
 
+            $relationship = $savedLegislation instanceof Legislation
+                ? Str::headline((string) $savedLegislation->pivot?->relationship_type)
+                : Str::headline((string) ($storedAnalysis['relationship_type'] ?? ''));
+            $legislationType = $savedLegislation instanceof Legislation
+                ? $this->legislationTypeLabel($savedLegislation->legislation_type)
+                : $this->legislationTypeLabel((string) ($storedAnalysis['legislation_type'] ?? ''));
+
             $rows[] = [
                 'id' => 'source-'.$document->id,
                 'kind' => 'source',
                 'source_document_id' => $document->id,
+                'record_label' => $this->legislationRecordLabel($relationship, $legislationType),
                 'title' => $savedLegislation?->title
                     ?? (string) ($storedAnalysis['title'] ?? $document->title),
                 'subtitle' => $savedLegislation instanceof Legislation ? $document->title : null,
-                'relationship' => $savedLegislation instanceof Legislation
-                    ? Str::headline((string) $savedLegislation->pivot?->relationship_type)
-                    : Str::headline((string) ($storedAnalysis['relationship_type'] ?? '')),
-                'legislation_type' => $savedLegislation instanceof Legislation
-                    ? $this->legislationTypeLabel($savedLegislation->legislation_type)
-                    : $this->legislationTypeLabel((string) ($storedAnalysis['legislation_type'] ?? '')),
+                'relationship' => $relationship,
+                'legislation_type' => $legislationType,
                 'date_enacted' => $savedLegislation?->date_enacted?->toFormattedDateString()
                     ?? ($this->blankToNull((string) ($storedAnalysis['date_enacted'] ?? '')) ?? '—'),
                 'summary' => $savedLegislation?->summary
@@ -697,14 +702,18 @@ class LegislationPage extends Workspace
                 continue;
             }
 
+            $relationship = Str::headline((string) $legislation->pivot->relationship_type);
+            $legislationType = $this->legislationTypeLabel($legislation->legislation_type);
+
             $rows[] = [
                 'id' => 'legacy-'.$legislation->id,
                 'kind' => 'legacy',
                 'source_document_id' => null,
+                'record_label' => $this->legislationRecordLabel($relationship, $legislationType),
                 'title' => $legislation->title,
                 'subtitle' => null,
-                'relationship' => Str::headline((string) $legislation->pivot->relationship_type),
-                'legislation_type' => $this->legislationTypeLabel($legislation->legislation_type),
+                'relationship' => $relationship,
+                'legislation_type' => $legislationType,
                 'date_enacted' => $legislation->date_enacted?->toFormattedDateString() ?? '—',
                 'summary' => $legislation->summary,
                 'key_themes' => [],
@@ -723,6 +732,35 @@ class LegislationPage extends Workspace
         }
 
         return array_values($rows);
+    }
+
+    private function legislationRecordLabel(string $relationship, string $legislationType): string
+    {
+        $relationship = trim($relationship);
+        $legislationType = trim($legislationType);
+
+        if ($relationship === '' && $legislationType === '') {
+            return __('Legislation');
+        }
+
+        if (Str::lower($relationship) === 'primary') {
+            return __('Primary legislation');
+        }
+
+        if (Str::lower($relationship) === 'delegated') {
+            return $legislationType !== ''
+                ? __('Delegated :type', ['type' => Str::lower($legislationType)])
+                : __('Delegated legislation');
+        }
+
+        if ($relationship !== '' && $legislationType !== '') {
+            return __(':relationship :type', [
+                'relationship' => $relationship,
+                'type' => Str::lower($legislationType),
+            ]);
+        }
+
+        return $relationship !== '' ? $relationship : $legislationType;
     }
 
     private function sourceRecordStatus(Document $document): string
