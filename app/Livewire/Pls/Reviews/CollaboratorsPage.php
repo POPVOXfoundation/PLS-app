@@ -17,7 +17,7 @@ class CollaboratorsPage extends Workspace
 {
     use AuthorizesRequests;
 
-    protected string $workspace = 'collaborators';
+    protected string $workspace = 'settings';
 
     public string $inviteCollaboratorEmail = '';
 

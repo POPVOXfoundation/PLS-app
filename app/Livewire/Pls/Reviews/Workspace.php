@@ -103,12 +103,6 @@ class Workspace extends Component
                 'route' => 'pls.reviews.workflow',
             ],
             [
-                'key' => 'collaborators',
-                'label' => __('Collaborators'),
-                'icon' => 'user-plus',
-                'route' => 'pls.reviews.collaborators',
-            ],
-            [
                 'key' => 'legislation',
                 'label' => __('Legislation'),
                 'icon' => 'scale',
@@ -143,6 +137,12 @@ class Workspace extends Component
                 'label' => __('Reports'),
                 'icon' => 'clipboard-document-list',
                 'route' => 'pls.reviews.reports',
+            ],
+            [
+                'key' => 'settings',
+                'label' => __('Settings'),
+                'icon' => 'cog-6-tooth',
+                'route' => 'pls.reviews.settings',
             ],
         ];
     }

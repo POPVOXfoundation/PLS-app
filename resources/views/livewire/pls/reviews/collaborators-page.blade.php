@@ -1,4 +1,17 @@
 <div class="space-y-8">
+    <div class="space-y-2">
+        <flux:heading size="lg" level="2">{{ __('Workspace settings') }}</flux:heading>
+        <flux:text class="max-w-3xl text-sm text-zinc-500 dark:text-zinc-400">
+            {{ __('Manage review-level settings, starting with who can access and contribute to this workspace.') }}
+        </flux:text>
+    </div>
+
+    <div class="flex border-b border-zinc-200 dark:border-zinc-800">
+        <div class="-mb-px border-b-2 border-violet-600 px-1 pb-2 text-sm font-semibold text-violet-700 dark:text-violet-300">
+            {{ __('Collaborators') }}
+        </div>
+    </div>
+
     <flux:card class="space-y-6">
         <div>
             <flux:heading size="lg">{{ __('Share review') }}</flux:heading>

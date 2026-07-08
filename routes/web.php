@@ -32,7 +32,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->can('view', 'review')
             ->name('pls.reviews.show');
         Route::get('/workflow', WorkflowPage::class)->can('view', 'review')->name('pls.reviews.workflow');
-        Route::get('/collaborators', CollaboratorsPage::class)->can('view', 'review')->name('pls.reviews.collaborators');
+        Route::get('/settings', CollaboratorsPage::class)->can('view', 'review')->name('pls.reviews.settings');
+        Route::get('/collaborators', fn (PlsReview $review) => to_route('pls.reviews.settings', ['review' => $review]))
+            ->can('view', 'review')
+            ->name('pls.reviews.collaborators');
         Route::get('/legislation', LegislationPage::class)->can('view', 'review')->name('pls.reviews.legislation');
         Route::get('/documents', DocumentsPage::class)->can('view', 'review')->name('pls.reviews.documents');
         Route::get('/stakeholders', StakeholdersPage::class)->can('view', 'review')->name('pls.reviews.stakeholders');

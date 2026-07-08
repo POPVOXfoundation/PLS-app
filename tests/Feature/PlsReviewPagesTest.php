@@ -255,7 +255,7 @@ test('review workflow page renders workflow details and supports step switching'
         ->assertOk()
         ->assertSee(config('app.name'))
         ->assertSee($review->title)
-        ->assertSee('Collaborators')
+        ->assertSee('Settings')
         ->assertSee('PLS Assistant')
         ->assertSee('Define the objectives and scope of PLS')
         ->assertSee('Analyse post-legislative scrutiny findings')
@@ -296,13 +296,13 @@ test('all review section routes render inside the shared workspace shell', funct
 
     $routes = [
         'pls.reviews.workflow' => 'Define the objectives and scope of PLS',
-        'pls.reviews.collaborators' => 'Collaborators',
         'pls.reviews.legislation' => 'No records saved for this review yet.',
         'pls.reviews.documents' => 'Document file',
         'pls.reviews.stakeholders' => 'Stakeholder directory',
         'pls.reviews.consultations' => 'Consultation activity',
         'pls.reviews.analysis' => 'Findings & recommendations',
         'pls.reviews.reports' => 'Government responses',
+        'pls.reviews.settings' => 'Workspace settings',
     ];
 
     foreach ($routes as $route => $expectedText) {
@@ -315,6 +315,9 @@ test('all review section routes render inside the shared workspace shell', funct
             ->assertSee('All reviews')
             ->assertDontSee('New review');
     }
+
+    $this->get(route('pls.reviews.collaborators', ['review' => $review->id]))
+        ->assertRedirect(route('pls.reviews.settings', ['review' => $review->id]));
 });
 
 test('legislation page uses inline source analysis instead of attach and create modals', function () {

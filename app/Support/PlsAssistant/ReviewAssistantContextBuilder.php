@@ -338,7 +338,7 @@ class ReviewAssistantContextBuilder
             'workflow' => $this->workflowFacts($review),
             'documents' => $this->documentsFacts($review),
             'legislation' => $this->legislationFacts($review),
-            'collaborators' => $this->collaboratorFacts($review),
+            'collaborators', 'settings' => $this->collaboratorFacts($review),
             'stakeholders' => $this->stakeholderFacts($review),
             'consultations' => $this->consultationFacts($review),
             'analysis' => $this->analysisFacts($review),
