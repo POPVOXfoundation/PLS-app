@@ -1,4 +1,23 @@
-<div class="space-y-2">
+<div class="space-y-3">
+    <section class="rounded-lg border border-teal-200 bg-teal-50/80 px-4 py-3 text-sm text-teal-950 dark:border-teal-900 dark:bg-teal-950/20 dark:text-teal-100">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0 space-y-1">
+                <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="text-sm font-semibold">{{ __('PLS process guide') }}</h2>
+                    <flux:badge size="sm" color="teal">{{ __('Advisory steps') }}</flux:badge>
+                </div>
+
+                <p class="leading-6 text-teal-900/80 dark:text-teal-100/80">
+                    {{ __('These numbered steps summarize WFD methodology for planning and checking a PLS review. They are guidance for the inquiry, not the app navigation.') }}
+                </p>
+            </div>
+
+            <p class="max-w-sm leading-6 text-teal-900/80 dark:text-teal-100/80">
+                {{ __('Use the Workspace navigation menu on the left to open Collaborators, Legislation, Documents, Stakeholders, Consultations, Analysis, and Reports.') }}
+            </p>
+        </div>
+    </section>
+
     @foreach ($review->steps as $step)
         @php
             $isCurrent = $review->current_step_number === $step->step_number;
@@ -36,7 +55,7 @@
                         </h2>
 
                         @if ($isCurrent)
-                            <flux:badge size="sm" color="violet">{{ __('Current') }}</flux:badge>
+                            <flux:badge size="sm" color="violet">{{ __('Current focus') }}</flux:badge>
                         @endif
                     </div>
 

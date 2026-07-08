@@ -1,8 +1,13 @@
 <x-layouts::app.header :title="$title ?? null">
     <div class="flex h-full w-full flex-1 flex-col gap-4">
-        <div class="grid flex-1 gap-6 xl:grid-cols-[11rem_minmax(0,1fr)] 2xl:grid-cols-[12rem_minmax(0,1fr)]">
+        <div class="grid flex-1 gap-6 xl:grid-cols-[13rem_minmax(0,1fr)] 2xl:grid-cols-[14rem_minmax(0,1fr)]">
             <aside class="xl:sticky xl:top-24 xl:self-start">
-                <nav aria-label="{{ __('Review sections') }}" class="border-s border-zinc-200 ps-3 dark:border-zinc-200">
+                <nav aria-label="{{ __('Review workspace sections') }}" class="border-s border-zinc-200 ps-3 dark:border-zinc-200">
+                    <div class="mb-3 space-y-1 px-2.5">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Workspace navigation') }}</p>
+                        <p class="text-xs leading-5 text-zinc-500 dark:text-zinc-400">{{ __('Move through the app with these sections.') }}</p>
+                    </div>
+
                     <div class="space-y-1">
                         @foreach ($workspaceNavigation as $workspace)
                             @php
@@ -13,6 +18,7 @@
                                 href="{{ route($workspace['route'], ['review' => $review]) }}"
                                 wire:navigate
                                 aria-current="{{ $isActive ? 'page' : 'false' }}"
+                                title="{{ __('Open :section', ['section' => $workspace['label']]) }}"
                                 @class([
                                     'flex w-full items-center gap-2 rounded-lg border border-transparent px-2.5 py-2 text-left text-sm font-medium transition',
                                     'border-violet-200 bg-violet-50 font-semibold text-violet-900 dark:border-violet-200 dark:bg-violet-50 dark:text-violet-900' => $isActive,
