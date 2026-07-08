@@ -16,7 +16,7 @@ use App\Livewire\Pls\Reviews\StakeholdersPage;
 use App\Livewire\Pls\Reviews\WorkflowPage;
 use Illuminate\Support\Facades\Route;
 
-Route::redirect('/', '/login')->name('home');
+Route::view('/', 'welcome')->name('home');
 
 Route::get('pls/invitations/{token}/accept', AcceptReviewInvitationController::class)->name('pls.invitations.accept');
 
