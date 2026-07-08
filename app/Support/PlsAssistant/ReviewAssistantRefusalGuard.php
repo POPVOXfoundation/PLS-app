@@ -63,7 +63,7 @@ class ReviewAssistantRefusalGuard
     private function documentsRefusal(string $prompt, array $structuredContext): ?string
     {
         if ($this->containsAny($prompt, ['impact', 'impact analysis', 'policy impact'])) {
-            return 'I can summarize and compare documents in this tab, but I cannot provide impact analysis from the Documents tab.';
+            return 'I can summarize and compare evidence in this tab, but I cannot provide impact analysis from the Evidence tab.';
         }
 
         $hasGroundedDocuments = collect($structuredContext['grounding']['review'])

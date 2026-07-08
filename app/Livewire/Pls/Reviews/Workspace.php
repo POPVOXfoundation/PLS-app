@@ -110,7 +110,7 @@ class Workspace extends Component
             ],
             [
                 'key' => 'documents',
-                'label' => __('Documents'),
+                'label' => __('Evidence'),
                 'icon' => 'document-text',
                 'route' => 'pls.reviews.documents',
             ],

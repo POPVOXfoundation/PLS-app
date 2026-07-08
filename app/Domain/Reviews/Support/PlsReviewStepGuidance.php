@@ -19,7 +19,7 @@ class PlsReviewStepGuidance
         'background_data_plan' => [
             'title' => 'Build the evidence base',
             'summary' => 'Use the documents area to collect background papers, implementation records, and supporting material before consultations begin.',
-            'tab' => 'Documents',
+            'tab' => 'Evidence',
             'action' => 'Upload implementation reports, audits, and background research notes.',
         ],
         'stakeholder_plan' => [

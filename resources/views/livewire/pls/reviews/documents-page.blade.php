@@ -21,9 +21,9 @@
             class="space-y-5"
         >
             <div class="space-y-2">
-                <flux:heading size="lg">{{ __('Documents') }}</flux:heading>
+                <flux:heading size="lg">{{ __('Evidence') }}</flux:heading>
                 <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                    {{ __('Upload review documents and they will appear in the records table below.') }}
+                    {{ __('Upload review evidence and source materials. PLSAssist will read each file and keep the record here for review.') }}
                 </flux:text>
             </div>
 
@@ -37,7 +37,7 @@
                     >
                         <flux:file-upload.dropzone
                             class="!min-h-28 !py-4"
-                            :heading="__('Drag documents here or choose files')"
+                            :heading="__('Drag evidence here or choose files')"
                             :text="__('PDF, DOCX, TXT, or MD, :limit', ['limit' => $this->uploadLimitLabel()])"
                         />
                     </flux:file-upload>
@@ -58,18 +58,18 @@
                         <flux:progress value="0" color="sky" x-bind:value="progress" />
 
                         <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                            {{ __('Moving documents into the review workspace. Once uploaded, PLSAssist will start reading them in the background.') }}
+                            {{ __('Moving evidence into the review workspace. Once uploaded, PLSAssist will start reading it in the background.') }}
                         </flux:text>
                     </flux:field>
                 </div>
 
                 <div class="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400" wire:loading.flex wire:target="documentUploads">
                     <flux:icon icon="arrow-path" class="size-4 animate-spin text-sky-500" />
-                    <span>{{ __('Adding documents to records...') }}</span>
+                    <span>{{ __('Adding evidence to records...') }}</span>
                 </div>
             @else
                 <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                    {{ __('You can review saved document records here, but only contributors can upload or edit them.') }}
+                    {{ __('You can review saved evidence records here, but only contributors can upload or edit them.') }}
                 </flux:text>
             @endcan
         </div>
@@ -94,7 +94,7 @@
 
         @if ($recordRows === [])
             <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                {{ __('No documents linked to this review yet.') }}
+                {{ __('No evidence linked to this review yet.') }}
             </flux:text>
         @else
             <flux:table>

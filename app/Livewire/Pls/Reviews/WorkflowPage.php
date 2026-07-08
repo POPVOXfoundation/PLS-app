@@ -39,7 +39,7 @@ class WorkflowPage extends Workspace
                 ['label' => __('Working documents'), 'value' => (string) $documentCount],
             ],
             'background_data_plan', 'implementation_review' => [
-                ['label' => __('Documents'), 'value' => (string) $documentCount],
+                ['label' => __('Evidence'), 'value' => (string) $documentCount],
                 ['label' => __('Evidence items'), 'value' => (string) $review->evidenceItems->count()],
                 ['label' => __('Agencies reviewed'), 'value' => (string) $review->implementingAgencies->count()],
             ],
@@ -64,7 +64,7 @@ class WorkflowPage extends Workspace
                 ['label' => __('Recommendations'), 'value' => (string) $review->recommendations->count()],
             ],
             default => [
-                ['label' => __('Documents'), 'value' => (string) $documentCount],
+                ['label' => __('Evidence'), 'value' => (string) $documentCount],
                 ['label' => __('Findings'), 'value' => (string) $review->findings->count()],
                 ['label' => __('Recommendations'), 'value' => (string) $review->recommendations->count()],
             ],

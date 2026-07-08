@@ -142,7 +142,7 @@ class AssistantSidebar extends Component
     {
         return match ($workspaceKey) {
             'legislation' => __('Ask about this legislation...'),
-            'documents' => __('Ask about these documents...'),
+            'documents' => __('Ask about this evidence...'),
             'stakeholders' => __('Ask about stakeholder coverage...'),
             'consultations' => __('Ask about this consultation process...'),
             'analysis' => __('Ask about findings or recommendations...'),

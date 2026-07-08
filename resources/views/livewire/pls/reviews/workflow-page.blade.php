@@ -13,7 +13,7 @@
             </div>
 
             <p class="max-w-sm leading-6 text-teal-900/80 dark:text-teal-100/80">
-                {{ __('Use the Workspace navigation menu on the left to open Legislation, Documents, Stakeholders, Consultations, Analysis, Reports, and Settings.') }}
+                {{ __('Use the Workspace navigation menu on the left to open Legislation, Evidence, Stakeholders, Consultations, Analysis, Reports, and Settings.') }}
             </p>
         </div>
     </div>
