@@ -6,6 +6,7 @@ use App\Ai\Agents\ReviewDocumentExtractorAgent;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Support\PlsAssistant\AssistantSourceTextExtractorFactory;
+use App\Support\PlsAssistant\StakeholderSuggestionNormalizer;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -30,6 +31,7 @@ class AnalyzeReviewDocument
      *     key_themes: list<string>,
      *     notable_excerpts: list<string>,
      *     important_dates: list<string>,
+     *     stakeholder_suggestions: list<array<string, mixed>>,
      *     warnings: list<string>,
      *     raw_text: string
      * }
@@ -99,6 +101,7 @@ class AnalyzeReviewDocument
             'key_themes' => [],
             'notable_excerpts' => [],
             'important_dates' => [],
+            'stakeholder_suggestions' => [],
             'warnings' => $warnings,
             'raw_text' => $rawText,
         ];
@@ -125,6 +128,7 @@ class AnalyzeReviewDocument
      *     key_themes: list<string>,
      *     notable_excerpts: list<string>,
      *     important_dates: list<string>,
+     *     stakeholder_suggestions: list<array<string, mixed>>,
      *     warnings: list<string>,
      *     raw_text: string
      * }
@@ -161,6 +165,7 @@ class AnalyzeReviewDocument
             'key_themes' => $aiExtraction['key_themes'],
             'notable_excerpts' => $aiExtraction['notable_excerpts'],
             'important_dates' => $aiExtraction['important_dates'],
+            'stakeholder_suggestions' => $aiExtraction['stakeholder_suggestions'],
             'warnings' => $aiExtraction['warnings'],
             'raw_text' => $rawText,
         ];
@@ -236,6 +241,7 @@ class AnalyzeReviewDocument
      *     key_themes: list<string>,
      *     notable_excerpts: list<string>,
      *     important_dates: list<string>,
+     *     stakeholder_suggestions: list<array<string, mixed>>,
      *     warnings: list<string>
      * }|null
      */
@@ -259,6 +265,11 @@ class AnalyzeReviewDocument
         $keyThemes = $this->normalizeStringList($response['key_themes'] ?? [], 5, 120);
         $notableExcerpts = $this->normalizeStringList($response['notable_excerpts'] ?? [], 3, 320);
         $importantDates = $this->normalizeImportantDates($response['important_dates'] ?? []);
+        $stakeholderSuggestions = app(StakeholderSuggestionNormalizer::class)->normalize(
+            $response['stakeholder_suggestions'] ?? [],
+            $document->id,
+            $document->title,
+        );
         $warnings = $this->normalizeStringList($response['warnings'] ?? [], 5, 200);
 
         if ($title === '' || $documentType === null) {
@@ -272,6 +283,7 @@ class AnalyzeReviewDocument
             'key_themes' => $keyThemes,
             'notable_excerpts' => $notableExcerpts,
             'important_dates' => $importantDates,
+            'stakeholder_suggestions' => $stakeholderSuggestions,
             'warnings' => $warnings,
         ];
     }
@@ -338,6 +350,7 @@ class AnalyzeReviewDocument
      *     key_themes: list<string>,
      *     notable_excerpts: list<string>,
      *     important_dates: list<string>,
+     *     stakeholder_suggestions: list<array<string, mixed>>,
      *     warnings: list<string>,
      *     raw_text: string
      * }
@@ -367,6 +380,7 @@ class AnalyzeReviewDocument
             'key_themes' => [],
             'notable_excerpts' => [],
             'important_dates' => [],
+            'stakeholder_suggestions' => [],
             'warnings' => array_values(array_unique(array_filter($warnings))),
             'raw_text' => $rawText,
         ];

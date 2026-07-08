@@ -55,6 +55,7 @@ class PersistReviewDocumentState
      *     key_themes?: list<string>,
      *     notable_excerpts?: list<string>,
      *     important_dates?: list<string>,
+     *     stakeholder_suggestions?: list<array<string, mixed>>,
      *     warnings?: list<string>
      * }  $result
      */
@@ -102,6 +103,7 @@ class PersistReviewDocumentState
             'key_themes' => $result['key_themes'] ?? [],
             'notable_excerpts' => $result['notable_excerpts'] ?? [],
             'important_dates' => $result['important_dates'] ?? [],
+            'stakeholder_suggestions' => $result['stakeholder_suggestions'] ?? [],
             'warnings' => $result['warnings'] ?? [],
             'updated_at' => now()->toIso8601String(),
         ], fn (mixed $value): bool => $value !== null));
@@ -157,6 +159,7 @@ class PersistReviewDocumentState
             'key_themes' => [],
             'notable_excerpts' => [],
             'important_dates' => [],
+            'stakeholder_suggestions' => [],
             'warnings' => [],
             'updated_at' => now()->toIso8601String(),
         ], fn (mixed $value): bool => $value !== null));

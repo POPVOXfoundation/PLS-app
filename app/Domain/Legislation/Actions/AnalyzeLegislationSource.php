@@ -8,6 +8,7 @@ use App\Domain\Legislation\Enums\LegislationType;
 use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
 use App\Domain\Legislation\Legislation;
 use App\Support\PlsAssistant\AssistantSourceTextExtractorFactory;
+use App\Support\PlsAssistant\StakeholderSuggestionNormalizer;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -75,6 +76,7 @@ class AnalyzeLegislationSource
      *     key_themes: list<string>,
      *     notable_excerpts: list<string>,
      *     important_dates: list<string>,
+     *     stakeholder_suggestions: list<array<string, mixed>>,
      *     relationship_type: string,
      *     signals: list<string>,
      *     hints: list<string>,
@@ -120,6 +122,7 @@ class AnalyzeLegislationSource
             'key_themes' => $aiExtraction['key_themes'],
             'notable_excerpts' => $aiExtraction['notable_excerpts'],
             'important_dates' => $aiExtraction['important_dates'],
+            'stakeholder_suggestions' => $aiExtraction['stakeholder_suggestions'],
             'relationship_type' => $aiExtraction['relationship_type'],
             'signals' => [],
             'hints' => [],
@@ -149,6 +152,7 @@ class AnalyzeLegislationSource
      *     date_enacted: string,
      *     summary: string,
      *     relationship_type: string,
+     *     stakeholder_suggestions: list<array<string, mixed>>,
      *     signals: list<string>,
      *     hints: list<string>,
      *     warnings: list<string>,
@@ -254,6 +258,7 @@ class AnalyzeLegislationSource
      *     key_themes: list<string>,
      *     notable_excerpts: list<string>,
      *     important_dates: list<string>,
+     *     stakeholder_suggestions: list<array<string, mixed>>,
      *     relationship_type: string,
      *     warnings: list<string>
      * }|null
@@ -280,6 +285,11 @@ class AnalyzeLegislationSource
         $keyThemes = $this->normalizeStringList($response['key_themes'] ?? [], 5, 120);
         $notableExcerpts = $this->normalizeStringList($response['notable_excerpts'] ?? [], 3, 320);
         $importantDates = $this->normalizeImportantDates($response['important_dates'] ?? []);
+        $stakeholderSuggestions = app(StakeholderSuggestionNormalizer::class)->normalize(
+            $response['stakeholder_suggestions'] ?? [],
+            $document->id,
+            $document->title,
+        );
         $relationshipType = $this->normalizeRelationshipType($response['relationship_type'] ?? null);
         $warnings = $this->normalizeWarnings($response['warnings'] ?? []);
 
@@ -296,6 +306,7 @@ class AnalyzeLegislationSource
             'key_themes' => $keyThemes,
             'notable_excerpts' => $notableExcerpts,
             'important_dates' => $importantDates,
+            'stakeholder_suggestions' => $stakeholderSuggestions,
             'relationship_type' => $relationshipType->value,
             'warnings' => $warnings,
         ];
@@ -365,6 +376,7 @@ class AnalyzeLegislationSource
      *     key_themes: list<string>,
      *     notable_excerpts: list<string>,
      *     important_dates: list<string>,
+     *     stakeholder_suggestions: list<array<string, mixed>>,
      *     relationship_type: string,
      *     signals: list<string>,
      *     hints: list<string>,
@@ -401,6 +413,7 @@ class AnalyzeLegislationSource
             'key_themes' => [],
             'notable_excerpts' => [],
             'important_dates' => [],
+            'stakeholder_suggestions' => [],
             'relationship_type' => '',
             'signals' => [],
             'hints' => [],

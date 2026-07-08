@@ -11,6 +11,76 @@
     class="space-y-8"
 >
     <flux:card class="space-y-6">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div class="space-y-2">
+                <flux:heading size="lg">{{ __('Suggested by uploaded evidence') }}</flux:heading>
+                <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                    {{ __('PLSAssist can suggest stakeholders and implementing agencies named or implied by uploaded legislation and evidence. Review each suggestion before adding it to the directory.') }}
+                </flux:text>
+            </div>
+
+            @if ($suggestedStakeholders->isNotEmpty())
+                <flux:badge size="sm">{{ __(':count suggestions', ['count' => $suggestedStakeholders->count()]) }}</flux:badge>
+            @endif
+        </div>
+
+        @if ($suggestedStakeholders->isEmpty())
+            <div class="rounded-xl border border-dashed border-zinc-300 bg-zinc-50/70 px-4 py-4 dark:border-zinc-700 dark:bg-zinc-900/40">
+                <flux:text class="text-sm text-zinc-600 dark:text-zinc-400">
+                    {{ __('No stakeholder suggestions are ready yet. New or retried legislation and evidence uploads will surface suggestions here when PLSAssist can identify relevant actors from the source text.') }}
+                </flux:text>
+            </div>
+        @else
+            <div class="grid gap-3 lg:grid-cols-2">
+                @foreach ($suggestedStakeholders as $suggestion)
+                    <section class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0 space-y-2">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <flux:heading size="base" class="break-words">{{ $suggestion['name'] }}</flux:heading>
+                                    <flux:badge size="sm" :color="$suggestion['kind'] === 'implementing_agency' ? 'sky' : 'zinc'">
+                                        {{ $suggestion['kind'] === 'implementing_agency' ? __('Implementing agency') : __('Stakeholder') }}
+                                    </flux:badge>
+                                    <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($suggestion['category']) }}</flux:badge>
+                                </div>
+
+                                @if ($suggestion['rationale'] !== '')
+                                    <flux:text class="text-sm leading-6 text-zinc-600 dark:text-zinc-300">{{ $suggestion['rationale'] }}</flux:text>
+                                @endif
+
+                                <div class="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                    @if ($suggestion['source'] !== '')
+                                        <div>{{ __('Source phrase: :source', ['source' => $suggestion['source']]) }}</div>
+                                    @endif
+                                    @if ($suggestion['source_title'] !== '')
+                                        <div>{{ __('From: :title', ['title' => $suggestion['source_title']]) }}</div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 flex flex-wrap justify-end gap-2">
+                            @if ($suggestion['kind'] === 'implementing_agency')
+                                <flux:button size="sm" variant="primary" wire:click="prepareSuggestedImplementingAgency(@js($suggestion['id']))">
+                                    {{ __('Review and add') }}
+                                </flux:button>
+                            @else
+                                <flux:button size="sm" variant="primary" wire:click="prepareSuggestedStakeholder(@js($suggestion['id']))">
+                                    {{ __('Review and add') }}
+                                </flux:button>
+                            @endif
+
+                            <flux:button size="sm" variant="ghost" wire:click="dismissSuggestedStakeholder(@js($suggestion['id']))">
+                                {{ __('Dismiss') }}
+                            </flux:button>
+                        </div>
+                    </section>
+                @endforeach
+            </div>
+        @endif
+    </flux:card>
+
+    <flux:card class="space-y-6">
         <div class="flex items-center justify-between gap-4">
             <flux:heading size="lg">{{ __('Stakeholder directory') }}</flux:heading>
 

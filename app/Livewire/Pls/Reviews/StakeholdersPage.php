@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Pls\Reviews;
 
+use App\Domain\Documents\Document;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Stakeholders\Actions\StoreImplementingAgency;
 use App\Domain\Stakeholders\Actions\StoreStakeholder;
@@ -9,10 +10,13 @@ use App\Domain\Stakeholders\Actions\UpdateStakeholder;
 use App\Domain\Stakeholders\Enums\ImplementingAgencyType;
 use App\Domain\Stakeholders\Enums\StakeholderType;
 use App\Domain\Stakeholders\Stakeholder;
+use App\Support\PlsAssistant\StakeholderSuggestionNormalizer;
 use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class StakeholdersPage extends Workspace
@@ -45,6 +49,8 @@ class StakeholdersPage extends Workspace
 
     public string $implementingAgencyType = ImplementingAgencyType::Agency->value;
 
+    public string $activeSuggestionId = '';
+
     public function mount(PlsReview $review): void
     {
         parent::mount($review);
@@ -59,6 +65,7 @@ class StakeholdersPage extends Workspace
             'stakeholderTypes' => StakeholderType::cases(),
             'filteredStakeholders' => $this->filteredStakeholders($review),
             'implementingAgencyTypes' => ImplementingAgencyType::cases(),
+            'suggestedStakeholders' => $this->suggestedStakeholders($review),
         ], $review);
     }
 
@@ -77,6 +84,55 @@ class StakeholdersPage extends Workspace
     {
         $this->resetImplementingAgencyForm();
         $this->showAddImplementingAgencyModal = true;
+    }
+
+    public function prepareSuggestedStakeholder(string $suggestionId): void
+    {
+        $suggestion = $this->findSuggestion($suggestionId);
+
+        if ($suggestion === null || $suggestion['kind'] !== 'stakeholder') {
+            return;
+        }
+
+        $this->resetStakeholderForm();
+        $this->activeSuggestionId = $suggestion['id'];
+        $this->stakeholderName = $suggestion['name'];
+        $this->stakeholderType = StakeholderType::tryFrom($suggestion['category'])?->value ?? StakeholderType::Expert->value;
+        $this->stakeholderOrganization = '';
+        $this->stakeholderEmail = '';
+        $this->stakeholderPhone = '';
+        $this->showAddStakeholderModal = true;
+    }
+
+    public function prepareSuggestedImplementingAgency(string $suggestionId): void
+    {
+        $suggestion = $this->findSuggestion($suggestionId);
+
+        if ($suggestion === null || $suggestion['kind'] !== 'implementing_agency') {
+            return;
+        }
+
+        $this->resetImplementingAgencyForm();
+        $this->activeSuggestionId = $suggestion['id'];
+        $this->implementingAgencyName = $suggestion['name'];
+        $this->implementingAgencyType = ImplementingAgencyType::tryFrom($suggestion['category'])?->value ?? ImplementingAgencyType::Agency->value;
+        $this->showAddImplementingAgencyModal = true;
+    }
+
+    public function dismissSuggestedStakeholder(string $suggestionId): void
+    {
+        $this->authorizeReviewMutation();
+
+        if (! $this->updateSuggestionStatus($suggestionId, 'dismissed')) {
+            return;
+        }
+
+        $this->review = $this->loadReview();
+
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Suggestion dismissed'),
+            __('The stakeholder suggestion was dismissed.'),
+        ));
     }
 
     public function prepareSubmissionCreate(?int $stakeholderId = null): void
@@ -190,8 +246,14 @@ class StakeholdersPage extends Workspace
             return;
         }
 
+        $acceptedSuggestionId = $this->activeSuggestionId;
+
         $this->resetStakeholderForm();
         $this->showAddStakeholderModal = false;
+
+        if ($acceptedSuggestionId !== '') {
+            $this->updateSuggestionStatus($acceptedSuggestionId, 'accepted');
+        }
 
         $this->dispatchWorkspaceToast(Toast::success(
             __('Stakeholder added'),
@@ -218,8 +280,14 @@ class StakeholdersPage extends Workspace
             return;
         }
 
+        $acceptedSuggestionId = $this->activeSuggestionId;
+
         $this->resetImplementingAgencyForm();
         $this->showAddImplementingAgencyModal = false;
+
+        if ($acceptedSuggestionId !== '') {
+            $this->updateSuggestionStatus($acceptedSuggestionId, 'accepted');
+        }
 
         $this->dispatchWorkspaceToast(Toast::success(
             __('Implementing agency added'),
@@ -271,7 +339,8 @@ class StakeholdersPage extends Workspace
     {
         return PlsReview::query()
             ->with([
-                'stakeholders',
+                'documents',
+                'stakeholders.submissions',
                 'implementingAgencies',
             ])
             ->findOrFail($this->review->getKey());
@@ -347,6 +416,8 @@ class StakeholdersPage extends Workspace
             'stakeholderPhone',
         ]);
 
+        $this->activeSuggestionId = '';
+
         $this->stakeholderType = StakeholderType::GovernmentAgency->value;
 
         $this->resetValidation([
@@ -365,11 +436,116 @@ class StakeholdersPage extends Workspace
             'implementingAgencyName',
         ]);
 
+        $this->activeSuggestionId = '';
+
         $this->implementingAgencyType = ImplementingAgencyType::Agency->value;
 
         $this->resetValidation([
             'implementingAgencyName',
             'implementingAgencyType',
         ]);
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function suggestedStakeholders(PlsReview $review): Collection
+    {
+        $existingStakeholders = $review->stakeholders
+            ->map(fn (Stakeholder $stakeholder): string => Str::lower($stakeholder->name))
+            ->all();
+        $existingAgencies = $review->implementingAgencies
+            ->map(fn ($agency): string => Str::lower($agency->name))
+            ->all();
+
+        return $this->allStoredSuggestions($review)
+            ->filter(fn (array $suggestion): bool => ($suggestion['status'] ?? 'suggested') === 'suggested')
+            ->reject(function (array $suggestion) use ($existingStakeholders, $existingAgencies): bool {
+                $name = Str::lower((string) ($suggestion['name'] ?? ''));
+
+                return ($suggestion['kind'] ?? '') === 'implementing_agency'
+                    ? in_array($name, $existingAgencies, true)
+                    : in_array($name, $existingStakeholders, true);
+            })
+            ->sortBy([
+                fn (array $suggestion): int => ($suggestion['kind'] ?? '') === 'implementing_agency' ? 0 : 1,
+                fn (array $suggestion): string => (string) ($suggestion['name'] ?? ''),
+            ])
+            ->values();
+    }
+
+    private function findSuggestion(string $suggestionId): ?array
+    {
+        return $this->allStoredSuggestions($this->loadReview())
+            ->firstWhere('id', $suggestionId);
+    }
+
+    private function updateSuggestionStatus(string $suggestionId, string $status): bool
+    {
+        foreach ($this->loadReview()->documents as $document) {
+            foreach (['legislation_analysis', 'document_analysis'] as $metadataKey) {
+                $path = "{$metadataKey}.stakeholder_suggestions";
+                $suggestions = $this->normalizeDocumentSuggestions($document, $metadataKey);
+
+                if ($suggestions->isEmpty()) {
+                    continue;
+                }
+
+                $updated = false;
+                $nextSuggestions = $suggestions
+                    ->map(function (array $suggestion) use ($suggestionId, $status, &$updated): array {
+                        if ($suggestion['id'] === $suggestionId) {
+                            $suggestion['status'] = $status;
+                            $updated = true;
+                        }
+
+                        return $suggestion;
+                    })
+                    ->values()
+                    ->all();
+
+                if (! $updated) {
+                    continue;
+                }
+
+                $metadata = $document->metadata ?? [];
+                data_set($metadata, $path, $nextSuggestions);
+                $document->forceFill(['metadata' => $metadata])->save();
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function allStoredSuggestions(PlsReview $review): Collection
+    {
+        return $review->documents
+            ->flatMap(function (Document $document): array {
+                return [
+                    ...$this->normalizeDocumentSuggestions($document, 'legislation_analysis')->all(),
+                    ...$this->normalizeDocumentSuggestions($document, 'document_analysis')->all(),
+                ];
+            })
+            ->unique('id')
+            ->values();
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function normalizeDocumentSuggestions(Document $document, string $metadataKey): Collection
+    {
+        $suggestions = data_get($document->metadata, "{$metadataKey}.stakeholder_suggestions", []);
+
+        return collect(app(StakeholderSuggestionNormalizer::class)->normalize(
+            $suggestions,
+            $document->id,
+            $document->title,
+        ));
     }
 }

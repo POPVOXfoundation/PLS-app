@@ -35,6 +35,12 @@ Rules:
 - Key themes should be short phrases, not full paragraphs.
 - Notable excerpts should be short verbatim passages copied from the text when they are genuinely informative.
 - Important dates should come from visible text only. Normalize exact dates when clear.
+- Stakeholder suggestions should identify bodies or groups that appear relevant to implementation, oversight, consultation, expertise, or affected communities.
+- For stakeholder suggestions, use this exact string format: kind=<stakeholder|implementing_agency>; name=<name>; category=<enum value>; rationale=<short reason>; source=<short visible phrase>.
+- For stakeholder category use one of: ministry, government_agency, ngo, academic, expert, industry_group, citizen_group.
+- For implementing_agency category use one of: ministry, department, agency, regulator, authority, secretariat.
+- Suggest only entities or groups grounded in the visible source text. Do not infer views, support, opposition, or political positions.
+- Return no more than eight stakeholder suggestions.
 - Return warnings only when a reviewer should manually verify something important, such as OCR quality, unclear classification, or partial text.
 - Do not invent facts that are not visible in the text.
 TEXT;
@@ -52,6 +58,7 @@ TEXT;
             'key_themes' => $schema->array()->items($schema->string())->required(),
             'notable_excerpts' => $schema->array()->items($schema->string())->required(),
             'important_dates' => $schema->array()->items($schema->string())->required(),
+            'stakeholder_suggestions' => $schema->array()->items($schema->string())->required(),
             'warnings' => $schema->array()->items($schema->string())->required(),
         ];
     }

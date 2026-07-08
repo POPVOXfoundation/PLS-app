@@ -61,6 +61,7 @@ class PersistLegislationSourceState
      *     key_themes?: list<string>,
      *     notable_excerpts?: list<string>,
      *     important_dates?: list<string>,
+     *     stakeholder_suggestions?: list<array<string, mixed>>,
      *     relationship_type?: string,
      *     warnings?: list<string>,
      *     duplicate_candidates?: list<array{id: int, title: string, short_title: string, legislation_type: string, date_enacted: string}>
@@ -114,6 +115,7 @@ class PersistLegislationSourceState
             'key_themes' => $result['key_themes'] ?? [],
             'notable_excerpts' => $result['notable_excerpts'] ?? [],
             'important_dates' => $result['important_dates'] ?? [],
+            'stakeholder_suggestions' => $result['stakeholder_suggestions'] ?? [],
             'relationship_type' => $result['relationship_type'] ?? null,
             'warnings' => $result['warnings'] ?? [],
             'duplicate_candidates' => $result['duplicate_candidates'] ?? [],
@@ -179,6 +181,7 @@ class PersistLegislationSourceState
             'source_label' => data_get($metadata, 'legislation_analysis.source_label', $document->title),
             'title' => data_get($metadata, 'legislation_analysis.title', $document->title),
             'warnings' => [],
+            'stakeholder_suggestions' => [],
             'duplicate_candidates' => [],
             'updated_at' => now()->toIso8601String(),
         ], fn (mixed $value): bool => $value !== null));
