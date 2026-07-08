@@ -335,7 +335,8 @@ class LegislationPage extends Workspace
         }
 
         $this->dispatch('modal-close', name: 'source-insight');
-        $this->dispatch('assistant-prompt-requested', prompt: $this->sourceInsightAssistantPrompt);
+        $this->dispatch('assistant-prompt-requested', prompt: $this->sourceInsightAssistantPrompt)
+            ->to(AssistantSidebar::class);
     }
 
     public function retrySourceAnalysis(int $documentId): void
