@@ -5,13 +5,21 @@
         assistantOpen: false,
         scrollToBottom() {
             $nextTick(() => {
-                if (this.$refs.messages) {
-                    this.$refs.messages.scrollTo({ top: this.$refs.messages.scrollHeight, behavior: 'smooth' });
-                }
+                const scroll = () => {
+                    if (this.$refs.messages) {
+                        this.$refs.messages.scrollTo({ top: this.$refs.messages.scrollHeight, behavior: 'smooth' });
+                    }
+                };
+
+                scroll();
+                requestAnimationFrame(scroll);
+                setTimeout(scroll, 180);
+                setTimeout(scroll, 420);
             });
         },
     }"
     x-on:assistant-message-added.window="pendingMessage = ''; assistantOpen = true; scrollToBottom()"
+    x-on:assistant-open-requested.window="pendingMessage = $event.detail.prompt || ''; assistantOpen = true; scrollToBottom()"
     class="fixed inset-x-3 bottom-3 z-50 xl:left-[16rem] xl:right-6 2xl:left-[17rem] print:hidden"
 >
     <section

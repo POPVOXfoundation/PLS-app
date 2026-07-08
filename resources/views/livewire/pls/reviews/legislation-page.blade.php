@@ -457,8 +457,17 @@
                 </div>
 
                 <div class="flex flex-wrap gap-2">
-                    <flux:button size="sm" variant="primary" icon="chat-bubble-left-right" wire:click="askAssistantAboutSourceInsight">
-                        {{ __('Ask assistant') }}
+                    <flux:button
+                        size="sm"
+                        variant="primary"
+                        icon="chat-bubble-left-right"
+                        wire:click="askAssistantAboutSourceInsight"
+                        wire:loading.attr="disabled"
+                        wire:target="askAssistantAboutSourceInsight"
+                        x-on:click="$dispatch('assistant-open-requested', { prompt: @js($sourceInsightAssistantPrompt) }); window.Flux?.modal?.('source-insight')?.close?.()"
+                    >
+                        <span wire:loading.remove wire:target="askAssistantAboutSourceInsight">{{ __('Ask assistant') }}</span>
+                        <span wire:loading wire:target="askAssistantAboutSourceInsight">{{ __('Sending...') }}</span>
                     </flux:button>
 
                     @if ($sourceInsightOriginalUrl !== '')
