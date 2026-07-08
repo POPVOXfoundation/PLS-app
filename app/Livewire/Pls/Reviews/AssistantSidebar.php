@@ -126,6 +126,18 @@ class AssistantSidebar extends Component
         $this->submitAssistantPrompt();
     }
 
+    #[On('assistant-prompt-requested')]
+    public function sendRequestedPrompt(string $prompt): void
+    {
+        $prompt = Str::of($prompt)->trim()->limit(2000, '')->toString();
+
+        if ($prompt === '') {
+            return;
+        }
+
+        $this->sendPrompt($prompt);
+    }
+
     public function assistantPlaceholder(string $workspaceKey): string
     {
         return match ($workspaceKey) {

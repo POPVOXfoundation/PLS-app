@@ -17,6 +17,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
@@ -60,6 +61,23 @@ class LegislationPage extends Workspace
     public string $sourceTextContent = '';
 
     public string $sourceTextOriginalUrl = '';
+
+    public string $sourceInsightTitle = '';
+
+    public string $sourceInsightLabel = '';
+
+    public string $sourceInsightKind = '';
+
+    public string $sourceInsightQuery = '';
+
+    public string $sourceInsightOriginalUrl = '';
+
+    public string $sourceInsightAssistantPrompt = '';
+
+    /**
+     * @var list<array{chunk_index: int, snippet: string, matched_terms: list<string>}>
+     */
+    public array $sourceInsightSnippets = [];
 
     /**
      * @var list<string>
@@ -282,6 +300,44 @@ class LegislationPage extends Workspace
         $this->dispatch('modal-show', name: 'source-text');
     }
 
+    public function viewSourceInsight(int $documentId, string $query, string $kind = 'source item'): void
+    {
+        $this->authorize('view', $this->review);
+
+        $query = trim($query);
+
+        if ($query === '') {
+            return;
+        }
+
+        $document = $this->review->documents()
+            ->where('document_type', DocumentType::LegislationText->value)
+            ->findOrFail($documentId);
+
+        $this->sourceInsightTitle = $document->title;
+        $this->sourceInsightLabel = $query;
+        $this->sourceInsightKind = Str::headline($kind);
+        $this->sourceInsightQuery = $query;
+        $this->sourceInsightOriginalUrl = route('pls.reviews.legislation.sources.original', [
+            'review' => $this->review,
+            'document' => $document,
+        ]);
+        $this->sourceInsightSnippets = $this->sourceInsightSnippets($document, $query);
+        $this->sourceInsightAssistantPrompt = $this->assistantPromptForSourceInsight($document, $query, $kind);
+
+        $this->dispatch('modal-show', name: 'source-insight');
+    }
+
+    public function askAssistantAboutSourceInsight(): void
+    {
+        if (trim($this->sourceInsightAssistantPrompt) === '') {
+            return;
+        }
+
+        $this->dispatch('modal-close', name: 'source-insight');
+        $this->dispatch('assistant-prompt-requested', prompt: $this->sourceInsightAssistantPrompt);
+    }
+
     public function retrySourceAnalysis(int $documentId): void
     {
         $this->authorizeReviewMutation();
@@ -339,6 +395,26 @@ class LegislationPage extends Workspace
     public function sourceUploadLimitLabel(): string
     {
         return __('50 MB max');
+    }
+
+    public function highlightedSourceSnippet(string $snippet): HtmlString
+    {
+        $html = e($snippet);
+
+        foreach ($this->sourceInsightSearchTerms($this->sourceInsightQuery) as $term) {
+            if (mb_strlen($term) < 3) {
+                continue;
+            }
+
+            $needle = e($term);
+            $html = preg_replace(
+                '/('.preg_quote($needle, '/').')/iu',
+                '<mark class="rounded bg-amber-200 px-0.5 text-zinc-950">$1</mark>',
+                $html,
+            ) ?? $html;
+        }
+
+        return new HtmlString($html);
     }
 
     /**
@@ -764,6 +840,145 @@ class LegislationPage extends Workspace
             ->map(fn (mixed $value): string => trim((string) $value))
             ->values()
             ->all();
+    }
+
+    /**
+     * @return list<array{chunk_index: int, snippet: string, matched_terms: list<string>}>
+     */
+    private function sourceInsightSnippets(Document $document, string $query): array
+    {
+        $terms = $this->sourceInsightSearchTerms($query);
+
+        if ($terms === []) {
+            return [];
+        }
+
+        return $document->chunks()
+            ->orderBy('chunk_index')
+            ->get(['chunk_index', 'content'])
+            ->map(function ($chunk) use ($terms): ?array {
+                $content = trim((string) $chunk->content);
+
+                if ($content === '') {
+                    return null;
+                }
+
+                $matchedTerms = collect($terms)
+                    ->filter(fn (string $term): bool => mb_strlen($term) >= 3 && Str::contains(Str::lower($content), Str::lower($term)))
+                    ->values()
+                    ->all();
+
+                if ($matchedTerms === []) {
+                    return null;
+                }
+
+                $score = collect($matchedTerms)
+                    ->sum(fn (string $term): int => mb_strlen($term) >= 12 ? 4 : 1);
+
+                return [
+                    'chunk_index' => (int) $chunk->chunk_index,
+                    'matched_terms' => $matchedTerms,
+                    'score' => $score,
+                    'snippet' => $this->sourceInsightExcerpt($content, $matchedTerms[0]),
+                ];
+            })
+            ->filter()
+            ->sortByDesc('score')
+            ->take(4)
+            ->map(fn (array $snippet): array => [
+                'chunk_index' => $snippet['chunk_index'],
+                'matched_terms' => array_slice($snippet['matched_terms'], 0, 5),
+                'snippet' => $snippet['snippet'],
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function sourceInsightSearchTerms(string $query): array
+    {
+        $normalized = $this->normalizeInsightText($query);
+
+        if ($normalized === '') {
+            return [];
+        }
+
+        $terms = [$normalized];
+
+        if (preg_match('/^(.+?)\s*\((.+)\)$/u', $normalized, $matches) === 1) {
+            $terms[] = trim($matches[1]);
+            $terms[] = trim($matches[2]);
+        }
+
+        $terms = [
+            ...$terms,
+            ...preg_split('/[;:,•|]+/u', $normalized) ?: [],
+        ];
+
+        preg_match_all('/[\pL\pN][\pL\pN\'-]{3,}/u', $normalized, $matches);
+
+        $stopWords = [
+            'about', 'after', 'before', 'being', 'from', 'have', 'including', 'into', 'measures',
+            'more', 'that', 'their', 'there', 'this', 'through', 'under', 'where', 'with',
+        ];
+
+        foreach ($matches[0] ?? [] as $word) {
+            $word = trim($word);
+
+            if (mb_strlen($word) < 5 || in_array(Str::lower($word), $stopWords, true)) {
+                continue;
+            }
+
+            $terms[] = $word;
+        }
+
+        return collect($terms)
+            ->map(fn (string $term): string => $this->normalizeInsightText($term))
+            ->filter(fn (string $term): bool => $term !== '' && mb_strlen($term) >= 3)
+            ->unique(fn (string $term): string => Str::lower($term))
+            ->sortByDesc(fn (string $term): int => mb_strlen($term))
+            ->take(14)
+            ->values()
+            ->all();
+    }
+
+    private function normalizeInsightText(string $value): string
+    {
+        return Str::of($value)
+            ->replace(['“', '”'], '"')
+            ->replace(['‘', '’'], "'")
+            ->replaceMatches('/\s+/', ' ')
+            ->trim(" \t\n\r\0\x0B\"'")
+            ->toString();
+    }
+
+    private function sourceInsightExcerpt(string $content, string $term): string
+    {
+        $position = mb_stripos($content, $term);
+        $start = $position === false ? 0 : max(0, $position - 260);
+        $excerpt = mb_substr($content, $start, 760);
+        $excerpt = trim($excerpt);
+
+        if ($start > 0) {
+            $excerpt = '... '.$excerpt;
+        }
+
+        if ($start + mb_strlen($excerpt) < mb_strlen($content)) {
+            $excerpt .= ' ...';
+        }
+
+        return $excerpt;
+    }
+
+    private function assistantPromptForSourceInsight(Document $document, string $query, string $kind): string
+    {
+        return __('Using the uploaded legislation source ":source", explain where this :kind appears in the law and why it matters for post-legislative scrutiny: ":query". Cite the relevant passages or clauses from the uploaded text where possible.', [
+            'source' => $document->title,
+            'kind' => Str::headline($kind),
+            'query' => $this->normalizeInsightText($query),
+        ]);
     }
 
     private function performSourceDeletion(int $documentId): void

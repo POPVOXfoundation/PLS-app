@@ -176,7 +176,19 @@
                             <div class="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                                 <div class="space-y-4">
                                     <div>
-                                        <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Summary') }}</div>
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Summary') }}</div>
+
+                                            @if ($row['source_document_id'] !== null && $row['summary'])
+                                                <button
+                                                    type="button"
+                                                    wire:click="viewSourceInsight({{ $row['source_document_id'] }}, @js($row['summary']), 'summary')"
+                                                    class="text-xs font-medium text-violet-600 hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-300"
+                                                >
+                                                    {{ __('Find supporting text') }}
+                                                </button>
+                                            @endif
+                                        </div>
                                         <p class="mt-1 text-sm leading-6 text-zinc-700 dark:text-zinc-300">
                                             {{ $row['summary'] ?: __('No summary extracted yet.') }}
                                         </p>
@@ -187,9 +199,19 @@
                                             <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Notable excerpts') }}</div>
                                             <div class="mt-2 space-y-2">
                                                 @foreach (array_slice($row['notable_excerpts'], 0, 2) as $excerpt)
-                                                    <p class="rounded-lg bg-white px-3 py-2 text-sm leading-6 text-zinc-600 ring-1 ring-zinc-200 dark:bg-zinc-950/50 dark:text-zinc-300 dark:ring-zinc-800">
-                                                        "{{ $excerpt }}"
-                                                    </p>
+                                                    @if ($row['source_document_id'] !== null)
+                                                        <button
+                                                            type="button"
+                                                            wire:click="viewSourceInsight({{ $row['source_document_id'] }}, @js($excerpt), 'excerpt')"
+                                                            class="block w-full rounded-lg bg-white px-3 py-2 text-left text-sm leading-6 text-zinc-600 ring-1 ring-zinc-200 transition hover:bg-violet-50 hover:text-violet-900 hover:ring-violet-200 dark:bg-zinc-950/50 dark:text-zinc-300 dark:ring-zinc-800 dark:hover:bg-violet-500/10 dark:hover:text-violet-200 dark:hover:ring-violet-500/30"
+                                                        >
+                                                            "{{ $excerpt }}"
+                                                        </button>
+                                                    @else
+                                                        <p class="rounded-lg bg-white px-3 py-2 text-sm leading-6 text-zinc-600 ring-1 ring-zinc-200 dark:bg-zinc-950/50 dark:text-zinc-300 dark:ring-zinc-800">
+                                                            "{{ $excerpt }}"
+                                                        </p>
+                                                    @endif
                                                 @endforeach
                                             </div>
                                         </div>
@@ -204,7 +226,17 @@
                                         @else
                                             <div class="mt-2 flex flex-wrap gap-2">
                                                 @foreach ($row['key_themes'] as $theme)
-                                                    <flux:badge size="sm">{{ $theme }}</flux:badge>
+                                                    @if ($row['source_document_id'] !== null)
+                                                        <button
+                                                            type="button"
+                                                            wire:click="viewSourceInsight({{ $row['source_document_id'] }}, @js($theme), 'key theme')"
+                                                            class="rounded-md bg-zinc-100 px-2.5 py-1 text-sm font-medium text-zinc-700 transition hover:bg-violet-100 hover:text-violet-800 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-violet-500/20 dark:hover:text-violet-200"
+                                                        >
+                                                            {{ $theme }}
+                                                        </button>
+                                                    @else
+                                                        <flux:badge size="sm">{{ $theme }}</flux:badge>
+                                                    @endif
                                                 @endforeach
                                             </div>
                                         @endif
@@ -215,7 +247,17 @@
                                             <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Dates mentioned') }}</div>
                                             <div class="mt-2 flex flex-wrap gap-2">
                                                 @foreach ($row['important_dates'] as $date)
-                                                    <flux:badge size="sm">{{ $date }}</flux:badge>
+                                                    @if ($row['source_document_id'] !== null)
+                                                        <button
+                                                            type="button"
+                                                            wire:click="viewSourceInsight({{ $row['source_document_id'] }}, @js($date), 'date mentioned')"
+                                                            class="rounded-md bg-zinc-100 px-2.5 py-1 text-sm font-medium text-zinc-700 transition hover:bg-violet-100 hover:text-violet-800 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-violet-500/20 dark:hover:text-violet-200"
+                                                        >
+                                                            {{ $date }}
+                                                        </button>
+                                                    @else
+                                                        <flux:badge size="sm">{{ $date }}</flux:badge>
+                                                    @endif
                                                 @endforeach
                                             </div>
                                         </div>
@@ -226,7 +268,19 @@
                                             <div class="font-medium">{{ __('Needs verification') }}</div>
                                             <ul class="mt-1 space-y-1">
                                                 @foreach ($row['warnings'] as $warning)
-                                                    <li>{{ $warning }}</li>
+                                                    <li>
+                                                        @if ($row['source_document_id'] !== null)
+                                                            <button
+                                                                type="button"
+                                                                wire:click="viewSourceInsight({{ $row['source_document_id'] }}, @js($warning), 'verification note')"
+                                                                class="text-left underline decoration-amber-500/40 underline-offset-2 hover:text-amber-700 dark:hover:text-amber-50"
+                                                            >
+                                                                {{ $warning }}
+                                                            </button>
+                                                        @else
+                                                            {{ $warning }}
+                                                        @endif
+                                                    </li>
                                                 @endforeach
                                             </ul>
                                         </div>
@@ -408,6 +462,70 @@
             <div class="max-h-[65vh] overflow-y-auto rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/60">
                 <pre class="whitespace-pre-wrap break-words font-mono text-xs leading-5 text-zinc-700 dark:text-zinc-200">{{ $sourceTextContent }}</pre>
             </div>
+        </div>
+    </flux:modal>
+
+    <flux:modal name="source-insight" class="!max-w-[56rem] w-[calc(100vw-2rem)] lg:!w-[56rem]">
+        <div class="space-y-5">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0 space-y-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <flux:heading size="lg">{{ __('Where this appears') }}</flux:heading>
+                        @if ($sourceInsightKind !== '')
+                            <flux:badge size="sm">{{ $sourceInsightKind }}</flux:badge>
+                        @endif
+                    </div>
+
+                    <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">{{ $sourceInsightTitle }}</flux:text>
+                </div>
+
+                <div class="flex flex-wrap gap-2">
+                    <flux:button size="sm" variant="primary" icon="chat-bubble-left-right" wire:click="askAssistantAboutSourceInsight">
+                        {{ __('Ask assistant') }}
+                    </flux:button>
+
+                    @if ($sourceInsightOriginalUrl !== '')
+                        <flux:button size="sm" variant="subtle" icon="arrow-top-right-on-square" :href="$sourceInsightOriginalUrl" target="_blank" rel="noopener">
+                            {{ __('Open original') }}
+                        </flux:button>
+                    @endif
+                </div>
+            </div>
+
+            <div class="rounded-xl border border-violet-200 bg-violet-50/70 px-4 py-3 dark:border-violet-500/20 dark:bg-violet-500/10">
+                <div class="text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">{{ __('Selected item') }}</div>
+                <div class="mt-1 text-sm leading-6 text-violet-950 dark:text-violet-100">{{ $sourceInsightLabel }}</div>
+            </div>
+
+            @if ($sourceInsightSnippets === [])
+                <div class="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-4 text-sm leading-6 text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-300">
+                    {{ __('No direct text matches were found in the extracted source text. Try opening the full text or asking the assistant to reason from the full uploaded source.') }}
+                </div>
+            @else
+                <div class="space-y-3">
+                    @foreach ($sourceInsightSnippets as $snippet)
+                        <section class="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950/60">
+                            <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                                    {{ __('Source passage :number', ['number' => $loop->iteration]) }}
+                                </div>
+
+                                @if ($snippet['matched_terms'] !== [])
+                                    <div class="flex flex-wrap gap-1">
+                                        @foreach ($snippet['matched_terms'] as $term)
+                                            <span class="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{{ $term }}</span>
+                                        @endforeach
+                                    </div>
+                                @endif
+                            </div>
+
+                            <p class="text-sm leading-6 text-zinc-700 dark:text-zinc-200">
+                                {!! $this->highlightedSourceSnippet($snippet['snippet']) !!}
+                            </p>
+                        </section>
+                    @endforeach
+                </div>
+            @endif
         </div>
     </flux:modal>
 
