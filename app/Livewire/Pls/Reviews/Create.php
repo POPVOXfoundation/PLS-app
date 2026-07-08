@@ -79,6 +79,7 @@ class Create extends Component
         $reviewGroups = $userCountry === null || $selectedJurisdiction === null
             ? collect()
             : $this->inquiryLeads($userCountry, $selectedJurisdiction, $selectedLegislature);
+        $selectedReviewGroup = $this->resolveSelectedInquiryLead($reviewGroups);
 
         return view('livewire.pls.reviews.create', [
             'userCountry' => $userCountry,
@@ -89,11 +90,13 @@ class Create extends Component
             'legislatures' => $legislatures,
             'selectedLegislature' => $selectedLegislature,
             'reviewGroups' => $reviewGroups,
-            'selectedReviewGroup' => $this->resolveSelectedInquiryLead($reviewGroups),
+            'selectedReviewGroup' => $selectedReviewGroup,
+            'usingSingleLegislature' => $this->usingSingleOption($legislatures, $this->legislature_id, $this->creating_legislature),
+            'usingSingleReviewGroup' => $this->usingSingleOption($reviewGroups, $this->review_group_id, $this->creating_review_group),
             'legislatureContextReady' => ($selectedJurisdiction !== null || $this->creating_jurisdiction)
                 && ($selectedLegislature !== null || $this->creating_legislature),
         ])->layout('layouts.app', [
-            'title' => __('Create PLS Review'),
+            'title' => __('Set up a PLS review workspace'),
         ]);
     }
 
@@ -135,11 +138,11 @@ class Create extends Component
         });
 
         session()->flash('toast', Toast::success(
-            __('Review created'),
-            __('Your review is ready.'),
+            __('Workspace created'),
+            __('Add the legislation or source text to continue setup.'),
         ));
 
-        $this->redirectRoute('pls.reviews.workflow', ['review' => $review->id], navigate: true);
+        $this->redirectRoute('pls.reviews.legislation', ['review' => $review->id], navigate: true);
     }
 
     public function updatedScope(): void
@@ -517,7 +520,7 @@ class Create extends Component
     private function resolveSelectedLegislature(Collection $legislatures): ?Legislature
     {
         if ($this->legislature_id === '') {
-            return null;
+            return $this->singleAvailableOption($legislatures, $this->creating_legislature);
         }
 
         return $legislatures->firstWhere('id', (int) $this->legislature_id);
@@ -526,7 +529,7 @@ class Create extends Component
     private function resolveSelectedInquiryLead(Collection $reviewGroups): ?ReviewGroup
     {
         if ($this->review_group_id === '') {
-            return null;
+            return $this->singleAvailableOption($reviewGroups, $this->creating_review_group);
         }
 
         return $reviewGroups->firstWhere('id', (int) $this->review_group_id);
@@ -741,11 +744,57 @@ class Create extends Component
 
     private function needsExistingLegislature(): bool
     {
+        if ($this->singleLegislatureCanBeUsed()) {
+            return false;
+        }
+
         if ($this->scope === 'national') {
             return true;
         }
 
         return $this->scope === 'subnational' && ! $this->creating_legislature;
+    }
+
+    private function singleLegislatureCanBeUsed(): bool
+    {
+        if ($this->creating_legislature || $this->scope === '') {
+            return false;
+        }
+
+        $country = $this->userCountry();
+
+        if ($country === null) {
+            return false;
+        }
+
+        $legislatures = match ($this->scope) {
+            'national' => $this->nationalLegislatures($country),
+            'subnational' => $this->legislatures(
+                $this->resolveSelectedJurisdiction($this->subnationalJurisdictions($country)),
+            ),
+            default => collect(),
+        };
+
+        return $legislatures->count() === 1;
+    }
+
+    /**
+     * @template TModel
+     * @param  Collection<int, TModel>  $options
+     * @return TModel|null
+     */
+    private function singleAvailableOption(Collection $options, bool $creatingInline): mixed
+    {
+        if ($creatingInline || $options->count() !== 1) {
+            return null;
+        }
+
+        return $options->first();
+    }
+
+    private function usingSingleOption(Collection $options, string $selectedId, bool $creatingInline): bool
+    {
+        return $selectedId === '' && $this->singleAvailableOption($options, $creatingInline) !== null;
     }
 
     private function needsExistingSubnationalJurisdiction(): bool

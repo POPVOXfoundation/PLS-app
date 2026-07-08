@@ -67,12 +67,14 @@ test('review can be created from the create page with a selected inquiry lead', 
         ->and($review->country_id)->toBe($legislature->jurisdiction->country_id)
         ->and($review->steps()->count())->toBe(11)
         ->and($review->memberships()->where('user_id', $user->id)->firstOrFail()->role)->toBe(PlsReviewMembershipRole::Owner);
-    expect(session()->get('toast'))->toBe(Toast::success('Review created', 'Your review is ready.'));
-    $response->assertRedirect(route('pls.reviews.workflow', ['review' => $review->id]));
+    expect(session()->get('toast'))->toBe(Toast::success('Workspace created', 'Add the legislation or source text to continue setup.'));
+    $response->assertRedirect(route('pls.reviews.legislation', ['review' => $review->id]));
 });
 
 test('review can be created from the create page without an inquiry lead', function () {
     ['country' => $country, 'jurisdiction' => $jurisdiction, 'legislature' => $legislature] = plsHierarchy();
+    $legislature->reviewGroups()->delete();
+
     $user = User::factory()->reviewer()->create([
         'country_id' => $country->id,
     ]);
@@ -96,7 +98,7 @@ test('review can be created from the create page without an inquiry lead', funct
         ->and($review->legislature_id)->toBe($legislature->id)
         ->and($review->jurisdiction_id)->toBe($jurisdiction->id)
         ->and($review->country_id)->toBe($legislature->jurisdiction->country_id);
-    $response->assertRedirect(route('pls.reviews.workflow', ['review' => $review->id]));
+    $response->assertRedirect(route('pls.reviews.legislation', ['review' => $review->id]));
 });
 
 test('review can create a sub-national jurisdiction, legislature, and inquiry lead inline', function () {
