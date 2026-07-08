@@ -28,30 +28,17 @@
             </div>
 
             <div class="space-y-4">
-                <flux:label>{{ __('Source file') }}</flux:label>
-
-                <label class="flex cursor-pointer flex-col gap-3 rounded-lg border border-dashed border-zinc-300 bg-zinc-50/70 px-4 py-3 transition hover:border-violet-300 hover:bg-violet-50/60 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:border-violet-700 dark:hover:bg-violet-950/20 sm:flex-row sm:items-center sm:justify-between">
-                    <span class="flex min-w-0 items-center gap-3">
-                        <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white text-violet-600 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-950 dark:text-violet-300 dark:ring-zinc-800">
-                            <flux:icon icon="arrow-up-tray" class="size-4" />
-                        </span>
-                        <span class="min-w-0">
-                            <span class="block text-sm font-medium text-zinc-900 dark:text-white">{{ __('Upload legislation source') }}</span>
-                            <span class="block text-sm text-zinc-500 dark:text-zinc-400">{{ __('PDF or DOCX, :limit', ['limit' => $this->sourceUploadLimitLabel()]) }}</span>
-                        </span>
-                    </span>
-
-                    <span class="inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">
-                        {{ __('Choose file') }}
-                    </span>
-
-                    <input
-                        type="file"
-                        wire:model="sourceUpload"
-                        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                        class="sr-only"
-                    >
-                </label>
+                <flux:file-upload
+                    wire:model="sourceUpload"
+                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    :label="__('Source file')"
+                >
+                    <flux:file-upload.dropzone
+                        class="!min-h-28 !py-4"
+                        :heading="__('Drag source here or choose a file')"
+                        :text="__('PDF or DOCX, :limit', ['limit' => $this->sourceUploadLimitLabel()])"
+                    />
+                </flux:file-upload>
 
                 <flux:field>
                     <flux:error name="sourceUpload" />
