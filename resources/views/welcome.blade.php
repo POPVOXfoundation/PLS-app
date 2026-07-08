@@ -599,8 +599,8 @@
                             {{ __('Open the WFD PLS manual') }}
                         </a>
                         @auth
-                            <a href="{{ route('pls.reviews.index') }}" class="button">
-                                {{ __('View PLS reviews') }}
+                            <a href="{{ route('dashboard') }}" class="button">
+                                {{ __('Open dashboard') }}
                             </a>
                         @else
                             <a href="{{ route('login') }}" class="button">
