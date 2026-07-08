@@ -12,7 +12,7 @@
         },
     }"
     x-on:assistant-message-added.window="pendingMessage = ''; assistantOpen = true; scrollToBottom()"
-    class="fixed inset-x-3 bottom-3 z-50 xl:left-[18rem] 2xl:left-[19rem] print:hidden"
+    class="fixed inset-x-3 bottom-3 z-50 xl:left-[16rem] xl:right-6 2xl:left-[17rem] print:hidden"
 >
     <section
         x-show="assistantOpen"
@@ -52,8 +52,8 @@
                 @if ($assistantMessages === [] && $assistantError === null)
                     <div class="rounded-2xl border border-violet-200 bg-violet-50/80 px-3.5 py-3 dark:border-violet-400/20 dark:bg-violet-500/10">
                         <div class="flex items-start gap-2.5">
-                            <div class="flex size-7 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
-                                <flux:icon icon="sparkles" class="size-3.5" />
+                            <div class="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-white p-1 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+                                <img src="{{ asset('images/PLS bot sq.png') }}" alt="{{ __('PLSAssist') }}" class="size-full object-contain" />
                             </div>
                             <div class="min-w-0">
                                 <flux:text class="text-sm font-semibold text-zinc-900 dark:!text-zinc-100">
@@ -88,8 +88,8 @@
                         'flex items-start gap-2 pr-2' => $message['role'] === 'assistant',
                     ])>
                         @if ($message['role'] === 'assistant')
-                            <div class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
-                                <flux:icon icon="sparkles" class="size-3" />
+                            <div class="mt-0.5 flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-white p-1 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+                                <img src="{{ asset('images/PLS bot sq.png') }}" alt="{{ __('PLSAssist') }}" class="size-full object-contain" />
                             </div>
                         @endif
 
@@ -149,8 +149,8 @@
                 </div>
 
                 <div wire:loading.flex wire:target="submitAssistantPrompt, sendPrompt" data-thinking class="items-start gap-2 pr-2">
-                    <div class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
-                        <flux:icon icon="sparkles" class="size-3 animate-spin" />
+                    <div class="mt-0.5 flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-white p-1 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+                        <img src="{{ asset('images/PLS bot sq.png') }}" alt="{{ __('PLSAssist') }}" class="size-full animate-pulse object-contain" />
                     </div>
                     <div class="rounded-[1.25rem] rounded-tl-md border border-violet-200 bg-violet-50 px-3.5 py-2.5 dark:border-violet-400/20 dark:bg-violet-500/10">
                         <div class="flex items-center gap-1.5">
@@ -173,8 +173,8 @@
                 class="flex min-w-0 flex-1 items-center gap-2 text-left"
                 x-bind:aria-expanded="assistantOpen.toString()"
             >
-                <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
-                    <flux:icon icon="sparkles" class="size-4" />
+                <span class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-white p-1 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+                    <img src="{{ asset('images/PLS bot sq.png') }}" alt="{{ __('PLSAssist') }}" class="size-full object-contain" />
                 </span>
                 <span class="min-w-0">
                     <span class="flex flex-wrap items-center gap-2">
