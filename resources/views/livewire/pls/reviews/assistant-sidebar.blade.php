@@ -3,6 +3,11 @@
     x-data="{
         pendingMessage: '',
         assistantOpen: false,
+        queuePrompt(prompt) {
+            this.pendingMessage = prompt;
+            this.assistantOpen = true;
+            this.scrollToBottom();
+        },
         scrollToBottom() {
             $nextTick(() => {
                 const scroll = () => {
@@ -19,7 +24,7 @@
         },
     }"
     x-on:assistant-message-added.window="pendingMessage = ''; assistantOpen = true; scrollToBottom()"
-    x-on:assistant-open-requested.window="pendingMessage = $event.detail.prompt || ''; assistantOpen = true; scrollToBottom()"
+    x-on:assistant-open-requested.window="queuePrompt($event.detail.prompt || '')"
     class="fixed inset-x-3 bottom-3 z-50 xl:left-[16rem] xl:right-6 2xl:left-[17rem] print:hidden"
 >
     <section
@@ -75,7 +80,7 @@
                                     @foreach ($assistantContext['playbook']['suggested_prompts'] as $prompt)
                                         <button
                                             type="button"
-                                            x-on:click="assistantOpen = true"
+                                            x-on:click="queuePrompt(@js($prompt))"
                                             wire:click="sendPrompt(@js($prompt))"
                                             wire:loading.attr="disabled"
                                             wire:target="submitAssistantPrompt, sendPrompt"
@@ -171,9 +176,70 @@
                 </div>
             </div>
         </div>
+
+        <div class="border-t border-zinc-200/80 bg-white px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">
+            @if ($assistantMessages !== [])
+                <div class="mb-2 flex flex-wrap gap-1">
+                    @foreach ($assistantContext['playbook']['suggested_prompts'] as $prompt)
+                        <button
+                            type="button"
+                            x-on:click="queuePrompt(@js($prompt))"
+                            wire:click="sendPrompt(@js($prompt))"
+                            wire:loading.attr="disabled"
+                            wire:target="submitAssistantPrompt, sendPrompt"
+                            class="rounded-full px-2 py-0.5 text-[11px] font-medium text-violet-600 hover:bg-violet-50 hover:text-violet-800 disabled:pointer-events-none disabled:opacity-50 dark:text-violet-400 dark:hover:bg-violet-500/10 dark:hover:text-violet-300"
+                        >
+                            {{ $prompt }}
+                        </button>
+                    @endforeach
+                </div>
+            @endif
+
+            <form
+                wire:submit="submitAssistantPrompt"
+                x-on:submit="
+                    assistantOpen = true;
+                    pendingMessage = $wire.assistantInput;
+                    scrollToBottom();
+                "
+            >
+                <flux:composer
+                    wire:model="assistantInput"
+                    submit="enter"
+                    rows="1"
+                    placeholder="{{ $this->assistantPlaceholder($assistantContext['workspace_key']) }}"
+                >
+                    <x-slot:actionsTrailing>
+                        <flux:modal.trigger name="confirm-reset-chat">
+                            <flux:button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                icon="arrow-path"
+                                wire:loading.attr="disabled"
+                                wire:target="resetAssistantConversation, submitAssistantPrompt, sendPrompt"
+                                class="!text-zinc-400 hover:!text-zinc-500"
+                            />
+                        </flux:modal.trigger>
+                        <flux:button
+                            variant="primary"
+                            size="sm"
+                            icon="paper-airplane"
+                            type="submit"
+                            class="data-loading:opacity-50"
+                        />
+                    </x-slot:actionsTrailing>
+                </flux:composer>
+            </form>
+        </div>
     </section>
 
-    <div class="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-[0_18px_70px_-34px_rgba(15,23,42,0.5)] dark:border-zinc-700 dark:bg-zinc-900">
+    <div
+        x-show="! assistantOpen"
+        x-cloak
+        x-transition
+        class="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-[0_18px_70px_-34px_rgba(15,23,42,0.5)] dark:border-zinc-700 dark:bg-zinc-900"
+    >
         <div class="flex items-center justify-between gap-3 border-b border-zinc-200/80 px-3 py-2 dark:border-zinc-700">
             <button
                 type="button"
@@ -210,7 +276,7 @@
                     @foreach ($assistantContext['playbook']['suggested_prompts'] as $prompt)
                         <button
                             type="button"
-                            x-on:click="assistantOpen = true"
+                            x-on:click="queuePrompt(@js($prompt))"
                             wire:click="sendPrompt(@js($prompt))"
                             wire:loading.attr="disabled"
                             wire:target="submitAssistantPrompt, sendPrompt"
