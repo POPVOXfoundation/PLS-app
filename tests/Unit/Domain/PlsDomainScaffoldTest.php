@@ -1,6 +1,8 @@
 <?php
 
 use App\Domain\Consultations\Consultation;
+use App\Domain\Consultations\ConsultationMaterial;
+use App\Domain\Consultations\Enums\ConsultationMaterialType;
 use App\Domain\Consultations\Enums\ConsultationType;
 use App\Domain\Consultations\Submission;
 use App\Domain\Documents\AssistantSourceDocument;
@@ -56,6 +58,8 @@ it('defines the prompt one backed enums', function () {
         ->and(StakeholderType::GovernmentAgency->value)->toBe('government_agency')
         ->and(ImplementingAgencyType::Authority->value)->toBe('authority')
         ->and(ConsultationType::PublicConsultation->value)->toBe('public_consultation')
+        ->and(ConsultationType::FocusGroup->value)->toBe('focus_group')
+        ->and(ConsultationMaterialType::SurveyResults->value)->toBe('survey_results')
         ->and(ReportType::BriefingNote->value)->toBe('briefing_note')
         ->and(ReportStatus::Published->value)->toBe('published')
         ->and(GovernmentResponseStatus::Overdue->value)->toBe('overdue');
@@ -90,6 +94,8 @@ it('defines the expected prompt one relationships', function () {
         ->and((new Stakeholder)->submissions())->toBeInstanceOf(HasMany::class)
         ->and((new ImplementingAgency)->review())->toBeInstanceOf(BelongsTo::class)
         ->and((new Consultation)->document())->toBeInstanceOf(BelongsTo::class)
+        ->and((new Consultation)->materials())->toBeInstanceOf(HasMany::class)
+        ->and((new ConsultationMaterial)->consultation())->toBeInstanceOf(BelongsTo::class)
         ->and((new Submission)->stakeholder())->toBeInstanceOf(BelongsTo::class)
         ->and((new Report)->governmentResponses())->toBeInstanceOf(HasMany::class)
         ->and((new GovernmentResponse)->report())->toBeInstanceOf(BelongsTo::class)
@@ -128,6 +134,8 @@ it('registers enum, date, and json casts on the scaffolded models', function () 
     ])->and((new Consultation)->getCasts())->toMatchArray([
         'consultation_type' => ConsultationType::class,
         'held_at' => 'datetime',
+    ])->and((new ConsultationMaterial)->getCasts())->toMatchArray([
+        'material_type' => ConsultationMaterialType::class,
     ])->and((new Report)->getCasts())->toMatchArray([
         'report_type' => ReportType::class,
         'status' => ReportStatus::class,

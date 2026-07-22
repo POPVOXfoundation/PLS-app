@@ -4,6 +4,7 @@ use App\Domain\Analysis\EvidenceItem;
 use App\Domain\Analysis\Finding;
 use App\Domain\Analysis\Recommendation;
 use App\Domain\Consultations\Consultation;
+use App\Domain\Consultations\ConsultationMaterial;
 use App\Domain\Consultations\Submission;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\DocumentChunk;
@@ -103,6 +104,12 @@ it('loads analysis, stakeholder, consultation, and reporting relationships', fun
         'document_id' => $document->id,
     ]);
 
+    $consultationMaterial = ConsultationMaterial::factory()->create([
+        'consultation_id' => $consultation->id,
+        'document_id' => $document->id,
+        'stakeholder_id' => $stakeholder->id,
+    ]);
+
     $submission = Submission::factory()->create([
         'pls_review_id' => $review->id,
         'stakeholder_id' => $stakeholder->id,
@@ -140,6 +147,8 @@ it('loads analysis, stakeholder, consultation, and reporting relationships', fun
         ->and($review->consultations()->sole()->is($consultation))->toBeTrue()
         ->and($consultation->review->is($review))->toBeTrue()
         ->and($consultation->document->is($document))->toBeTrue()
+        ->and($consultation->materials()->sole()->is($consultationMaterial))->toBeTrue()
+        ->and($consultationMaterial->document->is($document))->toBeTrue()
         ->and($review->submissions()->sole()->is($submission))->toBeTrue()
         ->and($submission->review->is($review))->toBeTrue()
         ->and($submission->stakeholder->is($stakeholder))->toBeTrue()

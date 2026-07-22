@@ -387,7 +387,7 @@ test('consultations page does not render the intake summary box', function () {
 
     $this->get(route('pls.reviews.consultations', ['review' => $review->id]))
         ->assertOk()
-        ->assertSee('Consultation activity')
+        ->assertSee('Consultation plan')
         ->assertSee('Written submissions')
         ->assertDontSee('Consultation and evidence intake')
         ->assertDontSee('Keep planned engagement, completed activity, and written evidence in one workspace so the review team can trace participation back to the workflow.');

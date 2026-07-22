@@ -102,6 +102,8 @@ class ReviewAssistantContextBuilder
             'stakeholders.submissions',
             'implementingAgencies',
             'consultations.document',
+            'consultations.materials.document',
+            'consultations.materials.stakeholder',
             'submissions.stakeholder',
             'findings',
             'recommendations.finding',
@@ -477,11 +479,12 @@ class ReviewAssistantContextBuilder
             ),
             'Submissions: '.$review->submissions->count(),
             ...$this->formatList($review->consultations, fn (Consultation $consultation): string => sprintf(
-                '%s [%s]%s%s',
+                '%s [%s]%s%s%s',
                 $consultation->title,
                 Str::headline($consultation->consultation_type->value),
                 $consultation->held_at ? ' Held: '.$consultation->held_at->toDateString() : ' Planned',
                 $consultation->summary ? ' Summary: '.$consultation->summary : '',
+                $this->consultationMaterialFacts($consultation),
             )),
             ...($review->submissions->isEmpty()
                 ? ['No submissions are logged yet.']
@@ -491,6 +494,37 @@ class ReviewAssistantContextBuilder
                     $submission->summary ? ': '.$submission->summary : '',
                 ))),
         ];
+    }
+
+    private function consultationMaterialFacts(Consultation $consultation): string
+    {
+        if ($consultation->materials->isEmpty()) {
+            return '';
+        }
+
+        $materials = $consultation->materials
+            ->map(function ($material): string {
+                $document = $material->document;
+
+                if ($document === null) {
+                    return '';
+                }
+
+                $stakeholder = $material->stakeholder?->name;
+                $summary = trim((string) ($document->summary ?? ''));
+
+                return trim(sprintf(
+                    '%s [%s]%s%s',
+                    $document->title,
+                    Str::headline($material->material_type->value),
+                    $stakeholder ? ' From: '.$stakeholder : '',
+                    $summary !== '' ? ' Summary: '.$summary : '',
+                ));
+            })
+            ->filter()
+            ->implode('; ');
+
+        return $materials === '' ? '' : ' Materials: '.$materials;
     }
 
     /**

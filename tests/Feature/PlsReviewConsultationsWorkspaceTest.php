@@ -1,14 +1,20 @@
 <?php
 
 use App\Domain\Consultations\Consultation;
+use App\Domain\Consultations\ConsultationMaterial;
+use App\Domain\Consultations\Enums\ConsultationMaterialType;
 use App\Domain\Consultations\Enums\ConsultationType;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Stakeholders\Enums\StakeholderType;
 use App\Domain\Stakeholders\Stakeholder;
+use App\Jobs\ProcessReviewDocument;
 use App\Livewire\Pls\Reviews\ConsultationsPage;
 use App\Models\User;
 use App\Support\Toast;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -27,7 +33,7 @@ test('consultations can be created from the review workspace', function () {
     ]);
 
     Livewire::test(ConsultationsPage::class, ['review' => $review])
-        ->assertSee('Consultation activity')
+        ->assertSee('Consultation plan')
         ->set('consultationTitle', 'Public hearing on implementation obstacles')
         ->set('consultationType', ConsultationType::Hearing->value)
         ->set('consultationHeldAt', '2026-03-11')
@@ -47,6 +53,90 @@ test('consultations can be created from the review workspace', function () {
         'consultation_type' => ConsultationType::Hearing->value,
         'document_id' => $document->id,
     ]);
+});
+
+test('a consultation plan creates an activity for each selected method', function () {
+    $review = plsReview([
+        'title' => 'Review of consultation methods',
+    ]);
+
+    Livewire::test(ConsultationsPage::class, ['review' => $review])
+        ->set('consultationTitle', 'Implementation evidence gathering')
+        ->set('consultationTypesToPlan', [
+            ConsultationType::Hearing->value,
+            ConsultationType::FocusGroup->value,
+            ConsultationType::Survey->value,
+        ])
+        ->set('consultationSummary', 'Gather evidence from people affected by implementation and from delivery partners.')
+        ->call('storeConsultation')
+        ->assertHasNoErrors()
+        ->assertSee('Implementation evidence gathering - Hearing')
+        ->assertSee('Implementation evidence gathering - Focus group')
+        ->assertSee('Implementation evidence gathering - Survey');
+
+    $this->assertDatabaseCount('consultations', 3);
+    $this->assertDatabaseHas('consultations', [
+        'pls_review_id' => $review->id,
+        'title' => 'Implementation evidence gathering - Hearing',
+        'consultation_type' => ConsultationType::Hearing->value,
+    ]);
+    $this->assertDatabaseHas('consultations', [
+        'pls_review_id' => $review->id,
+        'title' => 'Implementation evidence gathering - Focus group',
+        'consultation_type' => ConsultationType::FocusGroup->value,
+    ]);
+    $this->assertDatabaseHas('consultations', [
+        'pls_review_id' => $review->id,
+        'title' => 'Implementation evidence gathering - Survey',
+        'consultation_type' => ConsultationType::Survey->value,
+    ]);
+});
+
+test('consultation results are stored with their consultation activity', function () {
+    Storage::fake('local');
+    Queue::fake();
+
+    $review = plsReview([
+        'title' => 'Review of consultation results',
+    ]);
+
+    $stakeholder = Stakeholder::factory()->create([
+        'pls_review_id' => $review->id,
+        'name' => 'Community Advocacy Network',
+        'stakeholder_type' => StakeholderType::Ngo,
+    ]);
+
+    $consultation = Consultation::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Regional implementation focus group',
+        'consultation_type' => ConsultationType::FocusGroup,
+    ]);
+
+    Livewire::test(ConsultationsPage::class, ['review' => $review])
+        ->call('prepareConsultationMaterialUpload', $consultation->id)
+        ->set('consultationMaterialTitle', 'Regional focus group notes')
+        ->set('consultationMaterialType', ConsultationMaterialType::FocusGroupNotes->value)
+        ->set('consultationMaterialStakeholderId', (string) $stakeholder->id)
+        ->set('consultationMaterialUpload', UploadedFile::fake()->create('focus-group-notes.txt', 12, 'text/plain'))
+        ->call('storeConsultationMaterial')
+        ->assertHasNoErrors()
+        ->assertSee('Regional focus group notes');
+
+    $material = ConsultationMaterial::query()->firstOrFail();
+
+    expect($material)
+        ->consultation_id->toBe($consultation->id)
+        ->stakeholder_id->toBe($stakeholder->id)
+        ->material_type->toBe(ConsultationMaterialType::FocusGroupNotes);
+
+    $this->assertDatabaseHas('documents', [
+        'id' => $material->document_id,
+        'pls_review_id' => $review->id,
+        'title' => 'Regional focus group notes',
+        'document_type' => DocumentType::ConsultationSubmission->value,
+    ]);
+
+    Queue::assertPushed(ProcessReviewDocument::class, fn (ProcessReviewDocument $job): bool => $job->documentId === $material->document_id);
 });
 
 test('consultations can be edited from the review workspace', function () {
@@ -141,7 +231,7 @@ test('consultation and submission modals exclude legislation documents and clari
     ]);
 
     Livewire::test(ConsultationsPage::class, ['review' => $review])
-        ->assertSee('Consultation note')
+        ->assertSee('Purpose and key questions')
         ->assertSee('Review note')
         ->assertSeeHtml('wire:model.self="showAddConsultationModal"', false)
         ->assertSeeHtml('wire:model.self="showAddSubmissionModal"', false)
@@ -215,7 +305,7 @@ test('consultations workspace removes dashboard cues and shows one consultation 
 
     Livewire::withQueryParams(['stakeholder' => $stakeholder->id])
         ->test(ConsultationsPage::class, ['review' => $review])
-        ->assertSee('Consultation activity')
+        ->assertSee('Consultation plan')
         ->assertSee('Written submissions')
         ->assertSee('Implementation hearing')
         ->assertSee('Regional roundtable')

@@ -17,6 +17,16 @@ class StoreReviewDocumentMetadata
      */
     public function store(array $input): PlsReview
     {
+        $document = $this->storeDocument($input);
+
+        return PlsReview::query()->findOrFail($document->pls_review_id)->fresh('documents');
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     */
+    public function storeDocument(array $input): Document
+    {
         $validated = $this->validator->validate($input);
         $uploadedFile = $validated['file'] ?? null;
         $metadata = $validated['metadata'] ?? null;
@@ -40,7 +50,7 @@ class StoreReviewDocumentMetadata
             $storedPath = $validated['storage_path'];
         }
 
-        Document::query()->create([
+        return Document::query()->create([
             'pls_review_id' => $validated['pls_review_id'],
             'title' => $validated['title'],
             'document_type' => $validated['document_type'],
@@ -51,7 +61,6 @@ class StoreReviewDocumentMetadata
             'metadata' => $metadata,
         ]);
 
-        return PlsReview::query()->findOrFail($validated['pls_review_id'])->fresh('documents');
     }
 
     /**

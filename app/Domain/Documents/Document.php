@@ -4,6 +4,7 @@ namespace App\Domain\Documents;
 
 use App\Domain\Analysis\EvidenceItem;
 use App\Domain\Consultations\Consultation;
+use App\Domain\Consultations\ConsultationMaterial;
 use App\Domain\Consultations\Submission;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Legislation\Legislation;
@@ -70,6 +71,11 @@ class Document extends Model
     public function consultations(): HasMany
     {
         return $this->hasMany(Consultation::class);
+    }
+
+    public function consultationMaterials(): HasMany
+    {
+        return $this->hasMany(ConsultationMaterial::class);
     }
 
     public function submissions(): HasMany

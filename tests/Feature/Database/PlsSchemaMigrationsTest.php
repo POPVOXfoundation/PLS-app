@@ -23,6 +23,7 @@ it('creates all prompt two pls tables', function () {
         'stakeholders',
         'implementing_agencies',
         'consultations',
+        'consultation_materials',
         'submissions',
         'findings',
         'recommendations',
@@ -126,6 +127,12 @@ it('creates the critical prompt two workflow and foreign key columns', function 
             'pls_review_id',
             'stakeholder_id',
             'document_id',
+        ]))->toBeTrue()
+        ->and(Schema::hasColumns('consultation_materials', [
+            'consultation_id',
+            'document_id',
+            'stakeholder_id',
+            'material_type',
         ]))->toBeTrue()
         ->and(Schema::hasColumns('government_responses', [
             'pls_review_id',

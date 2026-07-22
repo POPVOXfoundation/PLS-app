@@ -7,6 +7,7 @@ use App\Domain\Documents\Document;
 use App\Domain\Reviews\PlsReview;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Model;
 
 class Consultation extends Model
@@ -34,6 +35,11 @@ class Consultation extends Model
     public function document(): BelongsTo
     {
         return $this->belongsTo(Document::class);
+    }
+
+    public function materials(): HasMany
+    {
+        return $this->hasMany(ConsultationMaterial::class);
     }
 
     /**
