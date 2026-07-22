@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Pls\Reviews;
 
+use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Reviews\Support\PlsReviewStepGuidance;
 use Illuminate\Contracts\View\View;
@@ -49,7 +50,7 @@ class Workspace extends Component
      *     review: PlsReview,
      *     title: string,
      *     workflowSummary: array{current_step_number: int, current_step: string, total_steps: int, progress_percentage: int},
-     *     workspaceNavigation: list<array{icon: string, key: string, label: string, route: string}>
+     *     workspaceNavigation: list<array{count: int|null, icon: string, key: string, label: string, route: string}>
      * }
      */
     protected function workspaceLayoutData(PlsReview $review): array
@@ -59,7 +60,7 @@ class Workspace extends Component
             'review' => $review,
             'title' => $review->title,
             'workflowSummary' => $this->workflowSummary($review),
-            'workspaceNavigation' => $this->workspaceNavigation(),
+            'workspaceNavigation' => $this->workspaceNavigation($review),
         ];
     }
 
@@ -91,58 +92,79 @@ class Workspace extends Component
     }
 
     /**
-     * @return list<array{icon: string, key: string, label: string, route: string}>
+     * @return list<array{count: int|null, icon: string, key: string, label: string, route: string}>
      */
-    public function workspaceNavigation(): array
+    public function workspaceNavigation(PlsReview $review): array
     {
+        $counts = [
+            'legislation' => $review->documents()
+                ->where('document_type', DocumentType::LegislationText->value)
+                ->count(),
+            'documents' => $review->documents()
+                ->where('document_type', '!=', DocumentType::LegislationText->value)
+                ->count(),
+            'stakeholders' => $review->stakeholders()->count() + $review->implementingAgencies()->count(),
+            'consultations' => $review->consultations()->count() + $review->submissions()->count(),
+            'analysis' => $review->findings()->count() + $review->recommendations()->count(),
+            'reports' => $review->reports()->count(),
+        ];
+
         return [
             [
                 'key' => 'workflow',
                 'label' => __('Overview'),
                 'icon' => 'list-bullet',
                 'route' => 'pls.reviews.workflow',
+                'count' => null,
             ],
             [
                 'key' => 'legislation',
                 'label' => __('Legislation'),
                 'icon' => 'scale',
                 'route' => 'pls.reviews.legislation',
+                'count' => $counts['legislation'],
             ],
             [
                 'key' => 'documents',
                 'label' => __('Evidence'),
                 'icon' => 'document-text',
                 'route' => 'pls.reviews.documents',
+                'count' => $counts['documents'],
             ],
             [
                 'key' => 'stakeholders',
                 'label' => __('Stakeholders'),
                 'icon' => 'users',
                 'route' => 'pls.reviews.stakeholders',
+                'count' => $counts['stakeholders'],
             ],
             [
                 'key' => 'consultations',
                 'label' => __('Consultations'),
                 'icon' => 'chat-bubble-left-right',
                 'route' => 'pls.reviews.consultations',
+                'count' => $counts['consultations'],
             ],
             [
                 'key' => 'analysis',
                 'label' => __('Analysis'),
                 'icon' => 'light-bulb',
                 'route' => 'pls.reviews.analysis',
+                'count' => $counts['analysis'],
             ],
             [
                 'key' => 'reports',
                 'label' => __('Reports'),
                 'icon' => 'clipboard-document-list',
                 'route' => 'pls.reviews.reports',
+                'count' => $counts['reports'],
             ],
             [
                 'key' => 'settings',
                 'label' => __('Settings'),
                 'icon' => 'cog-6-tooth',
                 'route' => 'pls.reviews.settings',
+                'count' => null,
             ],
         ];
     }

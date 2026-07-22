@@ -1,5 +1,6 @@
 <div
     x-data="{
+        activeTab: 'stakeholders',
         deleteConfirmation: { id: null, title: '', noun: '' },
         setDeleteConfirmation(id, title, noun) {
             this.deleteConfirmation = { id, title, noun };
@@ -10,7 +11,21 @@
     }"
     class="space-y-8"
 >
-    <flux:card class="space-y-6">
+    <section class="border-b border-zinc-200 pb-4 dark:border-zinc-800">
+        <div class="flex gap-2 overflow-x-auto" role="tablist" aria-label="{{ __('Stakeholder workspace sections') }}">
+            <button type="button" x-on:click="activeTab = 'stakeholders'" x-bind:aria-selected="(activeTab === 'stakeholders').toString()" :class="activeTab === 'stakeholders' ? 'border-violet-600 text-violet-800 dark:text-violet-200' : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white'" class="shrink-0 border-b-2 px-3 py-2 text-sm font-medium">
+                {{ __('Stakeholders') }} <span class="ml-1 tabular-nums">{{ $review->stakeholders->count() }}</span>
+            </button>
+            <button type="button" x-on:click="activeTab = 'agencies'" x-bind:aria-selected="(activeTab === 'agencies').toString()" :class="activeTab === 'agencies' ? 'border-violet-600 text-violet-800 dark:text-violet-200' : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white'" class="shrink-0 border-b-2 px-3 py-2 text-sm font-medium">
+                {{ __('Implementing agencies') }} <span class="ml-1 tabular-nums">{{ $review->implementingAgencies->count() }}</span>
+            </button>
+            <button type="button" x-on:click="activeTab = 'suggestions'" x-bind:aria-selected="(activeTab === 'suggestions').toString()" :class="activeTab === 'suggestions' ? 'border-violet-600 text-violet-800 dark:text-violet-200' : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white'" class="shrink-0 border-b-2 px-3 py-2 text-sm font-medium">
+                {{ __('Suggestions') }} <span class="ml-1 tabular-nums">{{ $suggestedStakeholders->count() + $suggestedImplementingAgencies->count() }}</span>
+            </button>
+        </div>
+    </section>
+
+    <flux:card x-show="activeTab === 'suggestions'" x-cloak class="space-y-6">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="space-y-2">
                 <flux:heading size="lg">{{ __('Suggested implementing agencies from legislation') }}</flux:heading>
@@ -97,7 +112,7 @@
         @endif
     </flux:card>
 
-    <flux:card class="space-y-6">
+    <flux:card x-show="activeTab === 'suggestions'" x-cloak class="space-y-6">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="space-y-2">
                 <flux:heading size="lg">{{ __('Suggested stakeholders') }}</flux:heading>
@@ -159,7 +174,7 @@
         @endif
     </flux:card>
 
-    <flux:card class="space-y-6">
+    <flux:card x-show="activeTab === 'stakeholders'" x-cloak class="space-y-6">
         <div class="flex items-center justify-between gap-4">
             <flux:heading size="lg">{{ __('Stakeholders') }}</flux:heading>
 
@@ -192,6 +207,7 @@
                     <flux:table.column>{{ __('Name') }}</flux:table.column>
                     <flux:table.column>{{ __('Type') }}</flux:table.column>
                     <flux:table.column>{{ __('Organization') }}</flux:table.column>
+                    <flux:table.column>{{ __('Source') }}</flux:table.column>
                     <flux:table.column></flux:table.column>
                 </flux:table.columns>
 
@@ -207,6 +223,7 @@
                                 <flux:badge size="sm">{{ $this->stakeholderTypeLabel($stakeholder->stakeholder_type) }}</flux:badge>
                             </flux:table.cell>
                             <flux:table.cell>{{ $contactDetails['organization'] ?? '—' }}</flux:table.cell>
+                            <flux:table.cell class="text-sm text-zinc-500 dark:text-zinc-400">{{ $contactDetails['source'] ?? __('Added manually') }}</flux:table.cell>
                             <flux:table.cell>
                                 <div class="flex justify-end gap-1">
                                     <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingStakeholder({{ $stakeholder->id }})" />
@@ -228,7 +245,7 @@
         @endif
     </flux:card>
 
-    <flux:card class="space-y-6">
+    <flux:card x-show="activeTab === 'agencies'" x-cloak class="space-y-6">
         <div class="flex items-center justify-between gap-4">
             <div class="space-y-1">
                 <flux:heading size="lg">{{ __('Implementing agencies') }}</flux:heading>
@@ -287,8 +304,27 @@
 
             <flux:input wire:model="stakeholderName" :invalid="$errors->has('stakeholderName')" :label="__('Name')" />
 
+            <div class="space-y-2">
+                <flux:label>{{ __('Stakeholder type') }}</flux:label>
+                <div class="flex flex-wrap gap-2">
+                    @foreach ($stakeholderTypes->take(6) as $stakeholderTypeOption)
+                        <button
+                            type="button"
+                            wire:click="$set('stakeholderType', @js($stakeholderTypeOption['value']))"
+                            @class([
+                                'rounded-md border px-2.5 py-1 text-sm font-medium transition',
+                                'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-500/50 dark:bg-violet-500/10 dark:text-violet-200' => $stakeholderType === $stakeholderTypeOption['value'],
+                                'border-zinc-200 text-zinc-600 hover:border-violet-200 hover:text-violet-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-violet-500/40 dark:hover:text-violet-200' => $stakeholderType !== $stakeholderTypeOption['value'],
+                            ])
+                        >
+                            {{ $stakeholderTypeOption['label'] }}
+                        </button>
+                    @endforeach
+                </div>
+            </div>
+
             <div class="grid gap-4 sm:grid-cols-2">
-                <flux:input wire:model="stakeholderType" :invalid="$errors->has('stakeholderType')" :label="__('Type')" list="stakeholder-type-options-create" />
+                <flux:input wire:model="stakeholderType" :invalid="$errors->has('stakeholderType')" :label="__('Type (or enter another)')" list="stakeholder-type-options-create" />
                 <datalist id="stakeholder-type-options-create">
                     @foreach ($stakeholderTypes as $stakeholderTypeOption)
                         <option value="{{ $stakeholderTypeOption['value'] }}">{{ $stakeholderTypeOption['label'] }}</option>
@@ -313,8 +349,27 @@
 
             <flux:input wire:model="stakeholderName" :invalid="$errors->has('stakeholderName')" :label="__('Name')" />
 
+            <div class="space-y-2">
+                <flux:label>{{ __('Stakeholder type') }}</flux:label>
+                <div class="flex flex-wrap gap-2">
+                    @foreach ($stakeholderTypes->take(6) as $stakeholderTypeOption)
+                        <button
+                            type="button"
+                            wire:click="$set('stakeholderType', @js($stakeholderTypeOption['value']))"
+                            @class([
+                                'rounded-md border px-2.5 py-1 text-sm font-medium transition',
+                                'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-500/50 dark:bg-violet-500/10 dark:text-violet-200' => $stakeholderType === $stakeholderTypeOption['value'],
+                                'border-zinc-200 text-zinc-600 hover:border-violet-200 hover:text-violet-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-violet-500/40 dark:hover:text-violet-200' => $stakeholderType !== $stakeholderTypeOption['value'],
+                            ])
+                        >
+                            {{ $stakeholderTypeOption['label'] }}
+                        </button>
+                    @endforeach
+                </div>
+            </div>
+
             <div class="grid gap-4 sm:grid-cols-2">
-                <flux:input wire:model="stakeholderType" :invalid="$errors->has('stakeholderType')" :label="__('Type')" list="stakeholder-type-options-edit" />
+                <flux:input wire:model="stakeholderType" :invalid="$errors->has('stakeholderType')" :label="__('Type (or enter another)')" list="stakeholder-type-options-edit" />
                 <datalist id="stakeholder-type-options-edit">
                     @foreach ($stakeholderTypes as $stakeholderTypeOption)
                         <option value="{{ $stakeholderTypeOption['value'] }}">{{ $stakeholderTypeOption['label'] }}</option>

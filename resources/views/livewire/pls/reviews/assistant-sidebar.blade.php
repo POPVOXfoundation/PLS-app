@@ -31,7 +31,7 @@
     }"
     x-on:assistant-message-added.window="pendingMessage = ''; assistantOpen = true; scrollToBottom()"
     x-on:assistant-open-requested.window="queuePrompt($event.detail.prompt || '')"
-    class="fixed inset-x-3 bottom-3 z-50 xl:left-[16rem] xl:right-6 2xl:left-[17rem] print:hidden"
+    class="fixed inset-x-3 bottom-3 z-50 sm:left-auto sm:w-[22rem] xl:right-6 print:hidden"
 >
     <section
         x-show="assistantOpen"

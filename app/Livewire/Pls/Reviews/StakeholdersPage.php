@@ -253,6 +253,7 @@ class StakeholdersPage extends Workspace
                 'stakeholder_type' => $this->stakeholderType,
                 'contact_details' => [
                     'organization' => $this->blankToNull($this->stakeholderOrganization),
+                    'source' => $stakeholder->contact_details['source'] ?? null,
                 ],
             ])->fresh();
         } catch (ValidationException $exception) {
@@ -279,6 +280,8 @@ class StakeholdersPage extends Workspace
     {
         $this->authorizeReviewMutation();
 
+        $suggestion = $this->activeSuggestionId === '' ? null : $this->findSuggestion($this->activeSuggestionId);
+
         try {
             $this->review = $action->store([
                 'pls_review_id' => $this->review->id,
@@ -286,6 +289,9 @@ class StakeholdersPage extends Workspace
                 'stakeholder_type' => $this->stakeholderType,
                 'contact_details' => [
                     'organization' => $this->blankToNull($this->stakeholderOrganization),
+                    'source' => $suggestion === null
+                        ? __('Added manually')
+                        : ($suggestion['source_title'] !== '' ? $suggestion['source_title'] : __('From source text')),
                 ],
             ])->fresh();
         } catch (ValidationException $exception) {

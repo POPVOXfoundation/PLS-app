@@ -10,7 +10,7 @@
     }"
     class="space-y-6"
 >
-    <flux:card class="space-y-6">
+    <flux:card class="space-y-5">
         <div
             x-data="{ uploading: false, progress: 0 }"
             x-on:livewire-upload-start="uploading = true; progress = 0"
@@ -20,11 +20,15 @@
             x-on:livewire-upload-progress="progress = $event.detail.progress"
             class="space-y-5"
         >
-            <div class="space-y-2">
-                <flux:heading size="lg">{{ __('Evidence') }}</flux:heading>
-                <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                    {{ __('Upload review evidence and source materials. PLSAssist will read each file and keep the record here for review.') }}
-                </flux:text>
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div class="max-w-2xl space-y-2">
+                    <flux:heading size="lg">{{ __('Evidence') }}</flux:heading>
+                    <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                        {{ __('Upload review evidence and source materials. PLSAssist will read each file and keep the record here for review.') }}
+                    </flux:text>
+                </div>
+
+                <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('PDF, DOCX, TXT, or MD') }}</flux:text>
             </div>
 
             @can('update', $review)
@@ -33,11 +37,11 @@
                         wire:model="documentUploads"
                         accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
                         multiple
-                        :label="__('Document file')"
+                        :label="__('Add evidence')"
                     >
                         <flux:file-upload.dropzone
-                            class="!min-h-28 !py-4"
-                            :heading="__('Drag evidence here or choose files')"
+                            class="!min-h-24 !py-3"
+                            :heading="__('Drag files here or choose files')"
                             :text="__('PDF, DOCX, TXT, or MD, :limit', ['limit' => $this->uploadLimitLabel()])"
                         />
                     </flux:file-upload>
@@ -76,11 +80,11 @@
     </flux:card>
 
     @if ($hasLegislationSources)
-        <flux:card class="space-y-5">
+        <flux:card class="space-y-4 border-violet-200 bg-violet-50/40 dark:border-violet-500/30 dark:bg-violet-500/5">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div class="space-y-2">
                     <div class="flex flex-wrap items-center gap-2">
-                        <flux:heading size="lg">{{ __('Stakeholder suggestions from legislation') }}</flux:heading>
+                        <flux:heading size="base">{{ __('Stakeholder suggestions from legislation') }}</flux:heading>
                         @if ($legislationStakeholderSuggestions->isNotEmpty())
                             <flux:badge size="sm">{{ __(':count suggestions', ['count' => $legislationStakeholderSuggestions->count()]) }}</flux:badge>
                         @endif
@@ -159,7 +163,7 @@
         </flux:card>
     @endif
 
-    <flux:card wire:poll.2s.keep-alive="refreshPendingAnalyses" class="space-y-6">
+    <flux:card wire:poll.2s.keep-alive="refreshPendingAnalyses" class="space-y-5">
         <div class="flex items-center justify-between gap-4">
             <div class="space-y-1">
                 <flux:heading size="lg">{{ __('Records') }}</flux:heading>
@@ -182,15 +186,18 @@
             </flux:text>
         @else
             <div class="space-y-1">
-                <div class="hidden grid-cols-[minmax(0,1fr)_auto] gap-4 border-b border-zinc-200 pb-3 text-sm font-medium text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 lg:grid">
+                <div class="hidden grid-cols-[minmax(0,1fr)_9rem_7rem_8rem_auto] gap-4 border-b border-zinc-200 pb-3 text-sm font-medium text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 lg:grid">
                     <div>{{ __('Record') }}</div>
-                    <div class="text-right">{{ __('Status and actions') }}</div>
+                    <div>{{ __('Type') }}</div>
+                    <div>{{ __('Updated') }}</div>
+                    <div>{{ __('Status') }}</div>
+                    <div class="text-right">{{ __('Actions') }}</div>
                 </div>
 
                 @foreach ($recordRows as $row)
                     <section
                         wire:key="evidence-record-{{ $row['id'] }}"
-                        class="grid min-w-0 gap-3 border-b border-zinc-200 py-4 last:border-b-0 dark:border-zinc-800 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                        class="grid min-w-0 gap-3 border-b border-zinc-200 py-4 last:border-b-0 dark:border-zinc-800 lg:grid-cols-[minmax(0,1fr)_9rem_7rem_8rem_auto] lg:items-center lg:gap-4"
                     >
                         <div class="min-w-0 space-y-1">
                             @if (in_array($row['action'], ['review', 'edit'], true))
@@ -211,13 +218,22 @@
                                 </flux:text>
                             @endif
 
-                            <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
+                            <flux:text class="text-xs text-zinc-500 dark:text-zinc-400 lg:hidden">
                                 {{ $row['document_type'] }} • {{ __('Updated :date', ['date' => $row['updated_at']]) }}
                             </flux:text>
                         </div>
 
-                        <div class="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+                        <div class="hidden text-sm text-zinc-600 lg:block dark:text-zinc-300">{{ $row['document_type'] }}</div>
+                        <div class="hidden text-sm text-zinc-600 lg:block dark:text-zinc-300">{{ $row['updated_at'] }}</div>
+
+                        <div class="hidden lg:block">
                             <flux:badge size="sm" :color="$row['status_color']" :class="$row['status_badge_class']">
+                                {{ $row['status_label'] }}
+                            </flux:badge>
+                        </div>
+
+                        <div class="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+                            <flux:badge size="sm" class="lg:hidden" :color="$row['status_color']" :class="$row['status_badge_class']">
                                 {{ $row['status_label'] }}
                             </flux:badge>
 

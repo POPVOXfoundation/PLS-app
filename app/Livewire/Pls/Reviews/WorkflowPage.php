@@ -28,9 +28,8 @@ class WorkflowPage extends Workspace
 
         return $this->renderWorkspaceView('livewire.pls.reviews.workflow-page', [
             'currentAction' => $this->currentAction($review),
-            'missingItems' => $this->missingItems($review),
             'recentUploads' => $this->recentUploads($review),
-            'recordedWork' => $this->recordedWork($review),
+            'workspaceRecord' => $this->workspaceRecord($review),
         ], $review);
     }
 
@@ -312,6 +311,45 @@ class WorkflowPage extends Workspace
                 'value' => (string) $review->reports->count(),
             ],
         ];
+    }
+
+    /**
+     * @return list<array{action: string, detail: string, label: string, route: string, status: string, status_color: string, value: string}>
+     */
+    private function workspaceRecord(PlsReview $review): array
+    {
+        $gaps = collect($this->missingItems($review))->keyBy('label');
+
+        return collect($this->recordedWork($review))
+            ->map(function (array $item) use ($gaps): array {
+                $label = $item['label'] === __('People and institutions') ? __('Stakeholders') : $item['label'];
+                $gap = $gaps->get($label);
+                $count = (int) $item['value'];
+
+                if ($count === 0) {
+                    return [
+                        ...$item,
+                        'action' => $gap['action'] ?? __('Open section'),
+                        'detail' => $gap['description'] ?? $item['detail'],
+                        'label' => $label,
+                        'route' => $gap['route'] ?? $item['route'],
+                        'status' => __('Not started'),
+                        'status_color' => 'zinc',
+                    ];
+                }
+
+                return [
+                    ...$item,
+                    'action' => __('Open section'),
+                    'detail' => $gap['description'] ?? $item['detail'],
+                    'label' => $label,
+                    'route' => $gap['route'] ?? $item['route'],
+                    'status' => $gap === null ? __('Recorded') : __('In progress'),
+                    'status_color' => $gap === null ? 'emerald' : 'violet',
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**

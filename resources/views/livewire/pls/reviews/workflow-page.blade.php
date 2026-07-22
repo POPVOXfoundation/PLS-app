@@ -92,62 +92,37 @@
         </div>
     </section>
 
-    <section class="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-        <div class="border-b border-zinc-200 pb-6 dark:border-zinc-800 xl:border-b-0 xl:border-e xl:pe-6">
-            <div class="flex items-center justify-between gap-4">
-                <div>
-                    <flux:heading size="lg" level="2">{{ __('What has been recorded') }}</flux:heading>
-                    <flux:text class="mt-1 text-sm">{{ __('Open any area to review, add, or edit its records.') }}</flux:text>
-                </div>
+    <section>
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+                <flux:heading size="lg" level="2">{{ __('Workspace record') }}</flux:heading>
+                <flux:text class="mt-1 text-sm">{{ __('A single view of what is recorded in PLSAssist and the next useful action in each area.') }}</flux:text>
             </div>
-
-            <div class="mt-4 grid gap-x-5 border-y border-zinc-200 dark:border-zinc-800 sm:grid-cols-2 xl:grid-cols-3">
-                @foreach ($recordedWork as $item)
-                    <a href="{{ $item['route'] }}" wire:navigate class="group flex min-w-0 items-start gap-3 border-b border-zinc-200 py-3 last:border-b-0 sm:[&:nth-last-child(-n+2)]:border-b-0 xl:[&:nth-last-child(-n+3)]:border-b-0 dark:border-zinc-800">
-                        <span class="text-lg font-semibold tabular-nums text-zinc-900 transition group-hover:text-violet-700 dark:text-white dark:group-hover:text-violet-300">{{ $item['value'] }}</span>
-                        <span class="min-w-0">
-                            <span class="block text-sm font-medium text-zinc-800 transition group-hover:text-violet-700 dark:text-zinc-200 dark:group-hover:text-violet-300">{{ $item['label'] }}</span>
-                            <span class="mt-0.5 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{{ $item['detail'] }}</span>
-                        </span>
-                    </a>
-                @endforeach
-            </div>
+            <flux:text class="text-xs">{{ __('Counts reflect records saved in this workspace.') }}</flux:text>
         </div>
 
-        <div>
-            <div class="flex items-center justify-between gap-4">
-                <div>
-                    <flux:heading size="lg" level="2">{{ __('Still to add') }}</flux:heading>
-                    <flux:text class="mt-1 text-sm">{{ __('These are gaps in the workspace record, not a judgment on work taking place elsewhere.') }}</flux:text>
-                </div>
+        <div class="mt-4 divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+            <div class="hidden grid-cols-[minmax(10rem,1fr)_5rem_8rem_minmax(0,1.1fr)_auto] gap-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-500 lg:grid dark:text-zinc-400">
+                <span>{{ __('Section') }}</span>
+                <span>{{ __('Records') }}</span>
+                <span>{{ __('Status') }}</span>
+                <span>{{ __('What to do next') }}</span>
+                <span></span>
             </div>
 
-            <div class="mt-4 divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-                @forelse ($missingItems as $item)
-                    <div class="flex gap-3 py-3">
-                        <flux:icon icon="plus-circle" class="mt-0.5 size-4 shrink-0 text-violet-700 dark:text-violet-300" />
-                        <div class="min-w-0 flex-1">
-                            <p class="text-sm font-medium text-zinc-900 dark:text-white">{{ $item['label'] }}</p>
-                            <p class="mt-0.5 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{{ $item['description'] }}</p>
-                        </div>
-                        @if ($item['route'] === '#review-details')
-                            @can('update', $review)
-                                <button type="button" wire:click="prepareReviewEdit" class="shrink-0 text-xs font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100">
-                                    {{ $item['action'] }}
-                                </button>
-                            @endcan
-                        @else
-                            <a href="{{ $item['route'] }}" wire:navigate class="shrink-0 text-xs font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100">
-                                {{ $item['action'] }}
-                            </a>
-                        @endif
-                    </div>
-                @empty
-                    <div class="py-3 text-sm text-zinc-600 dark:text-zinc-400">
-                        {{ __('The core workspace record is in place. Continue using the current focus above to keep the review moving.') }}
-                    </div>
-                @endforelse
-            </div>
+            @foreach ($workspaceRecord as $item)
+                <div class="grid gap-2 py-4 lg:grid-cols-[minmax(10rem,1fr)_5rem_8rem_minmax(0,1.1fr)_auto] lg:items-center lg:gap-4">
+                    <a href="{{ $item['route'] }}" wire:navigate class="min-w-0 text-sm font-semibold text-zinc-900 hover:text-violet-700 dark:text-white dark:hover:text-violet-300">
+                        {{ $item['label'] }}
+                    </a>
+                    <span class="text-sm font-semibold tabular-nums text-zinc-900 dark:text-white">{{ $item['value'] }}</span>
+                    <div><flux:badge size="sm" :color="$item['status_color']">{{ $item['status'] }}</flux:badge></div>
+                    <p class="text-sm leading-5 text-zinc-600 dark:text-zinc-400">{{ $item['detail'] }}</p>
+                    <a href="{{ $item['route'] }}" wire:navigate class="text-sm font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100">
+                        {{ $item['action'] }}
+                    </a>
+                </div>
+            @endforeach
         </div>
     </section>
 

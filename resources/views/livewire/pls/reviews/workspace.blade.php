@@ -26,9 +26,23 @@
                                 ])
                             >
                                 <flux:icon :icon="$workspace['icon']" class="size-4 shrink-0" />
-                                <span>{{ $workspace['label'] }}</span>
+                                <span class="min-w-0 flex-1">{{ $workspace['label'] }}</span>
+                                @if ($workspace['count'] !== null)
+                                    <span class="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs tabular-nums text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">{{ $workspace['count'] }}</span>
+                                @endif
                             </a>
                         @endforeach
+                    </div>
+
+                    <div class="mt-5 hidden border-t border-zinc-200 px-2.5 pt-4 xl:block dark:border-zinc-800">
+                        <div class="flex items-center justify-between gap-3 text-xs">
+                            <span class="font-medium text-zinc-700 dark:text-zinc-200">{{ __('Review progress') }}</span>
+                            <span class="tabular-nums text-zinc-500 dark:text-zinc-400">{{ $workflowSummary['progress_percentage'] }}%</span>
+                        </div>
+                        <flux:progress class="mt-2" :value="$workflowSummary['progress_percentage']" />
+                        <p class="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                            {{ __('Step :current of :total', ['current' => $workflowSummary['current_step_number'], 'total' => $workflowSummary['total_steps']]) }}
+                        </p>
                     </div>
                 </nav>
             </aside>
@@ -45,6 +59,12 @@
                             @if ($review->description)
                                 <flux:text class="max-w-4xl text-sm text-zinc-600 dark:text-zinc-400">{{ $review->description }}</flux:text>
                             @endif
+
+                            <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                <span>{{ __('Current step: :step', ['step' => $workflowSummary['current_step']]) }}</span>
+                                <span aria-hidden="true">•</span>
+                                <span>{{ __(':progress% complete', ['progress' => $workflowSummary['progress_percentage']]) }}</span>
+                            </div>
                         </div>
 
                         <div class="flex flex-wrap items-center gap-2">
@@ -55,7 +75,7 @@
                     </div>
                 </header>
 
-                <main class="min-w-0 space-y-6 pb-44 sm:pb-40 xl:pb-36">
+                <main class="min-w-0 space-y-6 pb-44 sm:pb-40 xl:pb-8 xl:pe-[23.5rem]">
                     {{ $slot }}
                 </main>
             </div>

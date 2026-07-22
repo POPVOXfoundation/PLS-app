@@ -259,8 +259,7 @@ test('review overview summarizes recorded work, gaps, and recent uploads', funct
         ->assertSee('PLS Assistant')
         ->assertSee('Overview')
         ->assertSee('Review overview')
-        ->assertSee('What has been recorded')
-        ->assertSee('Still to add')
+        ->assertSee('Workspace record')
         ->assertSee('Recent uploads')
         ->assertSee('Implementation Progress Report')
         ->assertSee('Define the objectives and scope of PLS')
@@ -280,8 +279,7 @@ test('review overview summarizes recorded work, gaps, and recent uploads', funct
 
     $component = Livewire::test(WorkflowPage::class, ['review' => $review])
         ->assertSee('Review overview')
-        ->assertSee('What has been recorded')
-        ->assertSee('Still to add')
+        ->assertSee('Workspace record')
         ->assertSee('Implementation Progress Report')
         ->assertSee('PLS methodology reference')
         ->assertSee('Current focus');
@@ -289,7 +287,7 @@ test('review overview summarizes recorded work, gaps, and recent uploads', funct
     $html = $component->html();
 
     expect($html)->toContain('Open legislation')
-        ->and($html)->toContain('Still to add')
+        ->and($html)->toContain('Workspace record')
         ->and($html)->toContain('PLS methodology reference')
         ->and($html)->not->toContain('data-flux-accordion-item')
         ->and($html)->not->toContain('wire:click="selectStep(');
@@ -328,7 +326,7 @@ test('all review section routes render inside the shared workspace shell', funct
     $routes = [
         'pls.reviews.workflow' => 'Review overview',
         'pls.reviews.legislation' => 'No records saved for this review yet.',
-        'pls.reviews.documents' => 'Document file',
+        'pls.reviews.documents' => 'Add evidence',
         'pls.reviews.stakeholders' => 'Stakeholders',
         'pls.reviews.consultations' => 'Consultation activity',
         'pls.reviews.analysis' => 'Findings & recommendations',
@@ -373,7 +371,7 @@ test('documents page uses inline upload analysis instead of metadata-first add a
 
     $this->get(route('pls.reviews.documents', ['review' => $review->id]))
         ->assertOk()
-        ->assertSee('Document file')
+        ->assertSee('Add evidence')
         ->assertSee('Choose files')
         ->assertSee('Records')
         ->assertDontSee('Storage path')

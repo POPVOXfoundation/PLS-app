@@ -15,7 +15,7 @@ class UpdateStakeholderValidator
      *     pls_review_id: int,
      *     name: string,
      *     stakeholder_type: string,
-     *     contact_details?: array{organization?: string|null}|null
+     *     contact_details?: array{organization?: string|null, source?: string|null}|null
      * }
      */
     public function validate(array $input): array
@@ -61,6 +61,7 @@ class UpdateStakeholderValidator
             'stakeholder_type' => ['required', 'string', 'max:255'],
             'contact_details' => ['nullable', 'array'],
             'contact_details.organization' => ['nullable', 'string', 'max:255'],
+            'contact_details.source' => ['nullable', 'string', 'max:255'],
         ];
     }
 
@@ -84,6 +85,7 @@ class UpdateStakeholderValidator
             'pls_review_id' => 'review',
             'stakeholder_type' => 'stakeholder type',
             'contact_details.organization' => 'organization',
+            'contact_details.source' => 'record source',
         ];
     }
 }

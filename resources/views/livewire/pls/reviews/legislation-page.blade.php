@@ -10,7 +10,7 @@
     }"
     class="space-y-6"
 >
-    <flux:card>
+    <flux:card id="upload-legislation" class="max-w-3xl">
         <div
             x-data="{ uploadOpen: @js(! $hasUploadedLegislationSource), uploading: false, progress: 0 }"
             x-on:livewire-upload-start="uploadOpen = true; uploading = true; progress = 0"
@@ -499,6 +499,21 @@
                     @endforeach
                 </flux:table.rows>
             </flux:table>
+
+            @php
+                $hasDelegatedLegislation = collect($recordRows)->contains(
+                    fn (array $row): bool => \Illuminate\Support\Str::lower($row['relationship']) === 'delegated',
+                );
+            @endphp
+
+            @if (! $hasDelegatedLegislation)
+                <div class="flex flex-col gap-3 border-t border-zinc-200 pt-4 text-sm sm:flex-row sm:items-center sm:justify-between dark:border-zinc-800">
+                    <p class="text-zinc-600 dark:text-zinc-400">
+                        {{ __('No delegated or secondary legislation is recorded yet. Add regulations, orders, rules, or other instruments where they matter to this review.') }}
+                    </p>
+                    <a href="#upload-legislation" class="shrink-0 font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100">{{ __('Add a source') }}</a>
+                </div>
+            @endif
         @endif
     </flux:card>
 
