@@ -1,68 +1,233 @@
-<section class="rounded-lg border border-zinc-200 bg-white text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-950/30">
-    <div class="border-b border-zinc-200 bg-teal-50/80 px-4 py-3 text-teal-950 dark:border-zinc-800 dark:bg-teal-950/20 dark:text-teal-100">
-        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div class="min-w-0 space-y-1">
+<div class="space-y-8">
+    <section id="review-details" class="border-b border-zinc-200 pb-6 dark:border-zinc-800">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div class="min-w-0 space-y-2">
                 <div class="flex flex-wrap items-center gap-2">
-                    <h2 class="text-sm font-semibold">{{ __('PLS process guide') }}</h2>
-                    <flux:badge size="sm" color="teal">{{ __('Advisory steps') }}</flux:badge>
+                    <flux:heading size="lg" level="2">{{ __('Review overview') }}</flux:heading>
+                    <flux:badge size="sm" color="violet">{{ __('Workspace home') }}</flux:badge>
                 </div>
-
-                <p class="leading-6 text-teal-900/80 dark:text-teal-100/80">
-                    {{ __('These numbered steps summarize WFD methodology for planning and checking a PLS review. They are guidance for the inquiry, not the app navigation.') }}
-                </p>
+                <flux:text class="max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">
+                    {{ __('Use this page to check what has been recorded, identify gaps, and move into the next part of the review.') }}
+                </flux:text>
             </div>
 
-            <p class="max-w-sm leading-6 text-teal-900/80 dark:text-teal-100/80">
-                {{ __('Use the Workspace navigation menu on the left to open Legislation, Evidence, Stakeholders, Consultations, Analysis, Reports, and Settings.') }}
+            @can('update', $review)
+                <flux:button variant="ghost" icon="pencil-square" wire:click="prepareReviewEdit">
+                    {{ __('Edit review details') }}
+                </flux:button>
+            @endcan
+        </div>
+
+        <div class="mt-5 grid gap-x-8 gap-y-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(16rem,0.8fr)]">
+            <div class="space-y-2">
+                <p class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Purpose and scope') }}</p>
+                @if (filled($review->description))
+                    <p class="max-w-3xl text-sm leading-6 text-zinc-800 dark:text-zinc-200">{{ $review->description }}</p>
+                @else
+                    <div class="flex flex-wrap items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+                        <span>{{ __('No purpose or scope has been recorded yet.') }}</span>
+                        @can('update', $review)
+                            <button type="button" wire:click="prepareReviewEdit" class="font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100">
+                                {{ __('Add details') }}
+                            </button>
+                        @endcan
+                    </div>
+                @endif
+            </div>
+
+            <dl class="grid grid-cols-2 gap-x-5 gap-y-4 text-sm">
+                <div class="min-w-0">
+                    <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ __('Inquiry lead') }}</dt>
+                    <dd class="mt-1 break-words font-medium text-zinc-900 dark:text-white">{{ $review->assignmentLabel() }}</dd>
+                </div>
+                <div class="min-w-0">
+                    <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ __('Legislature') }}</dt>
+                    <dd class="mt-1 break-words font-medium text-zinc-900 dark:text-white">{{ $review->legislature?->name ?? __('Not recorded') }}</dd>
+                </div>
+                <div class="min-w-0">
+                    <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ __('Location') }}</dt>
+                    <dd class="mt-1 break-words font-medium text-zinc-900 dark:text-white">
+                        {{ $review->assignmentLocationParts() !== [] ? implode(' - ', $review->assignmentLocationParts()) : __('Not recorded') }}
+                    </dd>
+                </div>
+                <div class="min-w-0">
+                    <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ __('Started') }}</dt>
+                    <dd class="mt-1 font-medium text-zinc-900 dark:text-white">{{ $review->start_date?->format('j M Y') ?? __('Not recorded') }}</dd>
+                </div>
+            </dl>
+        </div>
+    </section>
+
+    <section class="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(17rem,0.75fr)]">
+        <div class="border-b border-zinc-200 pb-6 dark:border-zinc-800 xl:border-b-0 xl:border-e xl:pe-6">
+            <div class="flex items-center gap-3">
+                <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-sm font-semibold text-violet-900 dark:bg-violet-900/50 dark:text-violet-100">
+                    {{ $review->current_step_number }}
+                </span>
+                <div class="min-w-0">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Current focus') }}</p>
+                    <h2 class="mt-0.5 text-base font-semibold text-zinc-950 dark:text-white">{{ $currentAction['title'] }}</h2>
+                </div>
+            </div>
+
+            <p class="mt-4 max-w-3xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">{{ $currentAction['summary'] }}</p>
+            <p class="mt-3 max-w-3xl text-sm font-medium leading-6 text-zinc-800 dark:text-zinc-200">{{ $currentAction['action'] }}</p>
+
+            <div class="mt-4">
+                <flux:button variant="primary" :href="$currentAction['route']" wire:navigate icon="arrow-right">
+                    {{ $currentAction['button'] }}
+                </flux:button>
+            </div>
+        </div>
+
+        <div class="space-y-3">
+            <div class="flex items-center justify-between gap-3">
+                <p class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Review progress') }}</p>
+                <span class="text-xs tabular-nums text-zinc-500 dark:text-zinc-400">{{ $review->progressPercentage() }}%</span>
+            </div>
+            <flux:progress :value="$review->progressPercentage()" />
+            <p class="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+                {{ __('Step :current of :total in the WFD PLS methodology.', ['current' => $review->current_step_number, 'total' => $review->steps->count()]) }}
             </p>
         </div>
-    </div>
+    </section>
 
-    <div class="divide-y divide-zinc-200 dark:divide-zinc-800">
-        @foreach ($review->steps as $step)
-            @php
-                $isCurrent = $review->current_step_number === $step->step_number;
-            @endphp
-
-            <div
-                wire:key="workflow-step-{{ $step->id }}"
-                @class([
-                    'cursor-default px-4 py-3',
-                    'bg-violet-50/80 dark:bg-violet-950/20' => $isCurrent,
-                ])
-            >
-                <div class="flex items-start gap-3">
-                    <span
-                        @class([
-                            'inline-flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold tabular-nums',
-                            'border-violet-300 bg-violet-100 text-violet-900 dark:border-violet-700 dark:bg-violet-900/50 dark:text-violet-100' => $isCurrent,
-                            'border-zinc-200 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400' => ! $isCurrent,
-                        ])
-                    >
-                        {{ $step->step_number }}
-                    </span>
-
-                    <div class="min-w-0">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <h3
-                                @class([
-                                    'text-sm leading-5',
-                                    'font-semibold text-zinc-950 dark:text-white' => $isCurrent,
-                                    'font-medium text-zinc-900 dark:text-zinc-100' => ! $isCurrent,
-                                ])
-                            >
-                                {{ $step->title }}
-                            </h3>
-
-                            @if ($isCurrent)
-                                <flux:badge size="sm" color="violet">{{ __('Current focus') }}</flux:badge>
-                            @endif
-                        </div>
-
-                        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{{ $this->stepContext($step) }}</p>
-                    </div>
+    <section class="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+        <div class="border-b border-zinc-200 pb-6 dark:border-zinc-800 xl:border-b-0 xl:border-e xl:pe-6">
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <flux:heading size="lg" level="2">{{ __('What has been recorded') }}</flux:heading>
+                    <flux:text class="mt-1 text-sm">{{ __('Open any area to review, add, or edit its records.') }}</flux:text>
                 </div>
             </div>
-        @endforeach
-    </div>
-</section>
+
+            <div class="mt-4 grid gap-x-5 border-y border-zinc-200 dark:border-zinc-800 sm:grid-cols-2 xl:grid-cols-3">
+                @foreach ($recordedWork as $item)
+                    <a href="{{ $item['route'] }}" wire:navigate class="group flex min-w-0 items-start gap-3 border-b border-zinc-200 py-3 last:border-b-0 sm:[&:nth-last-child(-n+2)]:border-b-0 xl:[&:nth-last-child(-n+3)]:border-b-0 dark:border-zinc-800">
+                        <span class="text-lg font-semibold tabular-nums text-zinc-900 transition group-hover:text-violet-700 dark:text-white dark:group-hover:text-violet-300">{{ $item['value'] }}</span>
+                        <span class="min-w-0">
+                            <span class="block text-sm font-medium text-zinc-800 transition group-hover:text-violet-700 dark:text-zinc-200 dark:group-hover:text-violet-300">{{ $item['label'] }}</span>
+                            <span class="mt-0.5 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{{ $item['detail'] }}</span>
+                        </span>
+                    </a>
+                @endforeach
+            </div>
+        </div>
+
+        <div>
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <flux:heading size="lg" level="2">{{ __('Still to add') }}</flux:heading>
+                    <flux:text class="mt-1 text-sm">{{ __('These are gaps in the workspace record, not a judgment on work taking place elsewhere.') }}</flux:text>
+                </div>
+            </div>
+
+            <div class="mt-4 divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+                @forelse ($missingItems as $item)
+                    <div class="flex gap-3 py-3">
+                        <flux:icon icon="plus-circle" class="mt-0.5 size-4 shrink-0 text-violet-700 dark:text-violet-300" />
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-medium text-zinc-900 dark:text-white">{{ $item['label'] }}</p>
+                            <p class="mt-0.5 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{{ $item['description'] }}</p>
+                        </div>
+                        @if ($item['route'] === '#review-details')
+                            @can('update', $review)
+                                <button type="button" wire:click="prepareReviewEdit" class="shrink-0 text-xs font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100">
+                                    {{ $item['action'] }}
+                                </button>
+                            @endcan
+                        @else
+                            <a href="{{ $item['route'] }}" wire:navigate class="shrink-0 text-xs font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100">
+                                {{ $item['action'] }}
+                            </a>
+                        @endif
+                    </div>
+                @empty
+                    <div class="py-3 text-sm text-zinc-600 dark:text-zinc-400">
+                        {{ __('The core workspace record is in place. Continue using the current focus above to keep the review moving.') }}
+                    </div>
+                @endforelse
+            </div>
+        </div>
+    </section>
+
+    <section class="border-y border-zinc-200 py-6 dark:border-zinc-800">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+                <flux:heading size="lg" level="2">{{ __('Recent uploads') }}</flux:heading>
+                <flux:text class="mt-1 text-sm">{{ __('The latest legislation and evidence records attached to this review.') }}</flux:text>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+                <flux:button size="sm" variant="ghost" :href="route('pls.reviews.legislation', ['review' => $review])" wire:navigate icon="scale">
+                    {{ __('Add legislation') }}
+                </flux:button>
+                <flux:button size="sm" variant="ghost" :href="route('pls.reviews.documents', ['review' => $review])" wire:navigate icon="arrow-up-tray">
+                    {{ __('Add evidence') }}
+                </flux:button>
+            </div>
+        </div>
+
+        <div class="mt-4 divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+            @forelse ($recentUploads as $upload)
+                <a href="{{ $upload['route'] }}" wire:navigate class="flex min-w-0 flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
+                    <div class="min-w-0">
+                        <p class="truncate text-sm font-medium text-zinc-900 transition hover:text-violet-700 dark:text-white dark:hover:text-violet-300">{{ $upload['title'] }}</p>
+                        <p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{{ $upload['label'] }}@if ($upload['date'] !== '') · {{ $upload['date'] }}@endif</p>
+                    </div>
+                    <span class="shrink-0 text-xs font-medium text-zinc-600 dark:text-zinc-300">{{ $upload['status'] }}</span>
+                </a>
+            @empty
+                <div class="py-4 text-sm text-zinc-600 dark:text-zinc-400">
+                    {{ __('No legislation or evidence has been uploaded yet.') }}
+                </div>
+            @endforelse
+        </div>
+    </section>
+
+    <details class="group border-b border-zinc-200 pb-5 dark:border-zinc-800">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-zinc-800 marker:hidden dark:text-zinc-200">
+            <span>{{ __('PLS methodology reference') }}</span>
+            <flux:icon icon="chevron-down" class="size-4 transition group-open:rotate-180" />
+        </summary>
+        <p class="mt-3 max-w-3xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+            {{ __('These steps summarize WFD methodology. They are a reference for planning and checking the inquiry, while the navigation menu opens the relevant working areas.') }}
+        </p>
+        <ol class="mt-4 grid gap-x-6 gap-y-3 md:grid-cols-2">
+            @foreach ($review->steps as $step)
+                <li class="flex gap-3 text-sm">
+                    <span class="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-xs font-semibold tabular-nums text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">{{ $step->step_number }}</span>
+                    <span class="leading-6 text-zinc-700 dark:text-zinc-300">{{ $step->title }}</span>
+                </li>
+            @endforeach
+        </ol>
+    </details>
+
+    <flux:modal wire:model.self="showEditReviewModal" class="md:w-[38rem]">
+        <form wire:submit="saveReviewDetails" class="space-y-6">
+            <div>
+                <flux:heading size="lg">{{ __('Edit review details') }}</flux:heading>
+                <flux:text class="mt-1">{{ __('Keep the working title, scope, and start date accurate as the inquiry takes shape.') }}</flux:text>
+            </div>
+
+            <flux:input wire:model="reviewTitle" :invalid="$errors->has('reviewTitle')" :label="__('Working title')" />
+
+            <flux:textarea
+                wire:model="reviewDescription"
+                :invalid="$errors->has('reviewDescription')"
+                :label="__('What is this review examining?')"
+                rows="6"
+                :placeholder="__('Describe the purpose, scope, and questions the inquiry will explore.')"
+            />
+
+            <flux:input wire:model="reviewStartDate" :invalid="$errors->has('reviewStartDate')" :label="__('Start date')" type="date" />
+
+            <div class="flex justify-end gap-2">
+                <flux:modal.close>
+                    <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
+                </flux:modal.close>
+                <flux:button variant="primary" type="submit">{{ __('Save details') }}</flux:button>
+            </div>
+        </form>
+    </flux:modal>
+</div>

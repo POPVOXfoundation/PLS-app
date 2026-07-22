@@ -1846,6 +1846,6 @@ test('workspace guidance reflects the current workflow step', function () {
 
     Livewire::test(WorkflowPage::class, ['review' => $review->fresh()])
         ->assertSee('Invite a response from the government to "comply or explain"')
-        ->assertSee('Current')
-        ->assertSee('Monitor whether the executive has responded and whether commitments are on record.');
+        ->assertSee('Current focus')
+        ->assertSee('Track what happens after publication');
 });

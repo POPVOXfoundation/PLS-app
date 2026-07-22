@@ -209,7 +209,7 @@ test('review show route redirects to workflow route', function () {
         ->assertRedirect(route('pls.reviews.workflow', ['review' => $review->id]));
 });
 
-test('review workflow page renders workflow details and supports step switching', function () {
+test('review overview summarizes recorded work, gaps, and recent uploads', function () {
     $review = plsReview([
         'title' => 'Review of the Access to Information Act',
         'description' => 'Focuses on response timelines, disclosure quality, and agency compliance.',
@@ -257,6 +257,12 @@ test('review workflow page renders workflow details and supports step switching'
         ->assertSee($review->title)
         ->assertSee('Settings')
         ->assertSee('PLS Assistant')
+        ->assertSee('Overview')
+        ->assertSee('Review overview')
+        ->assertSee('What has been recorded')
+        ->assertSee('Still to add')
+        ->assertSee('Recent uploads')
+        ->assertSee('Implementation Progress Report')
         ->assertSee('Define the objectives and scope of PLS')
         ->assertSee('Analyse post-legislative scrutiny findings')
         ->assertSee('dark:bg-white', false)
@@ -273,20 +279,45 @@ test('review workflow page renders workflow details and supports step switching'
         ->assertDontSee('dark:bg-violet-900"', false);
 
     $component = Livewire::test(WorkflowPage::class, ['review' => $review])
-        ->assertSee('Define the objectives and scope of PLS')
-        ->assertSee('Analyse post-legislative scrutiny findings')
-        ->assertSee('Synthesize evidence into findings and identify the strongest recommendation themes.')
-        ->assertSee('Current');
+        ->assertSee('Review overview')
+        ->assertSee('What has been recorded')
+        ->assertSee('Still to add')
+        ->assertSee('Implementation Progress Report')
+        ->assertSee('PLS methodology reference')
+        ->assertSee('Current focus');
 
     $html = $component->html();
 
-    expect($html)->not->toContain('Best next area')
-        ->and($html)->not->toContain('Do next')
-        ->and($html)->not->toContain('Step 1 of 11')
+    expect($html)->toContain('Open legislation')
+        ->and($html)->toContain('Still to add')
+        ->and($html)->toContain('PLS methodology reference')
         ->and($html)->not->toContain('data-flux-accordion-item')
-        ->and($html)->not->toContain('Legislation linked')
-        ->and($html)->not->toContain('No notes recorded.')
         ->and($html)->not->toContain('wire:click="selectStep(');
+});
+
+test('contributors can update review details from the overview', function () {
+    $review = plsReview([
+        'title' => 'Review of existing implementation',
+        'description' => 'Initial inquiry description.',
+        'start_date' => '2026-03-10',
+    ]);
+
+    Livewire::test(WorkflowPage::class, ['review' => $review])
+        ->call('prepareReviewEdit')
+        ->assertSet('showEditReviewModal', true)
+        ->assertSet('reviewTitle', 'Review of existing implementation')
+        ->set('reviewTitle', 'Review of implementation delivery')
+        ->set('reviewDescription', 'Updated scope and purpose for the inquiry.')
+        ->set('reviewStartDate', '2026-04-15')
+        ->call('saveReviewDetails')
+        ->assertHasNoErrors()
+        ->assertSet('showEditReviewModal', false);
+
+    $updatedReview = $review->fresh();
+
+    expect($updatedReview->title)->toBe('Review of implementation delivery')
+        ->and($updatedReview->description)->toBe('Updated scope and purpose for the inquiry.')
+        ->and($updatedReview->start_date?->format('Y-m-d'))->toBe('2026-04-15');
 });
 
 test('all review section routes render inside the shared workspace shell', function () {
@@ -295,7 +326,7 @@ test('all review section routes render inside the shared workspace shell', funct
     ]);
 
     $routes = [
-        'pls.reviews.workflow' => 'Define the objectives and scope of PLS',
+        'pls.reviews.workflow' => 'Review overview',
         'pls.reviews.legislation' => 'No records saved for this review yet.',
         'pls.reviews.documents' => 'Document file',
         'pls.reviews.stakeholders' => 'Stakeholder directory',
@@ -310,7 +341,7 @@ test('all review section routes render inside the shared workspace shell', funct
             ->assertOk()
             ->assertSee($review->title)
             ->assertSee('PLS Assistant')
-            ->assertSee('Workflow')
+            ->assertSee('Overview')
             ->assertSee($expectedText)
             ->assertSee('All reviews')
             ->assertDontSee('New review');

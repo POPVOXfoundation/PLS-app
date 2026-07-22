@@ -98,7 +98,7 @@ class Workspace extends Component
         return [
             [
                 'key' => 'workflow',
-                'label' => __('Workflow'),
+                'label' => __('Overview'),
                 'icon' => 'list-bullet',
                 'route' => 'pls.reviews.workflow',
             ],
