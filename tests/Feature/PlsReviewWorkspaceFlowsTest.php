@@ -1706,6 +1706,41 @@ test('reports can be created from the review workspace and linked to a review do
     ]);
 });
 
+test('report assistance keeps drafting in the assistant for human review', function () {
+    $review = plsReview([
+        'title' => 'Review of assisted report drafting',
+    ]);
+
+    $finding = $review->findings()->create([
+        'title' => 'Implementation reporting remains inconsistent',
+        'finding_type' => FindingType::ImplementationGap,
+        'summary' => 'The review record identifies inconsistent reporting across implementing agencies.',
+        'detail' => null,
+    ]);
+
+    $component = Livewire::test(ReportsPage::class, ['review' => $review])
+        ->assertSee('Draft with PLSAssist')
+        ->assertSee('Human review required')
+        ->assertSee('Build report outline')
+        ->assertSee('Draft findings section')
+        ->assertSee('Check report coverage')
+        ->call('requestReportOutline')
+        ->assertDispatched('assistant-prompt-requested')
+        ->call('requestFindingsSectionDraft')
+        ->assertDispatched('assistant-prompt-requested');
+
+    $component
+        ->call('prepareReportDraft')
+        ->assertSet('showReportDraftModal', true)
+        ->set('reportDraftRequest', 'Draft a short executive summary for the committee.')
+        ->call('developReportDraft')
+        ->assertSet('showReportDraftModal', false)
+        ->assertDispatched('assistant-prompt-requested');
+
+    expect($finding->fresh()->exists)->toBeTrue();
+    $this->assertDatabaseCount('reports', 0);
+});
+
 test('reports can be edited and deleted from the review workspace', function () {
     $review = plsReview([
         'title' => 'Review of publication and dissemination obligations',

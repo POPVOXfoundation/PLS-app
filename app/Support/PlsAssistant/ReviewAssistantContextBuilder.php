@@ -563,11 +563,9 @@ class ReviewAssistantContextBuilder
      */
     private function reportFacts(PlsReview $review): array
     {
-        if ($review->reports->isEmpty() && $review->governmentResponses->isEmpty()) {
-            return ['No reports or government responses are recorded yet.'];
-        }
-
         return [
+            'Confirmed review material available for report drafting:',
+            ...$this->analysisFacts($review),
             'Reports: '.$review->reports->count(),
             'Government responses: '.$review->governmentResponses->count(),
             ...($review->reports->isEmpty()

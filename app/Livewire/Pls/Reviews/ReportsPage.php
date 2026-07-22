@@ -29,7 +29,11 @@ class ReportsPage extends Workspace
 
     public bool $showEditReportModal = false;
 
+    public bool $showReportDraftModal = false;
+
     public bool $showAddGovernmentResponseModal = false;
+
+    public string $reportDraftRequest = '';
 
     public string $reportTitle = '';
 
@@ -124,6 +128,55 @@ class ReportsPage extends Workspace
         ) {
             $this->reportPublishedAt = now()->toDateString();
         }
+    }
+
+    public function requestReportOutline(): void
+    {
+        $this->authorize('view', $this->review);
+
+        $this->dispatch('assistant-prompt-requested', prompt: $this->reportOutlinePrompt())
+            ->to(AssistantSidebar::class);
+    }
+
+    public function requestFindingsSectionDraft(): void
+    {
+        $this->authorize('view', $this->review);
+
+        $this->dispatch('assistant-prompt-requested', prompt: $this->findingsSectionPrompt())
+            ->to(AssistantSidebar::class);
+    }
+
+    public function requestReportCoverageCheck(): void
+    {
+        $this->authorize('view', $this->review);
+
+        $this->dispatch('assistant-prompt-requested', prompt: $this->reportCoveragePrompt())
+            ->to(AssistantSidebar::class);
+    }
+
+    public function prepareReportDraft(): void
+    {
+        $this->resetValidation('reportDraftRequest');
+        $this->reportDraftRequest = '';
+        $this->showReportDraftModal = true;
+    }
+
+    public function developReportDraft(): void
+    {
+        $this->authorize('view', $this->review);
+
+        $this->validate([
+            'reportDraftRequest' => ['required', 'string', 'max:5000'],
+        ], [
+            'reportDraftRequest.required' => __('Describe the report section or drafting task you need help with.'),
+        ]);
+
+        $request = trim($this->reportDraftRequest);
+        $this->reportDraftRequest = '';
+        $this->showReportDraftModal = false;
+
+        $this->dispatch('assistant-prompt-requested', prompt: $this->customReportDraftPrompt($request))
+            ->to(AssistantSidebar::class);
     }
 
     public function storeReport(StoreReport $action): void
@@ -616,6 +669,29 @@ class ReportsPage extends Workspace
         $report = $review->reports->firstWhere('id', (int) $reportId);
 
         return $report;
+    }
+
+    private function reportOutlinePrompt(): string
+    {
+        return 'Using the current review scope and the confirmed findings and recommendations in the review record, propose a practical PLS report outline. For each section, state its purpose and the confirmed material it should draw on. Flag evidence limitations or missing sections. Do not create, update, publish, or describe this as a final report. Keep the outline as a draft for review-team decisions.';
+    }
+
+    private function findingsSectionPrompt(): string
+    {
+        return 'Draft a report section that presents the confirmed findings and associated recommendations currently recorded in this review. Preserve their substance and evidence limitations, distinguish findings from recommendations, and use cautious report language. Mention the source record where it is available, but do not invent citations, add new findings, or present the report as final. End with a short list of points the review team should verify before using the draft.';
+    }
+
+    private function reportCoveragePrompt(): string
+    {
+        return 'Check the current review record for report-drafting readiness. Compare the review scope, confirmed findings, recommendations, evidence record, consultations, and report records. Identify the strongest available material, missing sections or evidence, and questions the review team should resolve before publishing. Do not create a report, make new findings, or treat draft material as final.';
+    }
+
+    private function customReportDraftPrompt(string $request): string
+    {
+        return sprintf(
+            'The review team needs help with this report drafting task: "%s". Use only the current review record, especially the confirmed findings and recommendations. Provide a clearly labelled draft with any source limitations or unresolved questions. Do not create or update a report record, add new findings, invent citations, or present the output as final publication language.',
+            $request,
+        );
     }
 
     /**

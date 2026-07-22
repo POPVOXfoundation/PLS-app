@@ -20,6 +20,43 @@
             </flux:card>
         @endif
 
+        <flux:card class="space-y-5">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div class="max-w-2xl space-y-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <flux:heading size="lg">{{ __('Draft with PLSAssist') }}</flux:heading>
+                        <flux:badge size="sm" color="amber">{{ __('Human review required') }}</flux:badge>
+                    </div>
+                    <flux:text class="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+                        {{ __('Build report drafts from the review scope and confirmed analysis. PLSAssist keeps all drafting in the assistant so the review team can check the wording and sources before adding it to a working report.') }}
+                    </flux:text>
+                </div>
+
+                <div class="flex shrink-0 flex-wrap gap-2">
+                    <flux:button variant="primary" size="sm" icon="sparkles" wire:click="requestReportOutline">
+                        {{ __('Build report outline') }}
+                    </flux:button>
+                    <flux:button variant="filled" size="sm" icon="pencil-square" wire:click="prepareReportDraft">
+                        {{ __('Draft a section') }}
+                    </flux:button>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+                <flux:button variant="ghost" size="sm" icon="document-text" wire:click="requestFindingsSectionDraft" :disabled="$review->findings->isEmpty()">
+                    {{ __('Draft findings section') }}
+                </flux:button>
+                <flux:button variant="ghost" size="sm" icon="clipboard-document-check" wire:click="requestReportCoverageCheck">
+                    {{ __('Check report coverage') }}
+                </flux:button>
+                @if ($review->findings->isEmpty())
+                    <flux:text class="self-center text-xs text-zinc-500 dark:text-zinc-400">
+                        {{ __('Confirm findings first to draft a findings section.') }}
+                    </flux:text>
+                @endif
+            </div>
+        </flux:card>
+
         <flux:card class="space-y-6">
             <div class="flex items-center justify-between gap-4">
                 <flux:heading size="lg">{{ __('Reports') }}</flux:heading>
@@ -188,6 +225,27 @@
             @endif
         </flux:card>
     </div>
+
+    <flux:modal wire:model.self="showReportDraftModal" class="md:w-[34rem]">
+        <form wire:submit="developReportDraft" class="space-y-6">
+            <div>
+                <flux:heading size="lg">{{ __('Draft a report section') }}</flux:heading>
+                <flux:text class="mt-1">{{ __('Describe the section, audience, or question you need to address. PLSAssist will provide a draft tied to the confirmed review record and flag any limitations for the team to check.') }}</flux:text>
+            </div>
+
+            <flux:textarea
+                wire:model="reportDraftRequest"
+                :invalid="$errors->has('reportDraftRequest')"
+                :label="__('Drafting task')"
+                :placeholder="__('For example: Draft a concise executive summary for committee members that explains the strongest confirmed findings and the recommended next steps.')"
+                rows="6"
+            />
+
+            <div class="flex justify-end">
+                <flux:button variant="primary" type="submit" icon="sparkles">{{ __('Draft with PLSAssist') }}</flux:button>
+            </div>
+        </form>
+    </flux:modal>
 
     <flux:modal wire:model.self="showAddReportModal" class="md:w-[32rem]">
         <form wire:submit="storeReport" class="space-y-6">
