@@ -1,5 +1,8 @@
 <?php
 
+use App\Domain\Documents\Document;
+use App\Domain\Documents\Enums\DocumentType;
+use App\Domain\Stakeholders\ImplementingAgency;
 use App\Domain\Stakeholders\Enums\ImplementingAgencyType;
 use App\Domain\Stakeholders\Enums\StakeholderType;
 use App\Domain\Stakeholders\Stakeholder;
@@ -101,6 +104,60 @@ test('implementing agencies can be added from the review workspace', function ()
         'pls_review_id' => $review->id,
         'name' => 'Public Service Commission',
         'agency_type' => ImplementingAgencyType::Agency->value,
+    ]);
+});
+
+test('implementing agencies are suggested from legislation and can be edited or removed', function () {
+    $review = plsReview([
+        'title' => 'Review of access to information implementation',
+    ]);
+
+    Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Access to Information Act',
+        'document_type' => DocumentType::LegislationText,
+        'metadata' => [
+            'legislation_analysis' => [
+                'status' => 'saved',
+                'stakeholder_suggestions' => [[
+                    'id' => 'information-commissioner',
+                    'kind' => 'implementing_agency',
+                    'name' => 'Information Commissioner',
+                    'category' => ImplementingAgencyType::Regulator->value,
+                    'rationale' => 'Oversees the public right of access created by the legislation.',
+                    'source' => 'public right of access to government information',
+                ]],
+            ],
+        ],
+    ]);
+
+    $component = Livewire::test(StakeholdersPage::class, ['review' => $review])
+        ->assertSee('Suggested implementing agencies from legislation')
+        ->assertSee('Information Commissioner')
+        ->call('prepareSuggestedImplementingAgency', 'information-commissioner')
+        ->assertSet('showAddImplementingAgencyModal', true)
+        ->assertSet('implementingAgencyName', 'Information Commissioner')
+        ->assertSet('implementingAgencyType', ImplementingAgencyType::Regulator->value)
+        ->call('storeImplementingAgency')
+        ->assertHasNoErrors();
+
+    $agency = ImplementingAgency::query()
+        ->where('pls_review_id', $review->id)
+        ->sole();
+
+    $component
+        ->call('startEditingImplementingAgency', $agency->id)
+        ->assertSet('showEditImplementingAgencyModal', true)
+        ->set('implementingAgencyName', 'Office of the Information Commissioner')
+        ->set('implementingAgencyType', ImplementingAgencyType::Authority->value)
+        ->call('updateImplementingAgency')
+        ->assertSet('showEditImplementingAgencyModal', false)
+        ->assertHasNoErrors()
+        ->assertSee('Office of the Information Commissioner')
+        ->call('removeImplementingAgency', $agency->id);
+
+    $this->assertDatabaseMissing('implementing_agencies', [
+        'id' => $agency->id,
     ]);
 });
 

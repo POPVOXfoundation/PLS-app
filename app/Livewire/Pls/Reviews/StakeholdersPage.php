@@ -3,13 +3,18 @@
 namespace App\Livewire\Pls\Reviews;
 
 use App\Domain\Documents\Document;
+use App\Domain\Documents\Enums\DocumentType;
+use App\Domain\Legislation\Actions\PersistLegislationSourceState;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Stakeholders\Actions\StoreImplementingAgency;
 use App\Domain\Stakeholders\Actions\StoreStakeholder;
+use App\Domain\Stakeholders\Actions\UpdateImplementingAgency;
 use App\Domain\Stakeholders\Actions\UpdateStakeholder;
 use App\Domain\Stakeholders\Enums\ImplementingAgencyType;
 use App\Domain\Stakeholders\Enums\StakeholderType;
+use App\Domain\Stakeholders\ImplementingAgency;
 use App\Domain\Stakeholders\Stakeholder;
+use App\Jobs\ProcessReviewLegislationSource;
 use App\Support\PlsAssistant\StakeholderSuggestionNormalizer;
 use App\Support\Toast;
 use Illuminate\Contracts\View\View;
@@ -31,9 +36,13 @@ class StakeholdersPage extends Workspace
 
     public bool $showAddImplementingAgencyModal = false;
 
+    public bool $showEditImplementingAgencyModal = false;
+
     public string $stakeholderTypeFilter = 'all';
 
     public string $stakeholderEditingId = '';
+
+    public string $implementingAgencyEditingId = '';
 
     public string $stakeholderName = '';
 
@@ -55,12 +64,21 @@ class StakeholdersPage extends Workspace
     public function render(): View
     {
         $review = $this->loadReview();
+        $legislationSources = $this->legislationSources($review);
 
         return $this->renderWorkspaceView('livewire.pls.reviews.stakeholders-page', [
             'review' => $review,
             'stakeholderTypes' => $this->stakeholderTypeOptions($review),
             'filteredStakeholders' => $this->filteredStakeholders($review),
             'implementingAgencyTypes' => ImplementingAgencyType::cases(),
+            'hasLegislationSources' => $legislationSources->isNotEmpty(),
+            'hasProcessingLegislationSuggestions' => $legislationSources->contains(
+                fn (Document $document): bool => $this->legislationSourceIsProcessing($document),
+            ),
+            'hasGeneratedLegislationAgencySuggestions' => $legislationSources->contains(
+                fn (Document $document): bool => $this->legislationAgencySuggestions($document)->isNotEmpty(),
+            ),
+            'suggestedImplementingAgencies' => $this->suggestedImplementingAgencies($review),
             'suggestedStakeholders' => $this->suggestedStakeholders($review),
         ], $review);
     }
@@ -80,6 +98,33 @@ class StakeholdersPage extends Workspace
     {
         $this->resetImplementingAgencyForm();
         $this->showAddImplementingAgencyModal = true;
+    }
+
+    public function generateImplementingAgencySuggestions(): void
+    {
+        $this->authorizeReviewMutation();
+
+        $sources = $this->legislationSources($this->review)
+            ->filter(fn (Document $document): bool => ! $this->legislationSourceIsProcessing($document))
+            ->filter(fn (Document $document): bool => $this->legislationAgencySuggestions($document)->isEmpty());
+
+        if ($sources->isEmpty()) {
+            return;
+        }
+
+        $state = app(PersistLegislationSourceState::class);
+
+        foreach ($sources as $source) {
+            $state->resetForRetry($source);
+            ProcessReviewLegislationSource::dispatch($source->id);
+        }
+
+        $this->review = $this->loadReview();
+
+        $this->dispatchWorkspaceToast(Toast::warning(
+            __('Preparing implementing agency suggestions'),
+            __('PLSAssist is reading the legislation and identifying the public bodies responsible for implementation.'),
+        ));
     }
 
     public function prepareSuggestedStakeholder(string $suggestionId): void
@@ -169,6 +214,31 @@ class StakeholdersPage extends Workspace
         ]);
 
         $this->showEditStakeholderModal = true;
+    }
+
+    public function startEditingImplementingAgency(int $agencyId): void
+    {
+        $this->authorizeReviewMutation();
+
+        $agency = $this->review->implementingAgencies()
+            ->whereKey($agencyId)
+            ->first();
+
+        if ($agency === null) {
+            return;
+        }
+
+        $this->implementingAgencyEditingId = (string) $agency->id;
+        $this->implementingAgencyName = $agency->name;
+        $this->implementingAgencyType = $agency->agency_type->value;
+
+        $this->resetValidation([
+            'implementingAgencyEditingId',
+            'implementingAgencyName',
+            'implementingAgencyType',
+        ]);
+
+        $this->showEditImplementingAgencyModal = true;
     }
 
     public function updateStakeholder(UpdateStakeholder $action): void
@@ -277,6 +347,36 @@ class StakeholdersPage extends Workspace
         ));
     }
 
+    public function updateImplementingAgency(UpdateImplementingAgency $action): void
+    {
+        $this->authorizeReviewMutation();
+
+        try {
+            $this->review = $action->update([
+                'agency_id' => $this->implementingAgencyEditingId,
+                'pls_review_id' => $this->review->id,
+                'name' => $this->implementingAgencyName,
+                'agency_type' => $this->implementingAgencyType,
+            ])->fresh();
+        } catch (ValidationException $exception) {
+            $this->mapValidationErrors($exception, [
+                'agency_id' => 'implementingAgencyEditingId',
+                'name' => 'implementingAgencyName',
+                'agency_type' => 'implementingAgencyType',
+            ]);
+
+            return;
+        }
+
+        $this->resetImplementingAgencyForm();
+        $this->showEditImplementingAgencyModal = false;
+
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Implementing agency updated'),
+            __('Implementing agency updated.'),
+        ));
+    }
+
     public function removeStakeholder(int $stakeholderId): void
     {
         $this->authorizeReviewMutation();
@@ -293,6 +393,25 @@ class StakeholdersPage extends Workspace
         $this->dispatchWorkspaceToast(Toast::success(
             __('Stakeholder removed'),
             __('Stakeholder removed from the review.'),
+        ));
+    }
+
+    public function removeImplementingAgency(int $agencyId): void
+    {
+        $this->authorizeReviewMutation();
+
+        $agency = $this->review->implementingAgencies()->whereKey($agencyId)->first();
+
+        if ($agency === null) {
+            return;
+        }
+
+        $agency->delete();
+        $this->review = $this->loadReview();
+
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Implementing agency removed'),
+            __('Implementing agency removed from the review.'),
         ));
     }
 
@@ -435,6 +554,7 @@ class StakeholdersPage extends Workspace
     private function resetImplementingAgencyForm(): void
     {
         $this->reset([
+            'implementingAgencyEditingId',
             'implementingAgencyName',
         ]);
 
@@ -443,9 +563,54 @@ class StakeholdersPage extends Workspace
         $this->implementingAgencyType = ImplementingAgencyType::Agency->value;
 
         $this->resetValidation([
+            'implementingAgencyEditingId',
             'implementingAgencyName',
             'implementingAgencyType',
         ]);
+    }
+
+    /**
+     * @return EloquentCollection<int, Document>
+     */
+    private function legislationSources(PlsReview $review): EloquentCollection
+    {
+        return $review->documents
+            ->filter(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
+            ->values();
+    }
+
+    private function legislationSourceIsProcessing(Document $document): bool
+    {
+        return data_get($document->metadata, 'legislation_analysis.status') === 'processing'
+            || in_array(data_get($document->metadata, 'extraction.status'), ['queued', 'processing'], true);
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function legislationAgencySuggestions(Document $document): Collection
+    {
+        return $this->normalizeDocumentSuggestions($document, 'legislation_analysis')
+            ->where('kind', 'implementing_agency')
+            ->values();
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function suggestedImplementingAgencies(PlsReview $review): Collection
+    {
+        $existingAgencies = $review->implementingAgencies
+            ->map(fn (ImplementingAgency $agency): string => Str::lower($agency->name))
+            ->all();
+
+        return $this->legislationSources($review)
+            ->flatMap(fn (Document $document): array => $this->legislationAgencySuggestions($document)->all())
+            ->filter(fn (array $suggestion): bool => $suggestion['status'] === 'suggested')
+            ->reject(fn (array $suggestion): bool => in_array(Str::lower($suggestion['name']), $existingAgencies, true))
+            ->unique('id')
+            ->sortBy('name')
+            ->values();
     }
 
     /**
@@ -456,23 +621,16 @@ class StakeholdersPage extends Workspace
         $existingStakeholders = $review->stakeholders
             ->map(fn (Stakeholder $stakeholder): string => Str::lower($stakeholder->name))
             ->all();
-        $existingAgencies = $review->implementingAgencies
-            ->map(fn ($agency): string => Str::lower($agency->name))
-            ->all();
 
         return $this->allStoredSuggestions($review)
             ->filter(fn (array $suggestion): bool => ($suggestion['status'] ?? 'suggested') === 'suggested')
-            ->reject(function (array $suggestion) use ($existingStakeholders, $existingAgencies): bool {
+            ->where('kind', 'stakeholder')
+            ->reject(function (array $suggestion) use ($existingStakeholders): bool {
                 $name = Str::lower((string) ($suggestion['name'] ?? ''));
 
-                return ($suggestion['kind'] ?? '') === 'implementing_agency'
-                    ? in_array($name, $existingAgencies, true)
-                    : in_array($name, $existingStakeholders, true);
+                return in_array($name, $existingStakeholders, true);
             })
-            ->sortBy([
-                fn (array $suggestion): int => ($suggestion['kind'] ?? '') === 'implementing_agency' ? 0 : 1,
-                fn (array $suggestion): string => (string) ($suggestion['name'] ?? ''),
-            ])
+            ->sortBy(fn (array $suggestion): string => (string) ($suggestion['name'] ?? ''))
             ->values();
     }
 
