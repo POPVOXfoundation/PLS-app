@@ -37,6 +37,12 @@ Rules:
 - Key themes should be short phrases, not full paragraphs.
 - Notable excerpts should be short verbatim passages copied from the text when they are genuinely informative.
 - Important dates should come from visible text only. Normalize exact dates when clear.
+- Build a source-grounded scrutiny preparation list in four categories: milestones and deadlines, implementation obligations, parliamentary follow-up, and records to locate.
+- Include only items that are explicit in, or directly required by, the visible source text. Do not infer implementation performance, policy effects, or missing evidence.
+- For each scrutiny preparation item, provide a short title, a concise factual detail, and a short verbatim source phrase that lets a reviewer find the relevant passage. Use an empty list when the source does not support a category.
+- For milestones and deadlines, include Royal Assent, commencement, phased implementation, statutory review, reporting, sunset, and consultation dates only when they are visible in the source. The timing field may be null when the obligation is clear but no date is stated.
+- For records to locate, name only a record that the legislation itself calls for or directly implies, such as regulations, guidance, a report, a code, or a consultation response. Do not suggest general research or an assessment of effectiveness.
+- Keep each scrutiny preparation category to no more than twelve items. Prioritize the clearest and most material provisions when there are many.
 - Stakeholder suggestions should identify bodies or groups that appear relevant to implementation, oversight, consultation, or affected communities.
 - For stakeholder suggestions, use this exact string format: kind=<stakeholder|implementing_agency>; name=<name>; category=<enum value>; rationale=<short reason>; source=<short visible phrase>.
 - For stakeholder category use one of: ministry, government_agency, ngo, academic, expert, industry_group, citizen_group.
@@ -69,6 +75,32 @@ TEXT;
             'key_themes' => $schema->array()->items($schema->string())->required(),
             'notable_excerpts' => $schema->array()->items($schema->string())->required(),
             'important_dates' => $schema->array()->items($schema->string())->required(),
+            'scrutiny_preparation' => $schema->object([
+                'milestones' => $schema->array()->items($schema->object([
+                    'title' => $schema->string()->required(),
+                    'detail' => $schema->string()->required(),
+                    'timing' => $schema->string()->nullable()->required(),
+                    'source_text' => $schema->string()->required(),
+                ]))->required(),
+                'implementation_obligations' => $schema->array()->items($schema->object([
+                    'title' => $schema->string()->required(),
+                    'detail' => $schema->string()->required(),
+                    'timing' => $schema->string()->nullable()->required(),
+                    'source_text' => $schema->string()->required(),
+                ]))->required(),
+                'parliamentary_follow_up' => $schema->array()->items($schema->object([
+                    'title' => $schema->string()->required(),
+                    'detail' => $schema->string()->required(),
+                    'timing' => $schema->string()->nullable()->required(),
+                    'source_text' => $schema->string()->required(),
+                ]))->required(),
+                'records_to_locate' => $schema->array()->items($schema->object([
+                    'title' => $schema->string()->required(),
+                    'detail' => $schema->string()->required(),
+                    'timing' => $schema->string()->nullable()->required(),
+                    'source_text' => $schema->string()->required(),
+                ]))->required(),
+            ])->required(),
             'stakeholder_suggestions' => $schema->array()->items($schema->string())->required(),
             'relationship_type' => $schema->string()->enum(array_map(
                 static fn (ReviewLegislationRelationshipType $type): string => $type->value,

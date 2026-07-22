@@ -160,6 +160,16 @@
                                     @endif
                                 @endif
 
+                                @if ($row['source_document_id'] !== null && $row['status'] === 'saved' && $row['preparation_status'] === 'processing')
+                                    <flux:button size="sm" variant="subtle" icon="arrow-path" disabled>
+                                        {{ __('Preparing prompts') }}
+                                    </flux:button>
+                                @elseif ($row['source_document_id'] !== null && $row['status'] === 'saved' && $row['scrutiny_preparation'] === [])
+                                    <flux:button size="sm" variant="subtle" icon="sparkles" wire:click="prepareScrutinyPrompts({{ $row['source_document_id'] }})">
+                                        {{ __('Prepare scrutiny prompts') }}
+                                    </flux:button>
+                                @endif
+
                                 @if ($row['action'] === 'review' && $row['source_document_id'] !== null)
                                     <flux:button size="sm" variant="primary" wire:click="startReviewDocument({{ $row['source_document_id'] }})">
                                         {{ __('Review and save') }}
@@ -192,6 +202,18 @@
                                     {{ $row['status_detail'] }}
                                 </div>
                             @else
+                                @if ($row['preparation_status'] === 'processing')
+                                    <div class="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
+                                        <div class="flex items-start gap-3">
+                                            <flux:icon icon="arrow-path" class="mt-0.5 size-4 shrink-0 animate-spin" />
+                                            <div class="space-y-1">
+                                                <div class="font-medium">{{ __('Preparing scrutiny prompts') }}</div>
+                                                <div>{{ __('PLSAssist is reading the saved source to prepare source-grounded milestones, obligations, and records to locate. Your saved legislation record remains unchanged.') }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endif
+
                                 <div class="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                                     <div class="space-y-4">
                                         <div>
@@ -260,29 +282,100 @@
                                                 </div>
                                             @endif
                                         </div>
-
-                                        @if ($row['important_dates'] !== [])
-                                            <div>
-                                                <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Dates mentioned') }}</div>
-                                                <div class="mt-2 flex flex-wrap gap-2">
-                                                    @foreach ($row['important_dates'] as $date)
-                                                        @if ($row['source_document_id'] !== null)
-                                                            <button
-                                                                type="button"
-                                                                wire:click="viewSourceInsight({{ $row['source_document_id'] }}, @js($date), 'date mentioned')"
-                                                                class="rounded-md bg-zinc-100 px-2.5 py-1 text-sm font-medium text-zinc-700 transition hover:bg-violet-100 hover:text-violet-800 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-violet-500/20 dark:hover:text-violet-200"
-                                                            >
-                                                                {{ $date }}
-                                                            </button>
-                                                        @else
-                                                            <flux:badge size="sm">{{ $date }}</flux:badge>
-                                                        @endif
-                                                    @endforeach
-                                                </div>
-                                            </div>
-                                        @endif
                                     </div>
                                 </div>
+
+                                @if ($row['scrutiny_preparation'] !== [])
+                                    @php
+                                        $preparationCount = collect($row['scrutiny_preparation'])->sum(fn (array $group): int => count($group['items']));
+                                    @endphp
+
+                                    <section
+                                        x-data="{ focus: 'all', expandedGroups: {} }"
+                                        class="mt-5 border-t border-zinc-200 pt-4 dark:border-zinc-800"
+                                    >
+                                        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                            <div class="max-w-2xl space-y-1">
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <flux:heading size="base">{{ __('Scrutiny preparation') }}</flux:heading>
+                                                    <flux:badge size="sm">{{ trans_choice(':count item|:count items', $preparationCount, ['count' => $preparationCount]) }}</flux:badge>
+                                                </div>
+                                                <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                                                    {{ __('Source-grounded milestones, obligations, and records to locate. Open an item to check the passage or ask PLSAssist about it.') }}
+                                                </flux:text>
+                                            </div>
+
+                                            <div class="flex flex-wrap gap-1.5" role="group" aria-label="{{ __('Focus scrutiny preparation') }}">
+                                                <button
+                                                    type="button"
+                                                    x-on:click="focus = 'all'"
+                                                    class="rounded-md px-2.5 py-1 text-xs font-medium transition"
+                                                    x-bind:class="focus === 'all' ? 'bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-200' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'"
+                                                >
+                                                    {{ __('All') }}
+                                                </button>
+                                                @foreach ($row['scrutiny_preparation'] as $group)
+                                                    <button
+                                                        type="button"
+                                                        x-on:click="focus = @js($group['key'])"
+                                                        class="rounded-md px-2.5 py-1 text-xs font-medium transition"
+                                                        x-bind:class="focus === @js($group['key']) ? 'bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-200' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'"
+                                                    >
+                                                        {{ $group['title'] }}
+                                                    </button>
+                                                @endforeach
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-4 grid gap-4 xl:grid-cols-2">
+                                            @foreach ($row['scrutiny_preparation'] as $group)
+                                                <section x-show="focus === 'all' || focus === @js($group['key'])" x-cloak class="border-l-2 border-violet-200 pl-4 dark:border-violet-500/30">
+                                                    <div class="flex items-start gap-2">
+                                                        <flux:icon :icon="$group['icon']" class="mt-0.5 size-4 shrink-0 text-violet-600 dark:text-violet-400" />
+                                                        <div class="min-w-0">
+                                                            <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ $group['title'] }}</div>
+                                                            <div class="mt-0.5 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{{ $group['description'] }}</div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="mt-3 space-y-2">
+                                                        @foreach ($group['items'] as $item)
+                                                            <button
+                                                                type="button"
+                                                                x-show="focus !== 'all' || expandedGroups[@js($group['key'])] || {{ $loop->index < 4 ? 'true' : 'false' }}"
+                                                                x-cloak
+                                                                wire:click="viewSourceInsight({{ $row['source_document_id'] }}, @js($item['source_text']), @js($group['title']))"
+                                                                class="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-left transition hover:border-violet-200 hover:bg-violet-50/60 dark:border-zinc-800 dark:bg-zinc-950/40 dark:hover:border-violet-500/30 dark:hover:bg-violet-500/10"
+                                                            >
+                                                                <span class="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{{ $item['title'] }}</span>
+                                                                <span class="mt-0.5 block text-xs leading-5 text-zinc-600 dark:text-zinc-300">{{ $item['detail'] }}</span>
+                                                                <span class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-violet-700 dark:text-violet-300">
+                                                                    @if ($item['timing'] !== null)
+                                                                        <span>{{ $item['timing'] }}</span>
+                                                                    @endif
+                                                                    <span>{{ __('View source') }}</span>
+                                                                </span>
+                                                            </button>
+                                                        @endforeach
+                                                    </div>
+
+                                                    @if (count($group['items']) > 4)
+                                                        <button
+                                                            type="button"
+                                                            x-show="focus === 'all'"
+                                                            x-cloak
+                                                            x-on:click="expandedGroups[@js($group['key'])] = ! expandedGroups[@js($group['key'])]"
+                                                            class="mt-2 text-xs font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-200"
+                                                        >
+                                                            <span x-show="! expandedGroups[@js($group['key'])]">{{ __('Show :count more', ['count' => count($group['items']) - 4]) }}</span>
+                                                            <span x-show="expandedGroups[@js($group['key'])]" x-cloak>{{ __('Show fewer') }}</span>
+                                                        </button>
+                                                    @endif
+                                                </section>
+                                            @endforeach
+                                        </div>
+                                    </section>
+                                @endif
                             @endif
                         </div>
                     </section>

@@ -88,6 +88,27 @@ test('uploaded legislation sources are queued and can be saved as new legislatio
         'key_themes' => ['Public access rights', 'Response timelines'],
         'notable_excerpts' => ['This Act establishes a public right of access to government information.'],
         'important_dates' => ['2010-05-04'],
+        'scrutiny_preparation' => [
+            'milestones' => [[
+                'title' => 'Enactment',
+                'detail' => 'The Act was enacted on May 4, 2010.',
+                'timing' => 'May 4, 2010',
+                'source_text' => 'Enacted on May 4, 2010.',
+            ]],
+            'implementation_obligations' => [[
+                'title' => 'Supporting regulations',
+                'detail' => 'Regulations may support implementation of the Act.',
+                'timing' => null,
+                'source_text' => 'permits regulations to support implementation',
+            ]],
+            'parliamentary_follow_up' => [],
+            'records_to_locate' => [[
+                'title' => 'Implementation regulations',
+                'detail' => 'Locate regulations made to support implementation of the Act.',
+                'timing' => null,
+                'source_text' => 'permits regulations to support implementation',
+            ]],
+        ],
         'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
         'warnings' => [],
     ]]);
@@ -124,7 +145,10 @@ test('uploaded legislation sources are queued and can be saved as new legislatio
         ->assertSee('2010-05-04')
         ->call('saveAnalyzedLegislation')
         ->assertHasNoErrors()
-        ->assertSee('Access to Information Act');
+        ->assertSee('Access to Information Act')
+        ->assertSee('Scrutiny preparation')
+        ->assertSee('Supporting regulations')
+        ->assertSee('Implementation regulations');
 
     $legislation = Legislation::query()->where('title', 'Access to Information Act')->firstOrFail();
 

@@ -61,6 +61,7 @@ class PersistLegislationSourceState
      *     key_themes?: list<string>,
      *     notable_excerpts?: list<string>,
      *     important_dates?: list<string>,
+     *     scrutiny_preparation?: array{milestones: list<array{title: string, detail: string, timing: string|null, source_text: string}>, implementation_obligations: list<array{title: string, detail: string, timing: string|null, source_text: string}>, parliamentary_follow_up: list<array{title: string, detail: string, timing: string|null, source_text: string}>, records_to_locate: list<array{title: string, detail: string, timing: string|null, source_text: string}>},
      *     stakeholder_suggestions?: list<array<string, mixed>>,
      *     relationship_type?: string,
      *     warnings?: list<string>,
@@ -115,6 +116,7 @@ class PersistLegislationSourceState
             'key_themes' => $result['key_themes'] ?? [],
             'notable_excerpts' => $result['notable_excerpts'] ?? [],
             'important_dates' => $result['important_dates'] ?? [],
+            'scrutiny_preparation' => $result['scrutiny_preparation'] ?? $this->emptyScrutinyPreparation(),
             'stakeholder_suggestions' => $result['stakeholder_suggestions'] ?? [],
             'relationship_type' => $result['relationship_type'] ?? null,
             'warnings' => $result['warnings'] ?? [],
@@ -243,5 +245,18 @@ class PersistLegislationSourceState
         ])->save();
 
         return $document->fresh();
+    }
+
+    /**
+     * @return array{milestones: list<array{title: string, detail: string, timing: string|null, source_text: string}>, implementation_obligations: list<array{title: string, detail: string, timing: string|null, source_text: string}>, parliamentary_follow_up: list<array{title: string, detail: string, timing: string|null, source_text: string}>, records_to_locate: list<array{title: string, detail: string, timing: string|null, source_text: string}>}
+     */
+    private function emptyScrutinyPreparation(): array
+    {
+        return [
+            'milestones' => [],
+            'implementation_obligations' => [],
+            'parliamentary_follow_up' => [],
+            'records_to_locate' => [],
+        ];
     }
 }

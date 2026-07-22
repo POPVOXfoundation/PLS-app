@@ -76,6 +76,7 @@ class AnalyzeLegislationSource
      *     key_themes: list<string>,
      *     notable_excerpts: list<string>,
      *     important_dates: list<string>,
+     *     scrutiny_preparation: array{milestones: list<array{title: string, detail: string, timing: string|null, source_text: string}>, implementation_obligations: list<array{title: string, detail: string, timing: string|null, source_text: string}>, parliamentary_follow_up: list<array{title: string, detail: string, timing: string|null, source_text: string}>, records_to_locate: list<array{title: string, detail: string, timing: string|null, source_text: string}>},
      *     stakeholder_suggestions: list<array<string, mixed>>,
      *     relationship_type: string,
      *     signals: list<string>,
@@ -122,6 +123,7 @@ class AnalyzeLegislationSource
             'key_themes' => $aiExtraction['key_themes'],
             'notable_excerpts' => $aiExtraction['notable_excerpts'],
             'important_dates' => $aiExtraction['important_dates'],
+            'scrutiny_preparation' => $aiExtraction['scrutiny_preparation'],
             'stakeholder_suggestions' => $aiExtraction['stakeholder_suggestions'],
             'relationship_type' => $aiExtraction['relationship_type'],
             'signals' => [],
@@ -258,6 +260,7 @@ class AnalyzeLegislationSource
      *     key_themes: list<string>,
      *     notable_excerpts: list<string>,
      *     important_dates: list<string>,
+     *     scrutiny_preparation: array{milestones: list<array{title: string, detail: string, timing: string|null, source_text: string}>, implementation_obligations: list<array{title: string, detail: string, timing: string|null, source_text: string}>, parliamentary_follow_up: list<array{title: string, detail: string, timing: string|null, source_text: string}>, records_to_locate: list<array{title: string, detail: string, timing: string|null, source_text: string}>},
      *     stakeholder_suggestions: list<array<string, mixed>>,
      *     relationship_type: string,
      *     warnings: list<string>
@@ -285,6 +288,7 @@ class AnalyzeLegislationSource
         $keyThemes = $this->normalizeStringList($response['key_themes'] ?? [], 5, 120);
         $notableExcerpts = $this->normalizeStringList($response['notable_excerpts'] ?? [], 3, 320);
         $importantDates = $this->normalizeImportantDates($response['important_dates'] ?? []);
+        $scrutinyPreparation = $this->normalizeScrutinyPreparation($response['scrutiny_preparation'] ?? []);
         $stakeholderSuggestions = app(StakeholderSuggestionNormalizer::class)->normalize(
             $response['stakeholder_suggestions'] ?? [],
             $document->id,
@@ -306,6 +310,7 @@ class AnalyzeLegislationSource
             'key_themes' => $keyThemes,
             'notable_excerpts' => $notableExcerpts,
             'important_dates' => $importantDates,
+            'scrutiny_preparation' => $scrutinyPreparation,
             'stakeholder_suggestions' => $stakeholderSuggestions,
             'relationship_type' => $relationshipType->value,
             'warnings' => $warnings,
@@ -318,7 +323,7 @@ class AnalyzeLegislationSource
 
         return implode("\n\n", array_filter([
             'Document title: '.$document->title,
-            'Extract the legislation fields from this source text.',
+            'Extract the legislation fields and source-grounded scrutiny preparation from this source text.',
             'Return the structured fields only.',
             'Source text excerpt:'."\n".$sourceExcerpt,
         ]));
@@ -335,11 +340,11 @@ class AnalyzeLegislationSource
         $frontMatter = Str::limit($normalizedText, 18000, '');
 
         $signalLines = collect(preg_split("/\R/", $normalizedText) ?: [])
-            ->filter(fn (string $line): bool => preg_match('/\b(short title|long title|bill|act|regulation|ordinance|enacted|assented|dated|made on|gazetted|commenced)\b/i', $line) === 1)
-            ->map(fn (string $line): string => trim($line))
+            ->filter(fn (string $line): bool => preg_match('/\b(short title|long title|bill|act|regulation|ordinance|enacted|assented|dated|made on|gazetted|commenced|commencement|shall|must|duty|regulations|guidance|code|report|review|consult|lay before|sunset|expire)\b/i', $line) === 1)
+            ->map(fn (string $line): string => Str::limit(trim($line), 360, ''))
             ->filter()
             ->unique()
-            ->take(20)
+            ->take(80)
             ->implode("\n");
 
         return trim(implode("\n\n", array_filter([
@@ -376,6 +381,7 @@ class AnalyzeLegislationSource
      *     key_themes: list<string>,
      *     notable_excerpts: list<string>,
      *     important_dates: list<string>,
+     *     scrutiny_preparation: array{milestones: list<array{title: string, detail: string, timing: string|null, source_text: string}>, implementation_obligations: list<array{title: string, detail: string, timing: string|null, source_text: string}>, parliamentary_follow_up: list<array{title: string, detail: string, timing: string|null, source_text: string}>, records_to_locate: list<array{title: string, detail: string, timing: string|null, source_text: string}>},
      *     stakeholder_suggestions: list<array<string, mixed>>,
      *     relationship_type: string,
      *     signals: list<string>,
@@ -413,6 +419,7 @@ class AnalyzeLegislationSource
             'key_themes' => [],
             'notable_excerpts' => [],
             'important_dates' => [],
+            'scrutiny_preparation' => $this->emptyScrutinyPreparation(),
             'stakeholder_suggestions' => [],
             'relationship_type' => '',
             'signals' => [],
@@ -540,6 +547,70 @@ class AnalyzeLegislationSource
             ->take(5)
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array{milestones: list<array{title: string, detail: string, timing: string|null, source_text: string}>, implementation_obligations: list<array{title: string, detail: string, timing: string|null, source_text: string}>, parliamentary_follow_up: list<array{title: string, detail: string, timing: string|null, source_text: string}>, records_to_locate: list<array{title: string, detail: string, timing: string|null, source_text: string}>}
+     */
+    private function normalizeScrutinyPreparation(mixed $value): array
+    {
+        $preparation = is_array($value) ? $value : [];
+        $normalized = [];
+
+        foreach (array_keys($this->emptyScrutinyPreparation()) as $category) {
+            $normalized[$category] = Collection::wrap($preparation[$category] ?? [])
+                ->filter(fn (mixed $item): bool => is_array($item))
+                ->map(function (array $item): ?array {
+                    $title = $this->normalizePreparationText($item['title'] ?? null, 160);
+                    $detail = $this->normalizePreparationText($item['detail'] ?? null, 300);
+                    $timing = $this->normalizePreparationText($item['timing'] ?? null, 120);
+                    $sourceText = $this->normalizePreparationText($item['source_text'] ?? null, 240);
+
+                    if ($title === '' || $detail === '' || $sourceText === '') {
+                        return null;
+                    }
+
+                    return [
+                        'title' => $title,
+                        'detail' => $detail,
+                        'timing' => $timing !== '' ? $timing : null,
+                        'source_text' => $sourceText,
+                    ];
+                })
+                ->filter()
+                ->unique(fn (array $item): string => Str::lower($item['title'].'|'.$item['source_text']))
+                ->take(12)
+                ->values()
+                ->all();
+        }
+
+        return $normalized;
+    }
+
+    private function normalizePreparationText(mixed $value, int $maxLength): string
+    {
+        if (! is_string($value) || trim($value) === '') {
+            return '';
+        }
+
+        return Str::of($value)
+            ->replaceMatches('/\s+/', ' ')
+            ->trim()
+            ->limit($maxLength, '')
+            ->toString();
+    }
+
+    /**
+     * @return array{milestones: list<array{title: string, detail: string, timing: string|null, source_text: string}>, implementation_obligations: list<array{title: string, detail: string, timing: string|null, source_text: string}>, parliamentary_follow_up: list<array{title: string, detail: string, timing: string|null, source_text: string}>, records_to_locate: list<array{title: string, detail: string, timing: string|null, source_text: string}>}
+     */
+    private function emptyScrutinyPreparation(): array
+    {
+        return [
+            'milestones' => [],
+            'implementation_obligations' => [],
+            'parliamentary_follow_up' => [],
+            'records_to_locate' => [],
+        ];
     }
 
     private function normalizeVisibleDate(string $value): ?string

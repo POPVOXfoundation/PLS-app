@@ -362,6 +362,29 @@ class LegislationPage extends Workspace
         ));
     }
 
+    public function prepareScrutinyPrompts(int $documentId): void
+    {
+        $this->authorizeReviewMutation();
+
+        $document = $this->review->documents()
+            ->where('document_type', DocumentType::LegislationText->value)
+            ->find($documentId);
+
+        if (! $document instanceof Document || $this->sourceRecordStatus($document) === 'processing') {
+            return;
+        }
+
+        app(PersistLegislationSourceState::class)->resetForRetry($document);
+        ProcessReviewLegislationSource::dispatch($document->id);
+
+        $this->review = $this->loadReview();
+
+        $this->dispatchWorkspaceToast(Toast::warning(
+            __('Preparing scrutiny prompts'),
+            __('PLSAssist is reading the saved source and preparing source-grounded milestones and obligations.'),
+        ));
+    }
+
     public function hasAnalysisState(): bool
     {
         return $this->analysisSourceDocumentId !== '';
@@ -626,6 +649,8 @@ class LegislationPage extends Workspace
      *     relationship: string,
      *     legislation_type: string,
      *     date_enacted: string,
+     *     scrutiny_preparation: list<array{key: string, title: string, description: string, icon: string, items: list<array{title: string, detail: string, timing: string|null, source_text: string}>}>,
+     *     preparation_status: string,
      *     status: string,
      *     progress_stage: string|null,
      *     status_label: string,
@@ -677,6 +702,8 @@ class LegislationPage extends Workspace
                 'key_themes' => $this->analysisStringList($storedAnalysis, 'key_themes'),
                 'notable_excerpts' => $this->analysisStringList($storedAnalysis, 'notable_excerpts'),
                 'important_dates' => $this->analysisStringList($storedAnalysis, 'important_dates'),
+                'scrutiny_preparation' => $this->scrutinyPreparationGroups($storedAnalysis),
+                'preparation_status' => $this->sourceRecordStatus($document),
                 'warnings' => $this->analysisStringList($storedAnalysis, 'warnings'),
                 'status' => $status,
                 'progress_stage' => $progressStage = $this->sourceRecordProgressStage($document, $status),
@@ -719,6 +746,8 @@ class LegislationPage extends Workspace
                 'key_themes' => [],
                 'notable_excerpts' => [],
                 'important_dates' => [],
+                'scrutiny_preparation' => [],
+                'preparation_status' => 'saved',
                 'warnings' => [],
                 'status' => 'saved',
                 'progress_stage' => null,
@@ -858,7 +887,7 @@ class LegislationPage extends Workspace
             return match ($progressStage) {
                 'queued' => __('Your source is queued. PLSAssist will read the file, extract text, and prepare a structured legislation record.'),
                 'extracting_text' => __('PLSAssist is reading the uploaded legislation and extracting text so it can identify the instrument, context, key provisions, and dates.'),
-                'filling_record' => __('PLSAssist is drafting the legislation record: title, summary, type, relationship to the review, key themes, dates, and notable excerpts.'),
+                'filling_record' => __('PLSAssist is drafting the legislation record: title, summary, type, relationship to the review, key themes, notable excerpts, and source-grounded scrutiny prompts.'),
                 default => __('PLSAssist is processing this source in the background.'),
             };
         }
@@ -881,6 +910,96 @@ class LegislationPage extends Workspace
             ->map(fn (mixed $value): string => trim((string) $value))
             ->values()
             ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $storedAnalysis
+     * @return list<array{key: string, title: string, description: string, icon: string, items: list<array{title: string, detail: string, timing: string|null, source_text: string}>}>
+     */
+    private function scrutinyPreparationGroups(array $storedAnalysis): array
+    {
+        $preparation = $storedAnalysis['scrutiny_preparation'] ?? [];
+
+        if (! is_array($preparation)) {
+            return [];
+        }
+
+        $definitions = [
+            'milestones' => [
+                'title' => __('Milestones and deadlines'),
+                'description' => __('Commencement, reporting, review, and other dates stated in the legislation.'),
+                'icon' => 'calendar-days',
+            ],
+            'implementation_obligations' => [
+                'title' => __('Implementation obligations'),
+                'description' => __('Regulations, guidance, bodies, and duties stated in the legislation.'),
+                'icon' => 'cog-6-tooth',
+            ],
+            'parliamentary_follow_up' => [
+                'title' => __('Parliamentary follow-up'),
+                'description' => __('Requirements involving Parliament, review, reporting, or consultation.'),
+                'icon' => 'building-library',
+            ],
+            'records_to_locate' => [
+                'title' => __('Records to locate'),
+                'description' => __('Source-linked regulations, guidance, reports, or other records to gather.'),
+                'icon' => 'document-magnifying-glass',
+            ],
+        ];
+
+        return collect($definitions)
+            ->map(function (array $definition, string $key) use ($preparation): ?array {
+                $items = collect($preparation[$key] ?? [])
+                    ->filter(fn (mixed $item): bool => is_array($item))
+                    ->map(function (array $item): ?array {
+                        $title = $this->preparationText($item['title'] ?? null, 160);
+                        $detail = $this->preparationText($item['detail'] ?? null, 300);
+                        $timing = $this->preparationText($item['timing'] ?? null, 120);
+                        $sourceText = $this->preparationText($item['source_text'] ?? null, 240);
+
+                        if ($title === '' || $detail === '' || $sourceText === '') {
+                            return null;
+                        }
+
+                        return [
+                            'title' => $title,
+                            'detail' => $detail,
+                            'timing' => $timing !== '' ? $timing : null,
+                            'source_text' => $sourceText,
+                        ];
+                    })
+                    ->filter()
+                    ->unique(fn (array $item): string => Str::lower($item['title'].'|'.$item['source_text']))
+                    ->take(12)
+                    ->values()
+                    ->all();
+
+                if ($items === []) {
+                    return null;
+                }
+
+                return [
+                    'key' => $key,
+                    ...$definition,
+                    'items' => $items,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    private function preparationText(mixed $value, int $maxLength): string
+    {
+        if (! is_string($value) || trim($value) === '') {
+            return '';
+        }
+
+        return Str::of($value)
+            ->replaceMatches('/\s+/', ' ')
+            ->trim()
+            ->limit($maxLength, '')
+            ->toString();
     }
 
     /**
