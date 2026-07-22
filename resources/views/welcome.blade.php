@@ -455,8 +455,8 @@
 
                     <nav>
                         @auth
-                            <a href="{{ route('dashboard') }}" class="button button-primary">
-                                {{ __('Open dashboard') }}
+                            <a href="{{ route('pls.reviews.index') }}" class="button button-primary">
+                                {{ __('Open reviews') }}
                             </a>
                         @else
                             <a href="{{ route('login') }}" class="button">
@@ -482,7 +482,7 @@
 
                         <div class="hero-actions">
                             @auth
-                                <a href="{{ route('dashboard') }}" class="button button-primary">
+                                <a href="{{ route('pls.reviews.index') }}" class="button button-primary">
                                     {{ __('Open the workspace') }}
                                 </a>
                             @else
@@ -599,8 +599,8 @@
                             {{ __('Open the WFD PLS manual') }}
                         </a>
                         @auth
-                            <a href="{{ route('dashboard') }}" class="button">
-                                {{ __('Open dashboard') }}
+                            <a href="{{ route('pls.reviews.index') }}" class="button">
+                                {{ __('Open reviews') }}
                             </a>
                         @else
                             <a href="{{ route('login') }}" class="button">

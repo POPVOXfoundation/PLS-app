@@ -12,8 +12,8 @@
         </div>
 
         <div class="flex gap-2">
-            <flux:button variant="ghost" :href="route('dashboard')" wire:navigate>
-                {{ __('Back to dashboard') }}
+            <flux:button variant="ghost" :href="route('pls.reviews.index')" wire:navigate>
+                {{ __('Back to reviews') }}
             </flux:button>
         </div>
     </div>

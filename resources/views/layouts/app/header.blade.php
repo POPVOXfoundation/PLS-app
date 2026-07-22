@@ -1,16 +1,16 @@
 @php
     $primaryNavigation = [
         [
-            'label' => __('Dashboard'),
-            'route' => route('dashboard'),
-            'current' => request()->routeIs('dashboard'),
-            'icon' => 'home',
-        ],
-        [
             'label' => __('PLS Reviews'),
             'route' => route('pls.reviews.index'),
             'current' => request()->routeIs('pls.reviews.*'),
             'icon' => 'clipboard-document-list',
+        ],
+        [
+            'label' => __('Dashboard'),
+            'route' => route('dashboard'),
+            'current' => request()->routeIs('dashboard'),
+            'icon' => 'home',
         ],
     ];
 @endphp
@@ -25,7 +25,7 @@
             <flux:header class="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/92 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/92">
                 <div class="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
                     <div class="flex min-w-0 items-center gap-5">
-                        <x-app-logo href="{{ route('dashboard') }}" wire:navigate class="shrink-0" />
+                        <x-app-logo href="{{ route('pls.reviews.index') }}" wire:navigate class="shrink-0" />
 
                         <flux:navbar class="hidden md:flex items-center gap-1">
                             @foreach ($primaryNavigation as $item)
