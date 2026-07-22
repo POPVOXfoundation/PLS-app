@@ -1557,6 +1557,30 @@ test('findings and recommendations can be added from the review workspace', func
     ]);
 });
 
+test('analysis keeps assistant finding drafts provisional and lets users develop their own potential finding', function () {
+    $review = plsReview([
+        'title' => 'Review of analysis assistance',
+    ]);
+
+    $component = Livewire::test(AnalysisPage::class, ['review' => $review])
+        ->assertSee('Draft findings with PLSAssist')
+        ->assertSee('Human review required')
+        ->assertSee('Suggest provisional findings')
+        ->assertSee('Develop my finding')
+        ->call('requestProvisionalFindings')
+        ->assertDispatched('assistant-prompt-requested');
+
+    $component
+        ->call('prepareFindingDevelopment')
+        ->assertSet('showDevelopFindingModal', true)
+        ->set('potentialFinding', 'Implementation reporting may not be consistent across delivery agencies.')
+        ->call('developPotentialFinding')
+        ->assertSet('showDevelopFindingModal', false)
+        ->assertDispatched('assistant-prompt-requested');
+
+    $this->assertDatabaseCount('findings', 0);
+});
+
 test('findings and recommendations can be edited and deleted from the review workspace', function () {
     $review = plsReview([
         'title' => 'Review of implementation bottlenecks',
@@ -1635,14 +1659,14 @@ test('analysis workspace renders findings in a compact table layout', function (
     ]);
 
     Livewire::test(AnalysisPage::class, ['review' => $review])
-        ->assertSee('Add finding')
+        ->assertSee('Add reviewed finding')
         ->assertSee('Add recommendation')
         ->assertSee('Show more')
         ->assertSee('Recommendations')
+        ->assertSee('Review team record')
         ->assertSee('Update delegated regulations')
-        ->assertDontSee('Record')
         ->assertDontSee('Gov. responses')
-        ->assertDontSee('No findings or recommendations recorded yet.');
+        ->assertDontSee('No reviewed findings recorded yet');
 });
 
 test('reports can be created from the review workspace and linked to a review document', function () {

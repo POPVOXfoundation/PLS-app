@@ -10,25 +10,48 @@
     }"
 >
     <flux:card class="space-y-6">
+        <div class="border-b border-zinc-200 pb-6 dark:border-zinc-800">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div class="max-w-2xl space-y-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <flux:heading size="lg">{{ __('Draft findings with PLSAssist') }}</flux:heading>
+                        <flux:badge size="sm" color="amber">{{ __('Human review required') }}</flux:badge>
+                    </div>
+                    <flux:text class="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+                        {{ __('PLSAssist can test patterns across the legislation, evidence, and consultation record. Its drafts stay provisional in the assistant until the review team checks the sources and records a finding.') }}
+                    </flux:text>
+                </div>
+
+                <div class="flex shrink-0 flex-wrap gap-2">
+                    <flux:button variant="primary" size="sm" icon="sparkles" wire:click="requestProvisionalFindings">
+                        {{ __('Suggest provisional findings') }}
+                    </flux:button>
+                    <flux:button variant="filled" size="sm" icon="pencil-square" wire:click="prepareFindingDevelopment">
+                        {{ __('Develop my finding') }}
+                    </flux:button>
+                </div>
+            </div>
+        </div>
+
         @if ($review->findings->isEmpty())
             <div class="flex items-center justify-between gap-4">
-                <flux:heading size="lg">{{ __('Findings & recommendations') }}</flux:heading>
-                <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareFindingCreate">{{ __('Add finding') }}</flux:button>
+                <flux:heading size="lg">{{ __('Confirmed findings & recommendations') }}</flux:heading>
+                <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareFindingCreate">{{ __('Add reviewed finding') }}</flux:button>
             </div>
 
             <div class="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/70 p-6 dark:border-zinc-700 dark:bg-zinc-900/40">
-                <flux:heading size="base">{{ __('No findings recorded yet') }}</flux:heading>
+                <flux:heading size="base">{{ __('No reviewed findings recorded yet') }}</flux:heading>
                 <flux:text class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                    {{ __('Start the analysis workspace by recording the first finding drawn from the review evidence.') }}
+                    {{ __('Ask PLSAssist to surface provisional patterns, or develop a potential finding of your own. Add it here only after checking the supporting evidence.') }}
                 </flux:text>
                 <div class="mt-4">
-                    <flux:button variant="primary" icon="plus" wire:click="prepareFindingCreate">{{ __('Add the first finding') }}</flux:button>
+                    <flux:button variant="primary" icon="plus" wire:click="prepareFindingCreate">{{ __('Add the first reviewed finding') }}</flux:button>
                 </div>
             </div>
         @else
             <div class="flex items-center justify-between gap-4">
-                <flux:heading size="lg">{{ __('Findings & recommendations') }}</flux:heading>
-                <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareFindingCreate">{{ __('Add finding') }}</flux:button>
+                <flux:heading size="lg">{{ __('Confirmed findings & recommendations') }}</flux:heading>
+                <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareFindingCreate">{{ __('Add reviewed finding') }}</flux:button>
             </div>
 
             <div class="space-y-4">
@@ -42,7 +65,11 @@
                             </div>
 
                             <div class="flex shrink-0 items-center gap-2">
+                                <flux:badge size="sm" color="emerald">{{ __('Review team record') }}</flux:badge>
                                 <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($finding->finding_type->value) }}</flux:badge>
+                                <flux:button variant="ghost" size="sm" icon="sparkles" wire:click="refineFindingWithAssistant({{ $finding->id }})">
+                                    {{ __('Refine') }}
+                                </flux:button>
                                 <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingFinding({{ $finding->id }})" />
 
                                 <flux:modal.trigger name="confirm-analysis-delete">
@@ -180,8 +207,8 @@
     <flux:modal wire:model.self="showAddFindingModal" class="md:w-[32rem]">
         <form wire:submit="storeFinding" class="space-y-6">
             <div>
-                <flux:heading size="lg">{{ __('Add finding') }}</flux:heading>
-                <flux:text class="mt-1">{{ __('Capture a core conclusion from the review evidence.') }}</flux:text>
+                <flux:heading size="lg">{{ __('Add reviewed finding') }}</flux:heading>
+                <flux:text class="mt-1">{{ __('Record a finding after the review team has checked its wording, sources, and limitations. This becomes part of the review record.') }}</flux:text>
             </div>
 
             <flux:input wire:model="findingTitle" :invalid="$errors->has('findingTitle')" :label="__('Title')" />
@@ -196,7 +223,28 @@
             <flux:textarea wire:model="findingDetail" :invalid="$errors->has('findingDetail')" :label="__('Detail')" rows="4" />
 
             <div class="flex justify-end">
-                <flux:button variant="primary" type="submit">{{ __('Add finding') }}</flux:button>
+                <flux:button variant="primary" type="submit">{{ __('Save reviewed finding') }}</flux:button>
+            </div>
+        </form>
+    </flux:modal>
+
+    <flux:modal wire:model.self="showDevelopFindingModal" class="md:w-[34rem]">
+        <form wire:submit="developPotentialFinding" class="space-y-6">
+            <div>
+                <flux:heading size="lg">{{ __('Develop a potential finding') }}</flux:heading>
+                <flux:text class="mt-1">{{ __('Describe the pattern or concern you want to test. PLSAssist will refine the draft, look for supporting and contrary sources, and identify questions for the review team.') }}</flux:text>
+            </div>
+
+            <flux:textarea
+                wire:model="potentialFinding"
+                :invalid="$errors->has('potentialFinding')"
+                :label="__('Potential finding')"
+                :placeholder="__('For example: reporting requirements may not be applied consistently across implementing agencies.')"
+                rows="6"
+            />
+
+            <div class="flex justify-end">
+                <flux:button variant="primary" type="submit" icon="sparkles">{{ __('Test with PLSAssist') }}</flux:button>
             </div>
         </form>
     </flux:modal>

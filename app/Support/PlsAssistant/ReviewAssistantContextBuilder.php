@@ -532,11 +532,12 @@ class ReviewAssistantContextBuilder
      */
     private function analysisFacts(PlsReview $review): array
     {
-        if ($review->findings->isEmpty() && $review->recommendations->isEmpty()) {
-            return ['No findings or recommendations are recorded yet.'];
-        }
-
         return [
+            'Analysis input overview:',
+            ...$this->legislationFacts($review),
+            ...$this->documentsFacts($review),
+            ...$this->consultationFacts($review),
+            ...$this->stakeholderFacts($review),
             'Findings: '.$review->findings->count(),
             'Recommendations: '.$review->recommendations->count(),
             ...($review->findings->isEmpty()

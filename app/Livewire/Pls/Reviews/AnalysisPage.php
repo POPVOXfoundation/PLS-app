@@ -24,7 +24,11 @@ class AnalysisPage extends Workspace
 
     public bool $showEditFindingModal = false;
 
+    public bool $showDevelopFindingModal = false;
+
     public bool $showEditRecommendationModal = false;
+
+    public string $potentialFinding = '';
 
     public string $findingTitle = '';
 
@@ -55,6 +59,56 @@ class AnalysisPage extends Workspace
     {
         $this->resetFindingForm();
         $this->showAddFindingModal = true;
+    }
+
+    public function requestProvisionalFindings(): void
+    {
+        $this->authorize('view', $this->review);
+
+        $this->dispatch('assistant-prompt-requested', prompt: $this->provisionalFindingsPrompt())
+            ->to(AssistantSidebar::class);
+    }
+
+    public function prepareFindingDevelopment(): void
+    {
+        $this->resetValidation('potentialFinding');
+        $this->potentialFinding = '';
+        $this->showDevelopFindingModal = true;
+    }
+
+    public function developPotentialFinding(): void
+    {
+        $this->authorize('view', $this->review);
+
+        $this->validate([
+            'potentialFinding' => ['required', 'string', 'max:5000'],
+        ], [
+            'potentialFinding.required' => __('Describe the potential finding you want to test.'),
+        ]);
+
+        $potentialFinding = trim($this->potentialFinding);
+        $this->potentialFinding = '';
+        $this->showDevelopFindingModal = false;
+
+        $this->dispatch('assistant-prompt-requested', prompt: $this->potentialFindingPrompt($potentialFinding))
+            ->to(AssistantSidebar::class);
+    }
+
+    public function refineFindingWithAssistant(int $findingId): void
+    {
+        $this->authorize('view', $this->review);
+
+        $finding = $this->review->findings()->find($findingId);
+
+        if ($finding === null) {
+            return;
+        }
+
+        $this->dispatch('assistant-prompt-requested', prompt: sprintf(
+            'Help the review team test and refine this recorded finding: "%s". Current wording: "%s". Using only the current review record, provide: 1) a cautious revised draft, 2) supporting sources and short direct quotes where they are available, 3) any conflicting or limiting evidence, and 4) a short note on what the team should verify. Do not treat the recorded finding as final or invent citations.',
+            $finding->title,
+            trim(implode("\n", array_filter([$finding->summary, $finding->detail]))),
+        ))->to(AssistantSidebar::class);
     }
 
     public function prepareRecommendationCreate(?int $findingId = null): void
@@ -387,6 +441,19 @@ class AnalysisPage extends Workspace
             'findingDetail',
             'findingEditingId',
         ]);
+    }
+
+    private function provisionalFindingsPrompt(): string
+    {
+        return 'Review the current review record, including linked legislation, uploaded evidence, stakeholder submissions, and recorded consultation results. Identify up to three potential findings only where the available sources provide real support. For each potential finding, provide: 1) cautious draft wording, 2) suggested finding type, 3) supporting sources and short direct quotes only when they appear in the review record, 4) any contradictory evidence or limitations, and 5) a question for the human reviewer. Do not create a permanent finding, present a conclusion as final, infer public opinion, or invent citations. If the evidence is too thin, say what is missing instead.';
+    }
+
+    private function potentialFindingPrompt(string $potentialFinding): string
+    {
+        return sprintf(
+            'A review team member wants to test this potential finding: "%s". Using only the current review record, help refine it for human review. Provide: 1) cautious proposed wording, 2) a suggested finding type, 3) supporting sources and short direct quotes only where present, 4) contradictory or limiting evidence, and 5) missing evidence or verification questions. Do not add this to the findings record automatically, present it as final, or invent citations.',
+            $potentialFinding,
+        );
     }
 
     private function resetRecommendationForm(): void
