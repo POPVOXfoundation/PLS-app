@@ -260,6 +260,7 @@ test('review overview summarizes recorded work, gaps, and recent uploads', funct
         ->assertSee('Overview')
         ->assertSee('Review overview')
         ->assertSee('Workspace record')
+        ->assertSee('Ready to move forward?')
         ->assertSee('Recent uploads')
         ->assertSee('Implementation Progress Report')
         ->assertSee('Define the objectives and scope of PLS')
@@ -280,6 +281,7 @@ test('review overview summarizes recorded work, gaps, and recent uploads', funct
     $component = Livewire::test(WorkflowPage::class, ['review' => $review])
         ->assertSee('Review overview')
         ->assertSee('Workspace record')
+        ->assertSee('Ready to move forward?')
         ->assertSee('Implementation Progress Report')
         ->assertSee('PLS methodology reference')
         ->assertSee('Current focus');

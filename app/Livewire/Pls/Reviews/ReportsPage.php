@@ -74,6 +74,7 @@ class ReportsPage extends Workspace
             'reportTypes' => ReportType::cases(),
             'reportStatuses' => ReportStatus::cases(),
             'governmentResponseStatuses' => GovernmentResponseStatus::cases(),
+            'reportPreview' => $this->reportPreview($review),
             'reportWorkflowFocus' => $this->reportWorkflowFocus($review),
             'publishedFinalReports' => $publishedFinalReports,
             'awaitingResponseReports' => $awaitingResponseReports,
@@ -514,6 +515,8 @@ class ReportsPage extends Workspace
             ->with([
                 'steps',
                 'documents',
+                'consultations.materials',
+                'submissions',
                 'findings',
                 'recommendations.finding',
                 'reports.document',
@@ -522,6 +525,72 @@ class ReportsPage extends Workspace
                 'governmentResponses.document',
             ])
             ->findOrFail($this->review->getKey());
+    }
+
+    /**
+     * @return array{detail: string, sections: list<array{action: string, detail: string, label: string, ready: bool, route: string, title: string}>, title: string}
+     */
+    private function reportPreview(PlsReview $review): array
+    {
+        $evidenceCount = $review->documents
+            ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
+            ->count();
+        $consultationResultCount = $review->consultations->sum(
+            fn ($consultation): int => $consultation->materials->count(),
+        );
+        $workingReport = $review->reports
+            ->first(fn (Report $report): bool => $report->status === ReportStatus::Draft);
+
+        return [
+            'detail' => __('This working preview updates as the review record changes. It does not create or publish a report.'),
+            'title' => $workingReport?->title ?? __('Working report preview'),
+            'sections' => [
+                [
+                    'action' => __('Open overview'),
+                    'detail' => $review->description ?? __('Add the review purpose and scope to begin this section.'),
+                    'label' => __('Purpose and scope'),
+                    'ready' => filled($review->description),
+                    'route' => route('pls.reviews.workflow', ['review' => $review]).'#review-details',
+                    'title' => __('Review overview'),
+                ],
+                [
+                    'action' => __('Open evidence'),
+                    'detail' => $evidenceCount > 0
+                        ? trans_choice('{1} One evidence record is available for report drafting.|[2,*] :count evidence records are available for report drafting.', $evidenceCount, ['count' => $evidenceCount])
+                        : __('Add evidence before writing about implementation or impact.'),
+                    'label' => __('Evidence and consultation'),
+                    'ready' => $evidenceCount > 0,
+                    'route' => route('pls.reviews.documents', ['review' => $review]),
+                    'title' => $consultationResultCount > 0
+                        ? trans_choice(':count consultation result is also available.|:count consultation results are also available.', $consultationResultCount, ['count' => $consultationResultCount])
+                        : ($review->submissions->isNotEmpty()
+                            ? trans_choice(':count written submission is recorded.|:count written submissions are recorded.', $review->submissions->count(), ['count' => $review->submissions->count()])
+                            : __('No consultation results or written submissions are recorded yet.')),
+                ],
+                [
+                    'action' => __('Open analysis'),
+                    'detail' => $review->findings->isNotEmpty()
+                        ? trans_choice('{1} One human-reviewed finding is ready to structure the report.|[2,*] :count human-reviewed findings are ready to structure the report.', $review->findings->count(), ['count' => $review->findings->count()])
+                        : __('Confirm human-reviewed findings before treating this section as report-ready.'),
+                    'label' => __('Findings and recommendations'),
+                    'ready' => $review->findings->isNotEmpty(),
+                    'route' => route('pls.reviews.analysis', ['review' => $review]),
+                    'title' => $review->recommendations->isNotEmpty()
+                        ? trans_choice(':count recommendation is linked to the findings.|:count recommendations are linked to the findings.', $review->recommendations->count(), ['count' => $review->recommendations->count()])
+                        : __('No recommendations are linked to the reviewed findings yet.'),
+                ],
+                [
+                    'action' => __('Manage reports'),
+                    'detail' => $workingReport !== null
+                        ? __('A draft report record is already being tracked.')
+                        : __('Create a report record when the team is ready to track the working draft.'),
+                    'label' => __('Publication path'),
+                    'ready' => $workingReport !== null || $review->reports->isNotEmpty(),
+                    'route' => route('pls.reviews.reports', ['review' => $review]),
+                    'title' => $workingReport?->title ?? __('No report record yet'),
+                ],
+            ],
+        ];
     }
 
     private function performReportDeletion(int $reportId): void

@@ -21,6 +21,41 @@
         @endif
 
         <flux:card class="space-y-5">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="space-y-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <flux:heading size="lg">{{ __('Live report preview') }}</flux:heading>
+                        <flux:badge size="sm" color="violet">{{ __('Working draft') }}</flux:badge>
+                    </div>
+                    <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">{{ $reportPreview['detail'] }}</flux:text>
+                </div>
+                <flux:text class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ $reportPreview['title'] }}</flux:text>
+            </div>
+
+            <div class="divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+                @foreach ($reportPreview['sections'] as $section)
+                    <div class="grid gap-3 py-4 lg:grid-cols-[11rem_minmax(0,1fr)_auto] lg:items-start lg:gap-5">
+                        <div class="flex items-center gap-2">
+                            <span @class([
+                                'flex size-5 shrink-0 items-center justify-center rounded-full',
+                                'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' => $section['ready'],
+                                'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' => ! $section['ready'],
+                            ])>
+                                <flux:icon :icon="$section['ready'] ? 'check' : 'minus'" class="size-3" />
+                            </span>
+                            <span class="text-sm font-semibold text-zinc-900 dark:text-white">{{ $section['label'] }}</span>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ $section['title'] }}</p>
+                            <p class="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-400">{{ $section['detail'] }}</p>
+                        </div>
+                        <a href="{{ $section['route'] }}" wire:navigate class="shrink-0 text-sm font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100">{{ $section['action'] }}</a>
+                    </div>
+                @endforeach
+            </div>
+        </flux:card>
+
+        <flux:card class="space-y-5">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div class="max-w-2xl space-y-1">
                     <div class="flex flex-wrap items-center gap-2">

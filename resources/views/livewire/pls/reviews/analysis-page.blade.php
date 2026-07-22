@@ -56,7 +56,10 @@
 
             <div class="space-y-4">
                 @foreach ($review->findings as $finding)
-                    @php $recommendations = $review->recommendations->where('finding_id', $finding->id); @endphp
+                    @php
+                        $recommendations = $review->recommendations->where('finding_id', $finding->id);
+                        $supportingRecords = $findingSupportRecords[$finding->id] ?? [];
+                    @endphp
 
                     <div wire:key="finding-{{ $finding->id }}" class="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
                         <div class="flex items-center justify-between gap-3 bg-zinc-50/70 px-4 py-3 dark:bg-zinc-900/50">
@@ -113,6 +116,39 @@
                                     @endif
                                 </div>
                             @endif
+
+                            <div class="border-y border-zinc-100 py-4 dark:border-zinc-800">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Related records') }}</span>
+                                            <flux:badge size="sm" color="amber">{{ __('Verify before relying') }}</flux:badge>
+                                        </div>
+                                        <p class="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{{ __('These are text matches in saved records, not proof of the finding. Ask PLSAssist to locate and test the supporting passages.') }}</p>
+                                    </div>
+                                    <flux:button variant="ghost" size="sm" icon="magnifying-glass" wire:click="requestFindingSupport({{ $finding->id }})">
+                                        {{ __('Check source support') }}
+                                    </flux:button>
+                                </div>
+
+                                @if ($supportingRecords === [])
+                                    <p class="mt-3 text-sm text-zinc-500 dark:text-zinc-400">{{ __('No close text matches were found in the saved record. This may mean the wording needs a different search approach or further evidence.') }}</p>
+                                @else
+                                    <div class="mt-3 grid gap-2 lg:grid-cols-2">
+                                        @foreach ($supportingRecords as $record)
+                                            <a href="{{ $record['route'] }}" wire:navigate class="rounded-lg border border-zinc-200 bg-white px-3 py-2.5 transition hover:border-violet-200 hover:bg-violet-50/50 dark:border-zinc-800 dark:bg-zinc-950/50 dark:hover:border-violet-500/30 dark:hover:bg-violet-500/10">
+                                                <span class="block text-xs font-medium text-violet-700 dark:text-violet-300">{{ $record['label'] }}</span>
+                                                <span class="mt-0.5 block text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ $record['title'] }}</span>
+                                                <span class="mt-2 flex flex-wrap gap-1">
+                                                    @foreach ($record['matched_terms'] as $term)
+                                                        <span class="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{{ $term }}</span>
+                                                    @endforeach
+                                                </span>
+                                            </a>
+                                        @endforeach
+                                    </div>
+                                @endif
+                            </div>
 
                             <div class="ml-4 space-y-3 rounded-xl bg-zinc-100/80 px-4 py-4 dark:bg-zinc-900/60">
                                 <div class="flex items-center justify-between gap-3">

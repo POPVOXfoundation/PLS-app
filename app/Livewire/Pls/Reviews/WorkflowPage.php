@@ -29,6 +29,7 @@ class WorkflowPage extends Workspace
         return $this->renderWorkspaceView('livewire.pls.reviews.workflow-page', [
             'currentAction' => $this->currentAction($review),
             'recentUploads' => $this->recentUploads($review),
+            'readinessChecks' => $this->readinessChecks($review),
             'workspaceRecord' => $this->workspaceRecord($review),
         ], $review);
     }
@@ -350,6 +351,72 @@ class WorkflowPage extends Workspace
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * @return list<array{action: string, detail: string, label: string, ready: bool, route: string}>
+     */
+    private function readinessChecks(PlsReview $review): array
+    {
+        $evidenceCount = $this->documentCount($review);
+        $consultationRecordCount = $review->consultations->count() + $review->submissions->count();
+
+        return [
+            [
+                'action' => __('Edit details'),
+                'detail' => filled($review->description)
+                    ? __('The purpose and scope are recorded.')
+                    : __('Add a purpose and scope so the review has a clear frame.'),
+                'label' => __('Scope'),
+                'ready' => filled($review->description),
+                'route' => '#review-details',
+            ],
+            [
+                'action' => __('Open legislation'),
+                'detail' => $review->legislation->isNotEmpty()
+                    ? __('At least one legislation record is linked to the review.')
+                    : __('Add the primary or relevant delegated legislation.'),
+                'label' => __('Legislation'),
+                'ready' => $review->legislation->isNotEmpty(),
+                'route' => route('pls.reviews.legislation', ['review' => $review]),
+            ],
+            [
+                'action' => __('Open evidence'),
+                'detail' => $evidenceCount > 0
+                    ? trans_choice('{1} One evidence record is available.|[2,*] :count evidence records are available.', $evidenceCount, ['count' => $evidenceCount])
+                    : __('Add implementation records or other evidence before drawing conclusions.'),
+                'label' => __('Evidence'),
+                'ready' => $evidenceCount > 0,
+                'route' => route('pls.reviews.documents', ['review' => $review]),
+            ],
+            [
+                'action' => __('Open stakeholders'),
+                'detail' => $review->stakeholders->isNotEmpty() || $review->implementingAgencies->isNotEmpty()
+                    ? __('Relevant people, institutions, or implementing agencies are recorded.')
+                    : __('Map the people and institutions who should inform the review.'),
+                'label' => __('Stakeholders'),
+                'ready' => $review->stakeholders->isNotEmpty() || $review->implementingAgencies->isNotEmpty(),
+                'route' => route('pls.reviews.stakeholders', ['review' => $review]),
+            ],
+            [
+                'action' => __('Open consultations'),
+                'detail' => $consultationRecordCount > 0
+                    ? __('Consultation activity or written submissions are recorded.')
+                    : __('Plan consultation or log written evidence when it is appropriate for this review.'),
+                'label' => __('Consultation record'),
+                'ready' => $consultationRecordCount > 0,
+                'route' => route('pls.reviews.consultations', ['review' => $review]),
+            ],
+            [
+                'action' => __('Open analysis'),
+                'detail' => $review->findings->isNotEmpty()
+                    ? __('The review team has confirmed findings for the working record.')
+                    : __('Confirm human-reviewed findings before relying on them in a report.'),
+                'label' => __('Reviewed findings'),
+                'ready' => $review->findings->isNotEmpty(),
+                'route' => route('pls.reviews.analysis', ['review' => $review]),
+            ],
+        ];
     }
 
     /**

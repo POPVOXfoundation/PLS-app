@@ -1581,6 +1581,34 @@ test('analysis keeps assistant finding drafts provisional and lets users develop
     $this->assertDatabaseCount('findings', 0);
 });
 
+test('findings show related records as candidates and request source verification from the assistant', function () {
+    $review = plsReview([
+        'title' => 'Review of agency reporting duties',
+    ]);
+
+    Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Agency reporting implementation update',
+        'document_type' => DocumentType::ImplementationReport,
+        'summary' => 'Agency reporting remains inconsistent across several implementing bodies.',
+    ]);
+
+    $finding = $review->findings()->create([
+        'title' => 'Agency reporting remains inconsistent',
+        'finding_type' => FindingType::ImplementationGap,
+        'summary' => 'Agency reporting requirements are not consistently met.',
+        'detail' => null,
+    ]);
+
+    Livewire::test(AnalysisPage::class, ['review' => $review])
+        ->assertSee('Related records')
+        ->assertSee('Verify before relying')
+        ->assertSee('Agency reporting implementation update')
+        ->assertSee('Check source support')
+        ->call('requestFindingSupport', $finding->id)
+        ->assertDispatched('assistant-prompt-requested');
+});
+
 test('findings and recommendations can be edited and deleted from the review workspace', function () {
     $review = plsReview([
         'title' => 'Review of implementation bottlenecks',
@@ -1719,6 +1747,8 @@ test('report assistance keeps drafting in the assistant for human review', funct
     ]);
 
     $component = Livewire::test(ReportsPage::class, ['review' => $review])
+        ->assertSee('Live report preview')
+        ->assertSee('Working draft')
         ->assertSee('Draft with PLSAssist')
         ->assertSee('Human review required')
         ->assertSee('Build report outline')

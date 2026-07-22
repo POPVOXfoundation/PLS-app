@@ -127,6 +127,43 @@
     </section>
 
     <section class="border-y border-zinc-200 py-6 dark:border-zinc-800">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+                <flux:heading size="lg" level="2">{{ __('Ready to move forward?') }}</flux:heading>
+                <flux:text class="mt-1 text-sm">{{ __('These checks reflect what is saved in PLSAssist. They support team judgment; they do not replace it.') }}</flux:text>
+            </div>
+            <span class="text-sm font-medium text-zinc-700 dark:text-zinc-200">
+                {{ trans_choice('{0} no checks complete|{1} :count check complete|[2,*] :count checks complete', collect($readinessChecks)->where('ready', true)->count(), ['count' => collect($readinessChecks)->where('ready', true)->count()]) }}
+            </span>
+        </div>
+
+        <div class="mt-4 grid gap-x-6 gap-y-3 lg:grid-cols-2">
+            @foreach ($readinessChecks as $check)
+                <div class="flex items-start gap-3 border-b border-zinc-100 py-3 last:border-b-0 dark:border-zinc-800">
+                    <span @class([
+                        'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full',
+                        'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' => $check['ready'],
+                        'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' => ! $check['ready'],
+                    ])>
+                        <flux:icon :icon="$check['ready'] ? 'check' : 'minus'" class="size-3" />
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-medium text-zinc-900 dark:text-white">{{ $check['label'] }}</p>
+                        <p class="mt-0.5 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{{ $check['detail'] }}</p>
+                    </div>
+                    @if ($check['route'] === '#review-details')
+                        @can('update', $review)
+                            <button type="button" wire:click="prepareReviewEdit" class="shrink-0 text-xs font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100">{{ $check['action'] }}</button>
+                        @endcan
+                    @else
+                        <a href="{{ $check['route'] }}" wire:navigate class="shrink-0 text-xs font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100">{{ $check['action'] }}</a>
+                    @endif
+                </div>
+            @endforeach
+        </div>
+    </section>
+
+    <section class="border-y border-zinc-200 py-6 dark:border-zinc-800">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
                 <flux:heading size="lg" level="2">{{ __('Recent uploads') }}</flux:heading>

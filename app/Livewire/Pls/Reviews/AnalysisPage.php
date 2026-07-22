@@ -8,10 +8,14 @@ use App\Domain\Analysis\Actions\UpdateFinding;
 use App\Domain\Analysis\Actions\UpdateRecommendation;
 use App\Domain\Analysis\Enums\FindingType;
 use App\Domain\Analysis\Enums\RecommendationType;
+use App\Domain\Analysis\Finding;
+use App\Domain\Documents\Document;
+use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Reviews\PlsReview;
 use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AnalysisPage extends Workspace
@@ -111,6 +115,23 @@ class AnalysisPage extends Workspace
         ))->to(AssistantSidebar::class);
     }
 
+    public function requestFindingSupport(int $findingId): void
+    {
+        $this->authorize('view', $this->review);
+
+        $finding = $this->review->findings()->find($findingId);
+
+        if (! $finding instanceof Finding) {
+            return;
+        }
+
+        $this->dispatch('assistant-prompt-requested', prompt: sprintf(
+            'Locate the supporting and conflicting record for this human-reviewed finding: "%s". Current wording: "%s". Use only the legislation, evidence, consultation results, and written submissions saved in this review. For each relevant source, name the record, quote only short passages that appear in it, explain how it relates to the finding, and identify any limits or contrary material. Do not treat keyword matches as proof, invent citations, or change the finding automatically.',
+            $finding->title,
+            trim(implode("\n", array_filter([$finding->summary, $finding->detail]))),
+        ))->to(AssistantSidebar::class);
+    }
+
     public function prepareRecommendationCreate(?int $findingId = null): void
     {
         $this->resetRecommendationForm();
@@ -130,6 +151,7 @@ class AnalysisPage extends Workspace
         $review = $this->loadReview();
 
         return $this->renderWorkspaceView('livewire.pls.reviews.analysis-page', [
+            'findingSupportRecords' => $this->findingSupportRecords($review),
             'review' => $review,
             'findingTypes' => FindingType::cases(),
             'recommendationTypes' => RecommendationType::cases(),
@@ -362,10 +384,117 @@ class AnalysisPage extends Workspace
     {
         return PlsReview::query()
             ->with([
+                'documents',
+                'consultations.materials.document',
+                'submissions.document',
                 'findings',
                 'recommendations.finding',
             ])
             ->findOrFail($this->review->getKey());
+    }
+
+    /**
+     * @return array<int, list<array{label: string, matched_terms: list<string>, route: string, title: string}>>
+     */
+    private function findingSupportRecords(PlsReview $review): array
+    {
+        $consultationDocumentIds = $review->consultations
+            ->flatMap(fn ($consultation) => $consultation->materials)
+            ->pluck('document_id')
+            ->filter()
+            ->map(fn (int|string $id): int => (int) $id)
+            ->all();
+        $submissionDocumentIds = $review->submissions
+            ->pluck('document_id')
+            ->filter()
+            ->map(fn (int|string $id): int => (int) $id)
+            ->all();
+
+        return $review->findings
+            ->mapWithKeys(function (Finding $finding) use ($review, $consultationDocumentIds, $submissionDocumentIds): array {
+                $terms = $this->findingSearchTerms($finding);
+
+                $records = $review->documents
+                    ->map(function (Document $document) use ($review, $terms, $consultationDocumentIds, $submissionDocumentIds): ?array {
+                        if (in_array($document->document_type, [DocumentType::DraftReport, DocumentType::FinalReport], true)) {
+                            return null;
+                        }
+
+                        $text = Str::lower(implode(' ', array_filter([
+                            $document->title,
+                            $document->summary,
+                            data_get($document->metadata, 'document_analysis.key_themes') === null
+                                ? null
+                                : implode(' ', (array) data_get($document->metadata, 'document_analysis.key_themes')),
+                            data_get($document->metadata, 'legislation_analysis.key_themes') === null
+                                ? null
+                                : implode(' ', (array) data_get($document->metadata, 'legislation_analysis.key_themes')),
+                        ])));
+                        $matchedTerms = array_values(array_filter(
+                            $terms,
+                            fn (string $term): bool => str_contains($text, $term),
+                        ));
+
+                        if ($matchedTerms === []) {
+                            return null;
+                        }
+
+                        $isLegislation = $document->document_type === DocumentType::LegislationText;
+                        $isConsultationResult = in_array($document->id, $consultationDocumentIds, true);
+                        $isSubmission = in_array($document->id, $submissionDocumentIds, true);
+
+                        return [
+                            'label' => $isLegislation
+                                ? __('Legislation')
+                                : ($isConsultationResult ? __('Consultation result') : ($isSubmission ? __('Written submission') : __('Evidence'))),
+                            'matched_terms' => array_slice($matchedTerms, 0, 4),
+                            'route' => route(
+                                $isLegislation
+                                    ? 'pls.reviews.legislation'
+                                    : (($isConsultationResult || $isSubmission) ? 'pls.reviews.consultations' : 'pls.reviews.documents'),
+                                ['review' => $review],
+                            ),
+                            'score' => count($matchedTerms),
+                            'title' => $document->title,
+                        ];
+                    })
+                    ->filter()
+                    ->sortByDesc('score')
+                    ->take(4)
+                    ->map(fn (array $record): array => [
+                        'label' => $record['label'],
+                        'matched_terms' => $record['matched_terms'],
+                        'route' => $record['route'],
+                        'title' => $record['title'],
+                    ])
+                    ->values()
+                    ->all();
+
+                return [$finding->id => $records];
+            })
+            ->all();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function findingSearchTerms(Finding $finding): array
+    {
+        preg_match_all(
+            '/[[:alpha:]][[:alpha:]\\-]{3,}/u',
+            Str::lower(implode(' ', array_filter([$finding->title, $finding->summary, $finding->detail]))),
+            $matches,
+        );
+
+        $ignored = ['about', 'after', 'against', 'among', 'being', 'could', 'does', 'from', 'have', 'implementation', 'into', 'may', 'more', 'must', 'only', 'review', 'should', 'that', 'their', 'there', 'these', 'this', 'under', 'with'];
+
+        return collect($matches[0] ?? [])
+            ->map(fn (string $term): string => trim($term))
+            ->reject(fn (string $term): bool => in_array($term, $ignored, true))
+            ->unique()
+            ->take(12)
+            ->values()
+            ->all();
     }
 
     private function performFindingDeletion(int $findingId): void
