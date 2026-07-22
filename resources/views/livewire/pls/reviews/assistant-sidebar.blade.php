@@ -1,3 +1,9 @@
+@php
+    $assistantWorkspaceLabel = $assistantContext['workspace_key'] === 'workflow'
+        ? __('Overview')
+        : $assistantContext['workspace_label'];
+@endphp
+
 <div
     data-assistant-sidebar
     x-data="{
@@ -38,7 +44,7 @@
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
                         <flux:heading size="base" class="!text-white">{{ __('PLS Assistant') }}</flux:heading>
-                        <flux:badge size="sm" class="!border-white/20 !bg-white/15 !text-white" rounded>{{ $assistantContext['workspace_label'] }}</flux:badge>
+                        <flux:badge size="sm" class="!border-white/20 !bg-white/15 !text-white" rounded>{{ $assistantWorkspaceLabel }}</flux:badge>
                     </div>
                     <flux:text class="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-300">
                         {{ $assistantContext['playbook']['role'] }}
@@ -253,7 +259,7 @@
                 <span class="min-w-0">
                     <span class="flex flex-wrap items-center gap-2">
                         <span class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('PLS Assistant') }}</span>
-                        <flux:badge size="sm" color="violet">{{ $assistantContext['workspace_label'] }}</flux:badge>
+                        <flux:badge size="sm" color="violet">{{ $assistantWorkspaceLabel }}</flux:badge>
                     </span>
                     <span class="block truncate text-xs text-zinc-500 dark:text-zinc-400">{{ $this->assistantPlaceholder($assistantContext['workspace_key']) }}</span>
                 </span>
