@@ -1,5 +1,5 @@
-<div class="space-y-8">
-    <section id="review-details" class="border-b border-zinc-200 pb-6 dark:border-zinc-800">
+<div class="space-y-6">
+    <section id="review-details" class="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50 sm:p-6">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div class="min-w-0 space-y-2">
                 <div class="flex flex-wrap items-center gap-2">
@@ -18,13 +18,13 @@
             @endcan
         </div>
 
-        <div class="mt-5 grid gap-x-8 gap-y-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(16rem,0.8fr)]">
-            <div class="space-y-2">
+        <div class="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.85fr)]">
+            <div class="rounded-lg border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
                 <p class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Purpose and scope') }}</p>
                 @if (filled($review->description))
-                    <p class="max-w-3xl text-sm leading-6 text-zinc-800 dark:text-zinc-200">{{ $review->description }}</p>
+                    <p class="mt-2 max-w-3xl text-sm leading-6 text-zinc-800 dark:text-zinc-200">{{ $review->description }}</p>
                 @else
-                    <div class="flex flex-wrap items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+                    <div class="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
                         <span>{{ __('No purpose or scope has been recorded yet.') }}</span>
                         @can('update', $review)
                             <button type="button" wire:click="prepareReviewEdit" class="font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100">
@@ -35,22 +35,22 @@
                 @endif
             </div>
 
-            <dl class="grid grid-cols-2 gap-x-5 gap-y-4 text-sm">
-                <div class="min-w-0">
+            <dl class="grid grid-cols-2 overflow-hidden rounded-lg border border-zinc-200 text-sm dark:border-zinc-800">
+                <div class="min-w-0 border-b border-e border-zinc-200 p-4 dark:border-zinc-800">
                     <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ __('Inquiry lead') }}</dt>
                     <dd class="mt-1 break-words font-medium text-zinc-900 dark:text-white">{{ $review->assignmentLabel() }}</dd>
                 </div>
-                <div class="min-w-0">
+                <div class="min-w-0 border-b border-zinc-200 p-4 dark:border-zinc-800">
                     <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ __('Legislature') }}</dt>
                     <dd class="mt-1 break-words font-medium text-zinc-900 dark:text-white">{{ $review->legislature?->name ?? __('Not recorded') }}</dd>
                 </div>
-                <div class="min-w-0">
+                <div class="min-w-0 border-e border-zinc-200 p-4 dark:border-zinc-800">
                     <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ __('Location') }}</dt>
                     <dd class="mt-1 break-words font-medium text-zinc-900 dark:text-white">
                         {{ $review->assignmentLocationParts() !== [] ? implode(' - ', $review->assignmentLocationParts()) : __('Not recorded') }}
                     </dd>
                 </div>
-                <div class="min-w-0">
+                <div class="min-w-0 p-4">
                     <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ __('Started') }}</dt>
                     <dd class="mt-1 font-medium text-zinc-900 dark:text-white">{{ $review->start_date?->format('j M Y') ?? __('Not recorded') }}</dd>
                 </div>
@@ -58,10 +58,10 @@
         </div>
     </section>
 
-    <section class="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(17rem,0.75fr)]">
-        <div class="border-b border-zinc-200 pb-6 dark:border-zinc-800 xl:border-b-0 xl:border-e xl:pe-6">
+    <section class="grid gap-6 rounded-lg border border-violet-200 bg-violet-50/50 p-5 shadow-sm dark:border-violet-500/25 dark:bg-violet-500/5 sm:p-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(17rem,0.75fr)]">
+        <div class="border-b border-violet-200 pb-6 dark:border-violet-500/25 xl:border-b-0 xl:border-e xl:pe-6">
             <div class="flex items-center gap-3">
-                <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-sm font-semibold text-violet-900 dark:bg-violet-900/50 dark:text-violet-100">
+                <span class="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-violet-700 text-sm font-semibold text-white shadow-sm dark:bg-violet-500">
                     {{ $review->current_step_number }}
                 </span>
                 <div class="min-w-0">
@@ -80,7 +80,7 @@
             </div>
         </div>
 
-        <div class="space-y-3">
+        <div class="self-center rounded-lg border border-violet-200/80 bg-white/75 p-4 dark:border-violet-500/25 dark:bg-zinc-950/40">
             <div class="flex items-center justify-between gap-3">
                 <p class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Review progress') }}</p>
                 <span class="text-xs tabular-nums text-zinc-500 dark:text-zinc-400">{{ $review->progressPercentage() }}%</span>
@@ -101,32 +101,24 @@
             <flux:text class="text-xs">{{ __('Counts reflect records saved in this workspace.') }}</flux:text>
         </div>
 
-        <div class="mt-4 divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-            <div class="hidden grid-cols-[minmax(10rem,1fr)_5rem_8rem_minmax(0,1.1fr)_auto] gap-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-500 lg:grid dark:text-zinc-400">
-                <span>{{ __('Section') }}</span>
-                <span>{{ __('Records') }}</span>
-                <span>{{ __('Status') }}</span>
-                <span>{{ __('What to do next') }}</span>
-                <span></span>
-            </div>
-
+        <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             @foreach ($workspaceRecord as $item)
-                <div class="grid gap-2 py-4 lg:grid-cols-[minmax(10rem,1fr)_5rem_8rem_minmax(0,1.1fr)_auto] lg:items-center lg:gap-4">
-                    <a href="{{ $item['route'] }}" wire:navigate class="min-w-0 text-sm font-semibold text-zinc-900 hover:text-violet-700 dark:text-white dark:hover:text-violet-300">
-                        {{ $item['label'] }}
-                    </a>
-                    <span class="text-sm font-semibold tabular-nums text-zinc-900 dark:text-white">{{ $item['value'] }}</span>
-                    <div><flux:badge size="sm" :color="$item['status_color']">{{ $item['status'] }}</flux:badge></div>
-                    <p class="text-sm leading-5 text-zinc-600 dark:text-zinc-400">{{ $item['detail'] }}</p>
-                    <a href="{{ $item['route'] }}" wire:navigate class="text-sm font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100">
-                        {{ $item['action'] }}
-                    </a>
-                </div>
+                <a href="{{ $item['route'] }}" wire:navigate class="group flex min-h-44 flex-col rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-violet-300 hover:shadow dark:border-zinc-800 dark:bg-zinc-950/50 dark:hover:border-violet-500/50">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <p class="text-sm font-semibold text-zinc-950 transition group-hover:text-violet-800 dark:text-white dark:group-hover:text-violet-200">{{ $item['label'] }}</p>
+                            <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ trans_choice('{0} No records|{1} :count record|[2,*] :count records', (int) $item['value'], ['count' => $item['value']]) }}</p>
+                        </div>
+                        <flux:badge size="sm" :color="$item['status_color']">{{ $item['status'] }}</flux:badge>
+                    </div>
+                    <p class="mt-4 text-sm leading-5 text-zinc-600 dark:text-zinc-400">{{ $item['detail'] }}</p>
+                    <span class="mt-auto pt-4 text-sm font-medium text-violet-700 group-hover:text-violet-900 dark:text-violet-300 dark:group-hover:text-violet-100">{{ $item['action'] }}</span>
+                </a>
             @endforeach
         </div>
     </section>
 
-    <section class="border-y border-zinc-200 py-6 dark:border-zinc-800">
+    <section>
         <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
                 <flux:heading size="lg" level="2">{{ __('Ready to move forward?') }}</flux:heading>
@@ -137,9 +129,9 @@
             </span>
         </div>
 
-        <div class="mt-4 grid gap-x-6 gap-y-3 lg:grid-cols-2">
+        <div class="mt-4 grid gap-3 lg:grid-cols-2">
             @foreach ($readinessChecks as $check)
-                <div class="flex items-start gap-3 border-b border-zinc-100 py-3 last:border-b-0 dark:border-zinc-800">
+                <div class="flex items-start gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50">
                     <span @class([
                         'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full',
                         'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' => $check['ready'],
@@ -163,7 +155,7 @@
         </div>
     </section>
 
-    <section class="border-y border-zinc-200 py-6 dark:border-zinc-800">
+    <section class="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50 sm:p-6">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
                 <flux:heading size="lg" level="2">{{ __('Recent uploads') }}</flux:heading>
@@ -197,7 +189,7 @@
         </div>
     </section>
 
-    <details class="group border-b border-zinc-200 pb-5 dark:border-zinc-800">
+    <details class="group rounded-lg border border-zinc-200 bg-white px-5 py-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50 sm:px-6">
         <summary class="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-zinc-800 marker:hidden dark:text-zinc-200">
             <span>{{ __('PLS methodology reference') }}</span>
             <flux:icon icon="chevron-down" class="size-4 transition group-open:rotate-180" />
