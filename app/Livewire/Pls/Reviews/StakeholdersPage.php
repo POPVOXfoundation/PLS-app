@@ -37,13 +37,9 @@ class StakeholdersPage extends Workspace
 
     public string $stakeholderName = '';
 
-    public string $stakeholderType = StakeholderType::GovernmentAgency->value;
+    public string $stakeholderType = 'Government agency';
 
     public string $stakeholderOrganization = '';
-
-    public string $stakeholderEmail = '';
-
-    public string $stakeholderPhone = '';
 
     public string $implementingAgencyName = '';
 
@@ -62,7 +58,7 @@ class StakeholdersPage extends Workspace
 
         return $this->renderWorkspaceView('livewire.pls.reviews.stakeholders-page', [
             'review' => $review,
-            'stakeholderTypes' => StakeholderType::cases(),
+            'stakeholderTypes' => $this->stakeholderTypeOptions($review),
             'filteredStakeholders' => $this->filteredStakeholders($review),
             'implementingAgencyTypes' => ImplementingAgencyType::cases(),
             'suggestedStakeholders' => $this->suggestedStakeholders($review),
@@ -97,10 +93,8 @@ class StakeholdersPage extends Workspace
         $this->resetStakeholderForm();
         $this->activeSuggestionId = $suggestion['id'];
         $this->stakeholderName = $suggestion['name'];
-        $this->stakeholderType = StakeholderType::tryFrom($suggestion['category'])?->value ?? StakeholderType::Expert->value;
+        $this->stakeholderType = $this->stakeholderTypeLabel($suggestion['category']);
         $this->stakeholderOrganization = '';
-        $this->stakeholderEmail = '';
-        $this->stakeholderPhone = '';
         $this->showAddStakeholderModal = true;
     }
 
@@ -164,18 +158,14 @@ class StakeholdersPage extends Workspace
 
         $this->stakeholderEditingId = (string) $stakeholder->id;
         $this->stakeholderName = $stakeholder->name;
-        $this->stakeholderType = $stakeholder->stakeholder_type->value;
+        $this->stakeholderType = $this->stakeholderTypeLabel($stakeholder->stakeholder_type);
         $this->stakeholderOrganization = $stakeholder->contact_details['organization'] ?? '';
-        $this->stakeholderEmail = $stakeholder->contact_details['email'] ?? '';
-        $this->stakeholderPhone = $stakeholder->contact_details['phone'] ?? '';
 
         $this->resetValidation([
             'stakeholderEditingId',
             'stakeholderName',
             'stakeholderType',
             'stakeholderOrganization',
-            'stakeholderEmail',
-            'stakeholderPhone',
         ]);
 
         $this->showEditStakeholderModal = true;
@@ -193,8 +183,6 @@ class StakeholdersPage extends Workspace
                 'stakeholder_type' => $this->stakeholderType,
                 'contact_details' => [
                     'organization' => $this->blankToNull($this->stakeholderOrganization),
-                    'email' => $this->blankToNull($this->stakeholderEmail),
-                    'phone' => $this->blankToNull($this->stakeholderPhone),
                 ],
             ])->fresh();
         } catch (ValidationException $exception) {
@@ -203,8 +191,6 @@ class StakeholdersPage extends Workspace
                 'name' => 'stakeholderName',
                 'stakeholder_type' => 'stakeholderType',
                 'contact_details.organization' => 'stakeholderOrganization',
-                'contact_details.email' => 'stakeholderEmail',
-                'contact_details.phone' => 'stakeholderPhone',
             ]);
 
             return;
@@ -230,8 +216,6 @@ class StakeholdersPage extends Workspace
                 'stakeholder_type' => $this->stakeholderType,
                 'contact_details' => [
                     'organization' => $this->blankToNull($this->stakeholderOrganization),
-                    'email' => $this->blankToNull($this->stakeholderEmail),
-                    'phone' => $this->blankToNull($this->stakeholderPhone),
                 ],
             ])->fresh();
         } catch (ValidationException $exception) {
@@ -239,8 +223,6 @@ class StakeholdersPage extends Workspace
                 'name' => 'stakeholderName',
                 'stakeholder_type' => 'stakeholderType',
                 'contact_details.organization' => 'stakeholderOrganization',
-                'contact_details.email' => 'stakeholderEmail',
-                'contact_details.phone' => 'stakeholderPhone',
             ]);
 
             return;
@@ -356,7 +338,7 @@ class StakeholdersPage extends Workspace
         }
 
         return $review->stakeholders->filter(
-            fn (Stakeholder $stakeholder): bool => $stakeholder->stakeholder_type->value === $this->stakeholderTypeFilter,
+            fn (Stakeholder $stakeholder): bool => $this->stakeholderTypeKey($stakeholder->stakeholder_type) === $this->stakeholderTypeKey($this->stakeholderTypeFilter),
         )->values();
     }
 
@@ -380,25 +362,6 @@ class StakeholdersPage extends Workspace
             ->values();
     }
 
-    /**
-     * @return EloquentCollection<int, Stakeholder>
-     */
-    private function stakeholdersMissingContacts(PlsReview $review): EloquentCollection
-    {
-        return $review->stakeholders
-            ->filter(fn (Stakeholder $stakeholder): bool => ! $this->hasContactDetails($stakeholder))
-            ->values();
-    }
-
-    private function hasContactDetails(Stakeholder $stakeholder): bool
-    {
-        $contactDetails = $stakeholder->contact_details ?? [];
-
-        return filled($contactDetails['organization'] ?? null)
-            || filled($contactDetails['email'] ?? null)
-            || filled($contactDetails['phone'] ?? null);
-    }
-
     private function blankToNull(string $value): ?string
     {
         $trimmed = trim($value);
@@ -412,22 +375,61 @@ class StakeholdersPage extends Workspace
             'stakeholderEditingId',
             'stakeholderName',
             'stakeholderOrganization',
-            'stakeholderEmail',
-            'stakeholderPhone',
         ]);
 
         $this->activeSuggestionId = '';
 
-        $this->stakeholderType = StakeholderType::GovernmentAgency->value;
+        $this->stakeholderType = 'Government agency';
 
         $this->resetValidation([
             'stakeholderEditingId',
             'stakeholderName',
             'stakeholderType',
             'stakeholderOrganization',
-            'stakeholderEmail',
-            'stakeholderPhone',
         ]);
+    }
+
+    public function stakeholderTypeLabel(string $type): string
+    {
+        $type = trim($type);
+
+        if ($type === '') {
+            return __('Unspecified');
+        }
+
+        return match (Str::lower($type)) {
+            StakeholderType::Ngo->value => 'NGO',
+            default => Str::headline($type),
+        };
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, array{value: string, label: string}>
+     */
+    private function stakeholderTypeOptions(PlsReview $review): Collection
+    {
+        return collect([
+            ...array_map(static fn (StakeholderType $type): string => $type->value, StakeholderType::cases()),
+            ...$review->stakeholders->map(fn (Stakeholder $stakeholder): string => $stakeholder->stakeholder_type)->all(),
+        ])
+            ->map(fn (string $type): string => trim($type))
+            ->filter()
+            ->unique(fn (string $type): string => $this->stakeholderTypeKey($type))
+            ->map(fn (string $type): array => [
+                'value' => $this->stakeholderTypeLabel($type),
+                'label' => $this->stakeholderTypeLabel($type),
+            ])
+            ->sortBy('label')
+            ->values();
+    }
+
+    private function stakeholderTypeKey(string $type): string
+    {
+        return Str::of($type)
+            ->lower()
+            ->replace(['_', '-'], ' ')
+            ->squish()
+            ->toString();
     }
 
     private function resetImplementingAgencyForm(): void

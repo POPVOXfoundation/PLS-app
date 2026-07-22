@@ -122,7 +122,6 @@ it('registers enum, date, and json casts on the scaffolded models', function () 
         'embedding' => 'array',
         'metadata' => 'array',
     ])->and((new Stakeholder)->getCasts())->toMatchArray([
-        'stakeholder_type' => StakeholderType::class,
         'contact_details' => 'array',
     ])->and((new ImplementingAgency)->getCasts())->toMatchArray([
         'agency_type' => ImplementingAgencyType::class,

@@ -2,7 +2,6 @@
 
 namespace App\Domain\Stakeholders\Validation;
 
-use App\Domain\Stakeholders\Enums\StakeholderType;
 use App\Domain\Stakeholders\Stakeholder;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -16,11 +15,7 @@ class UpdateStakeholderValidator
      *     pls_review_id: int,
      *     name: string,
      *     stakeholder_type: string,
-     *     contact_details?: array{
-     *         organization?: string|null,
-     *         email?: string|null,
-     *         phone?: string|null
-     *     }|null
+     *     contact_details?: array{organization?: string|null}|null
      * }
      */
     public function validate(array $input): array
@@ -63,11 +58,9 @@ class UpdateStakeholderValidator
             'stakeholder_id' => ['required', 'integer', Rule::exists('stakeholders', 'id')],
             'pls_review_id' => ['required', 'integer', Rule::exists('pls_reviews', 'id')],
             'name' => ['required', 'string', 'max:255'],
-            'stakeholder_type' => ['required', Rule::enum(StakeholderType::class)],
+            'stakeholder_type' => ['required', 'string', 'max:255'],
             'contact_details' => ['nullable', 'array'],
             'contact_details.organization' => ['nullable', 'string', 'max:255'],
-            'contact_details.email' => ['nullable', 'email:rfc,dns', 'max:255'],
-            'contact_details.phone' => ['nullable', 'string', 'max:50'],
         ];
     }
 
@@ -91,8 +84,6 @@ class UpdateStakeholderValidator
             'pls_review_id' => 'review',
             'stakeholder_type' => 'stakeholder type',
             'contact_details.organization' => 'organization',
-            'contact_details.email' => 'email address',
-            'contact_details.phone' => 'phone number',
         ];
     }
 }

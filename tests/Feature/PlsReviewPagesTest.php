@@ -329,7 +329,7 @@ test('all review section routes render inside the shared workspace shell', funct
         'pls.reviews.workflow' => 'Review overview',
         'pls.reviews.legislation' => 'No records saved for this review yet.',
         'pls.reviews.documents' => 'Document file',
-        'pls.reviews.stakeholders' => 'Stakeholder directory',
+        'pls.reviews.stakeholders' => 'Stakeholders',
         'pls.reviews.consultations' => 'Consultation activity',
         'pls.reviews.analysis' => 'Findings & recommendations',
         'pls.reviews.reports' => 'Government responses',

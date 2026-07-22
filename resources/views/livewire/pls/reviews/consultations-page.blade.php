@@ -216,7 +216,7 @@
                     </flux:text>
                     <div class="mt-2 flex flex-wrap items-center gap-2">
                         <span class="text-sm font-medium text-zinc-900 dark:text-white">{{ $selectedSubmissionStakeholder->name }}</span>
-                        <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($selectedSubmissionStakeholder->stakeholder_type->value) }}</flux:badge>
+                        <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($selectedSubmissionStakeholder->stakeholder_type) }}</flux:badge>
                     </div>
                 </div>
             @endif

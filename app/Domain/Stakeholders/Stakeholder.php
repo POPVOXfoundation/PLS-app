@@ -5,6 +5,7 @@ namespace App\Domain\Stakeholders;
 use App\Domain\Consultations\Submission;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Stakeholders\Enums\StakeholderType;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -41,8 +42,16 @@ class Stakeholder extends Model
     protected function casts(): array
     {
         return [
-            'stakeholder_type' => StakeholderType::class,
             'contact_details' => 'array',
         ];
+    }
+
+    protected function stakeholderType(): Attribute
+    {
+        return Attribute::make(
+            set: fn (mixed $value): string => $value instanceof StakeholderType
+                ? $value->value
+                : trim((string) $value),
+        );
     }
 }

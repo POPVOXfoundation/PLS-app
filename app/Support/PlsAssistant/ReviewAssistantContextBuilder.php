@@ -444,17 +444,13 @@ class ReviewAssistantContextBuilder
             return ['No stakeholders are recorded yet.'];
         }
 
-        $missingContacts = $review->stakeholders
-            ->filter(fn (Stakeholder $stakeholder): bool => blank($stakeholder->contact_details['email'] ?? null) && blank($stakeholder->contact_details['phone'] ?? null));
-
         return [
             'Stakeholders: '.$review->stakeholders->count(),
             'Implementing agencies: '.$review->implementingAgencies->count(),
-            'Stakeholders missing direct contact detail: '.$missingContacts->count(),
             ...$this->formatList($review->stakeholders, fn (Stakeholder $stakeholder): string => sprintf(
                 '%s [%s]%s',
                 $stakeholder->name,
-                Str::headline($stakeholder->stakeholder_type->value),
+                Str::headline($stakeholder->stakeholder_type),
                 $stakeholder->submissions->isNotEmpty() ? ' Submissions: '.$stakeholder->submissions->count() : '',
             )),
         ];

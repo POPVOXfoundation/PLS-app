@@ -30,10 +30,8 @@ test('stakeholders can be added and filtered from the review workspace', functio
         ->call('prepareStakeholderCreate')
         ->assertSet('showAddStakeholderModal', true)
         ->set('stakeholderName', 'Open Budget Coalition')
-        ->set('stakeholderType', StakeholderType::Ngo->value)
+        ->set('stakeholderType', 'Budget transparency coalition')
         ->set('stakeholderOrganization', 'Open Budget Coalition')
-        ->set('stakeholderEmail', 'info@laravel.com')
-        ->set('stakeholderPhone', '+1-202-555-0113')
         ->call('storeStakeholder')
         ->assertDispatched('review-workspace-updated', toast: Toast::success(
             __('Stakeholder added'),
@@ -42,14 +40,14 @@ test('stakeholders can be added and filtered from the review workspace', functio
         ->assertSet('showAddStakeholderModal', false)
         ->assertHasNoErrors()
         ->assertSee('Open Budget Coalition')
-        ->set('stakeholderTypeFilter', StakeholderType::Ngo->value)
-        ->assertSet('stakeholderTypeFilter', StakeholderType::Ngo->value)
+        ->set('stakeholderTypeFilter', 'Budget transparency coalition')
+        ->assertSet('stakeholderTypeFilter', 'Budget transparency coalition')
         ->assertSee('Open Budget Coalition');
 
     $this->assertDatabaseHas('stakeholders', [
         'pls_review_id' => $review->id,
         'name' => 'Open Budget Coalition',
-        'stakeholder_type' => StakeholderType::Ngo->value,
+        'stakeholder_type' => 'Budget transparency coalition',
     ]);
 });
 
@@ -66,13 +64,12 @@ test('stakeholders can be edited from the stakeholder workspace', function () {
     ]);
 
     Livewire::test(StakeholdersPage::class, ['review' => $review])
-        ->assertSee('Stakeholder directory')
+        ->assertSee('Stakeholders')
         ->call('startEditingStakeholder', $stakeholder->id)
         ->assertSet('showEditStakeholderModal', true)
         ->set('stakeholderName', 'National Audit Office and Inspectorate')
-        ->set('stakeholderType', StakeholderType::Expert->value)
+        ->set('stakeholderType', 'Independent oversight body')
         ->set('stakeholderOrganization', 'National Audit Office')
-        ->set('stakeholderEmail', 'audit@laravel.com')
         ->call('updateStakeholder')
         ->assertSet('showEditStakeholderModal', false)
         ->assertHasNoErrors()
@@ -81,7 +78,7 @@ test('stakeholders can be edited from the stakeholder workspace', function () {
     $this->assertDatabaseHas('stakeholders', [
         'id' => $stakeholder->id,
         'name' => 'National Audit Office and Inspectorate',
-        'stakeholder_type' => StakeholderType::Expert->value,
+        'stakeholder_type' => 'Independent oversight body',
     ]);
 });
 
@@ -118,12 +115,14 @@ test('simplified page does not render removed elements', function () {
     ]);
 
     Livewire::test(StakeholdersPage::class, ['review' => $review])
-        ->assertSee('Stakeholder directory')
+        ->assertSee('Stakeholders')
         ->assertDontSee('Stakeholders mapped')
         ->assertDontSee('With submissions')
         ->assertDontSee('Review-team cues')
         ->assertDontSee('Awaiting written evidence')
         ->assertDontSee('Add submission')
         ->assertDontSee('Evidence received')
-        ->assertDontSee('Awaiting evidence');
+        ->assertDontSee('Awaiting evidence')
+        ->assertDontSee('Email')
+        ->assertDontSee('Phone');
 });

@@ -22,20 +22,25 @@ class UpdateStakeholder
         $stakeholder->update([
             'name' => $validated['name'],
             'stakeholder_type' => $validated['stakeholder_type'],
-            'contact_details' => $this->pruneEmptyValues($validated['contact_details'] ?? null),
+            'contact_details' => $this->contactDetailsWithOrganization(
+                $stakeholder->contact_details ?? [],
+                $validated['contact_details']['organization'] ?? null,
+            ),
         ]);
 
         return PlsReview::query()->findOrFail($validated['pls_review_id'])->fresh();
     }
 
     /**
-     * @param  array<string, string|null>|null  $contactDetails
+     * @param  array<string, string|null>  $contactDetails
      * @return array<string, string>|null
      */
-    private function pruneEmptyValues(?array $contactDetails): ?array
+    private function contactDetailsWithOrganization(array $contactDetails, ?string $organization): ?array
     {
-        if ($contactDetails === null) {
-            return null;
+        if (filled($organization)) {
+            $contactDetails['organization'] = $organization;
+        } else {
+            unset($contactDetails['organization']);
         }
 
         $filtered = array_filter(

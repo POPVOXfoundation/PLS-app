@@ -82,14 +82,14 @@
 
     <flux:card class="space-y-6">
         <div class="flex items-center justify-between gap-4">
-            <flux:heading size="lg">{{ __('Stakeholder directory') }}</flux:heading>
+            <flux:heading size="lg">{{ __('Stakeholders') }}</flux:heading>
 
             <div class="flex items-center gap-3">
                 @if ($review->stakeholders->isNotEmpty())
                     <flux:select wire:model.live="stakeholderTypeFilter" size="sm" class="max-w-48">
                         <flux:select.option value="all">{{ __('All types') }}</flux:select.option>
                         @foreach ($stakeholderTypes as $stakeholderTypeOption)
-                            <flux:select.option :value="$stakeholderTypeOption->value">{{ \Illuminate\Support\Str::headline($stakeholderTypeOption->value) }}</flux:select.option>
+                            <flux:select.option :value="$stakeholderTypeOption['value']">{{ $stakeholderTypeOption['label'] }}</flux:select.option>
                         @endforeach
                     </flux:select>
                 @endif
@@ -113,7 +113,6 @@
                     <flux:table.column>{{ __('Name') }}</flux:table.column>
                     <flux:table.column>{{ __('Type') }}</flux:table.column>
                     <flux:table.column>{{ __('Organization') }}</flux:table.column>
-                    <flux:table.column>{{ __('Contact') }}</flux:table.column>
                     <flux:table.column></flux:table.column>
                 </flux:table.columns>
 
@@ -126,22 +125,9 @@
                         <flux:table.row :key="$stakeholder->id">
                             <flux:table.cell variant="strong">{{ $stakeholder->name }}</flux:table.cell>
                             <flux:table.cell>
-                                <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($stakeholder->stakeholder_type->value) }}</flux:badge>
+                                <flux:badge size="sm">{{ $this->stakeholderTypeLabel($stakeholder->stakeholder_type) }}</flux:badge>
                             </flux:table.cell>
                             <flux:table.cell>{{ $contactDetails['organization'] ?? '—' }}</flux:table.cell>
-                            <flux:table.cell>
-                                <div class="space-y-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                                    @if ($contactDetails['email'] ?? null)
-                                        <div>{{ $contactDetails['email'] }}</div>
-                                    @endif
-                                    @if ($contactDetails['phone'] ?? null)
-                                        <div>{{ $contactDetails['phone'] }}</div>
-                                    @endif
-                                    @if (! ($contactDetails['email'] ?? null) && ! ($contactDetails['phone'] ?? null))
-                                        <div>—</div>
-                                    @endif
-                                </div>
-                            </flux:table.cell>
                             <flux:table.cell>
                                 <div class="flex justify-end gap-1">
                                     <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingStakeholder({{ $stakeholder->id }})" />
@@ -205,18 +191,14 @@
             <flux:input wire:model="stakeholderName" :invalid="$errors->has('stakeholderName')" :label="__('Name')" />
 
             <div class="grid gap-4 sm:grid-cols-2">
-                <flux:select wire:model="stakeholderType" :invalid="$errors->has('stakeholderType')" :label="__('Type')">
+                <flux:input wire:model="stakeholderType" :invalid="$errors->has('stakeholderType')" :label="__('Type')" list="stakeholder-type-options-create" />
+                <datalist id="stakeholder-type-options-create">
                     @foreach ($stakeholderTypes as $stakeholderTypeOption)
-                        <flux:select.option :value="$stakeholderTypeOption->value">{{ \Illuminate\Support\Str::headline($stakeholderTypeOption->value) }}</flux:select.option>
+                        <option value="{{ $stakeholderTypeOption['value'] }}">{{ $stakeholderTypeOption['label'] }}</option>
                     @endforeach
-                </flux:select>
+                </datalist>
 
                 <flux:input wire:model="stakeholderOrganization" :invalid="$errors->has('stakeholderOrganization')" :label="__('Organization')" />
-            </div>
-
-            <div class="grid gap-4 sm:grid-cols-2">
-                <flux:input wire:model="stakeholderEmail" :invalid="$errors->has('stakeholderEmail')" :label="__('Email')" type="email" />
-                <flux:input wire:model="stakeholderPhone" :invalid="$errors->has('stakeholderPhone')" :label="__('Phone')" />
             </div>
 
             <div class="flex justify-end">
@@ -229,24 +211,20 @@
         <form wire:submit="updateStakeholder" class="space-y-6">
             <div>
                 <flux:heading size="lg">{{ __('Edit stakeholder') }}</flux:heading>
-                <flux:text class="mt-1">{{ __('Keep the stakeholder record current so outreach and evidence tracking stay reliable.') }}</flux:text>
+                <flux:text class="mt-1">{{ __('Keep the stakeholder mapping current as the review scope develops.') }}</flux:text>
             </div>
 
             <flux:input wire:model="stakeholderName" :invalid="$errors->has('stakeholderName')" :label="__('Name')" />
 
             <div class="grid gap-4 sm:grid-cols-2">
-                <flux:select wire:model="stakeholderType" :invalid="$errors->has('stakeholderType')" :label="__('Type')">
+                <flux:input wire:model="stakeholderType" :invalid="$errors->has('stakeholderType')" :label="__('Type')" list="stakeholder-type-options-edit" />
+                <datalist id="stakeholder-type-options-edit">
                     @foreach ($stakeholderTypes as $stakeholderTypeOption)
-                        <flux:select.option :value="$stakeholderTypeOption->value">{{ \Illuminate\Support\Str::headline($stakeholderTypeOption->value) }}</flux:select.option>
+                        <option value="{{ $stakeholderTypeOption['value'] }}">{{ $stakeholderTypeOption['label'] }}</option>
                     @endforeach
-                </flux:select>
+                </datalist>
 
                 <flux:input wire:model="stakeholderOrganization" :invalid="$errors->has('stakeholderOrganization')" :label="__('Organization')" />
-            </div>
-
-            <div class="grid gap-4 sm:grid-cols-2">
-                <flux:input wire:model="stakeholderEmail" :invalid="$errors->has('stakeholderEmail')" :label="__('Email')" type="email" />
-                <flux:input wire:model="stakeholderPhone" :invalid="$errors->has('stakeholderPhone')" :label="__('Phone')" />
             </div>
 
             <div class="flex justify-end">

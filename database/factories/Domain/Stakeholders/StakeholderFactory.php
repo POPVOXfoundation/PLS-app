@@ -24,11 +24,8 @@ class StakeholderFactory extends Factory
         return [
             'pls_review_id' => PlsReview::factory(),
             'name' => fake()->company(),
-            'stakeholder_type' => fake()->randomElement(StakeholderType::cases()),
-            'contact_details' => [
-                'email' => fake()->companyEmail(),
-                'phone' => fake()->phoneNumber(),
-            ],
+            'stakeholder_type' => fake()->randomElement(StakeholderType::cases())->value,
+            'contact_details' => null,
         ];
     }
 }
