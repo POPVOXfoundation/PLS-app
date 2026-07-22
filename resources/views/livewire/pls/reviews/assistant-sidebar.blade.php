@@ -33,7 +33,7 @@
         x-transition
         class="mb-3 flex max-h-[58vh] min-h-[22rem] flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_24px_80px_-36px_rgba(15,23,42,0.45)] sm:max-h-[34rem] dark:border-zinc-700 dark:bg-zinc-900"
     >
-        <div class="border-b border-violet-300/30 bg-gradient-to-r from-slate-500 via-indigo-500 to-violet-500 px-4 py-2.5">
+        <div class="border-b border-violet-700 bg-violet-800 px-4 py-2.5">
             <div class="flex items-center justify-between gap-3">
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">

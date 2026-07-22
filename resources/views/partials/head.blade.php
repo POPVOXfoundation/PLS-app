@@ -17,9 +17,9 @@
 <link rel="stylesheet" href="{{ asset('vendor/volet/volet-default.css') }}">
 <style>
     :root {
-        --volet-primary: rgb(124 58 237);
-        --volet-primary-hover: rgb(109 40 217);
-        --volet-primary-light: rgb(196 181 253);
+        --volet-primary: rgb(82 55 108);
+        --volet-primary-hover: rgb(66 45 88);
+        --volet-primary-light: rgb(222 212 234);
         --volet-text: rgb(63 63 70);
         --volet-header-text: white;
         --volet-background: white;
@@ -28,9 +28,9 @@
         --volet-panel-width: 22rem;
     }
     .dark {
-        --volet-primary: rgb(124 58 237);
-        --volet-primary-hover: rgb(109 40 217);
-        --volet-primary-light: rgb(196 181 253);
+        --volet-primary: rgb(164 138 195);
+        --volet-primary-hover: rgb(198 182 220);
+        --volet-primary-light: rgb(82 55 108);
         --volet-text: rgb(228 228 231);
         --volet-header-text: white;
         --volet-background: rgb(24 24 27);
@@ -63,8 +63,8 @@
         color: rgb(228 228 231);
     }
     #volet .volet-feedback-textarea:focus {
-        border-color: rgb(124 58 237);
-        box-shadow: 0 0 0 1px rgb(124 58 237);
+        border-color: rgb(82 55 108);
+        box-shadow: 0 0 0 1px rgb(82 55 108);
     }
     #volet .volet-panel-header-back {
         display: none;
