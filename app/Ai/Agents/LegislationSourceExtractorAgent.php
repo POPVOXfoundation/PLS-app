@@ -43,11 +43,11 @@ Rules:
 - For milestones and deadlines, include Royal Assent, commencement, phased implementation, statutory review, reporting, sunset, and consultation dates only when they are visible in the source. The timing field may be null when the obligation is clear but no date is stated.
 - For records to locate, name only a record that the legislation itself calls for or directly implies, such as regulations, guidance, a report, a code, or a consultation response. Do not suggest general research or an assessment of effectiveness.
 - Keep each scrutiny preparation category to no more than twelve items. Prioritize the clearest and most material provisions when there are many.
-- Stakeholder suggestions should identify bodies or groups that appear relevant to implementation, oversight, consultation, or affected communities.
+- Stakeholder suggestions should identify bodies or groups that appear relevant to implementation, oversight, consultation, or affected communities. Include implementing authorities, regulators, oversight bodies, and groups whose rights, duties, services, or protections are addressed when the source text supports them.
 - For stakeholder suggestions, use this exact string format: kind=<stakeholder|implementing_agency>; name=<name>; category=<enum value>; rationale=<short reason>; source=<short visible phrase>.
 - For stakeholder category use one of: ministry, government_agency, ngo, academic, expert, industry_group, citizen_group.
 - For implementing_agency category use one of: ministry, department, agency, regulator, authority, secretariat.
-- Suggest only entities or groups grounded in the visible source text. Do not infer views, support, opposition, or political positions.
+- Suggest only entities or groups grounded in the visible source text. When the legislation describes a group without naming a specific organization, use the source's own description of that group. Do not infer views, support, opposition, or political positions.
 - Return no more than eight stakeholder suggestions.
 - Exclude formulaic legislative text such as "BE IT ENACTED", arrangement-of-clauses material, citation clauses, and procedural boilerplate from the summary.
 - If the source is a bill or draft bill, treat it as primary legislation for relationship purposes.

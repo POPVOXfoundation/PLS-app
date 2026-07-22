@@ -75,6 +75,90 @@
         </div>
     </flux:card>
 
+    @if ($hasLegislationSources)
+        <flux:card class="space-y-5">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="space-y-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <flux:heading size="lg">{{ __('Stakeholder suggestions from legislation') }}</flux:heading>
+                        @if ($legislationStakeholderSuggestions->isNotEmpty())
+                            <flux:badge size="sm">{{ __(':count suggestions', ['count' => $legislationStakeholderSuggestions->count()]) }}</flux:badge>
+                        @endif
+                    </div>
+                    <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                        {{ __('PLSAssist identifies implementing agencies, oversight bodies, and affected groups from the legislation. Review and add the suggestions in Stakeholders.') }}
+                    </flux:text>
+                </div>
+
+                @if ($legislationStakeholderSuggestions->isNotEmpty())
+                    <flux:button size="sm" variant="primary" :href="route('pls.reviews.stakeholders', ['review' => $review])" wire:navigate icon="user-group">
+                        {{ __('Review suggestions') }}
+                    </flux:button>
+                @endif
+            </div>
+
+            @if ($hasProcessingLegislationSuggestions)
+                <div class="flex items-start gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
+                    <flux:icon icon="arrow-path" class="mt-0.5 size-4 shrink-0 animate-spin" />
+                    <div>{{ __('PLSAssist is reading the legislation and preparing stakeholder suggestions. Your saved legislation record remains unchanged.') }}</div>
+                </div>
+            @elseif ($legislationStakeholderSuggestions->isEmpty())
+                <div class="flex flex-col gap-3 rounded-lg border border-dashed border-zinc-300 bg-zinc-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-zinc-700 dark:bg-zinc-900/40">
+                    @if ($hasGeneratedLegislationStakeholderSuggestions)
+                        <flux:text class="text-sm text-zinc-600 dark:text-zinc-400">
+                            {{ __('All current suggestions from the legislation have been reviewed. Visit Stakeholders to see the recorded directory.') }}
+                        </flux:text>
+
+                        <flux:button size="sm" variant="subtle" :href="route('pls.reviews.stakeholders', ['review' => $review])" wire:navigate icon="user-group">
+                            {{ __('Open stakeholders') }}
+                        </flux:button>
+                    @else
+                        <flux:text class="text-sm text-zinc-600 dark:text-zinc-400">
+                            {{ __('No suggestions have been generated from the legislation yet. Generate them to identify source-grounded stakeholders and implementing agencies.') }}
+                        </flux:text>
+
+                        @can('update', $review)
+                            <flux:button size="sm" variant="subtle" icon="sparkles" wire:click="generateLegislationStakeholderSuggestions">
+                                {{ __('Generate suggestions') }}
+                            </flux:button>
+                        @endcan
+                    @endif
+                </div>
+            @else
+                <div class="grid gap-x-6 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
+                    @foreach ($legislationStakeholderSuggestions->take(6) as $suggestion)
+                        <section class="border-l-2 border-violet-200 pl-3 dark:border-violet-500/30">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ $suggestion['name'] }}</div>
+                                <flux:badge size="sm" :color="$suggestion['kind'] === 'implementing_agency' ? 'sky' : 'zinc'">
+                                    {{ $suggestion['kind'] === 'implementing_agency' ? __('Implementing agency') : __('Stakeholder') }}
+                                </flux:badge>
+                            </div>
+
+                            @if ($suggestion['rationale'] !== '')
+                                <div class="mt-1 text-xs leading-5 text-zinc-600 dark:text-zinc-300">{{ $suggestion['rationale'] }}</div>
+                            @endif
+
+                            @if ($suggestion['source'] !== '')
+                                <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Source: :source', ['source' => $suggestion['source']]) }}</div>
+                            @endif
+
+                            @if ($suggestion['source_title'] !== '')
+                                <div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __('From: :title', ['title' => $suggestion['source_title']]) }}</div>
+                            @endif
+                        </section>
+                    @endforeach
+                </div>
+
+                @if ($legislationStakeholderSuggestions->count() > 6)
+                    <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                        {{ __('More suggestions are available in Stakeholders.') }}
+                    </flux:text>
+                @endif
+            @endif
+        </flux:card>
+    @endif
+
     <flux:card wire:poll.2s.keep-alive="refreshPendingAnalyses" class="space-y-6">
         <div class="flex items-center justify-between gap-4">
             <div class="space-y-1">

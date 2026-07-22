@@ -88,6 +88,9 @@ test('uploaded legislation sources are queued and can be saved as new legislatio
         'key_themes' => ['Public access rights', 'Response timelines'],
         'notable_excerpts' => ['This Act establishes a public right of access to government information.'],
         'important_dates' => ['2010-05-04'],
+        'stakeholder_suggestions' => [
+            'kind=implementing_agency; name=Information Commissioner; category=regulator; rationale=Oversees the public right of access created by the Act.; source=public right of access to government information',
+        ],
         'scrutiny_preparation' => [
             'milestones' => [[
                 'title' => 'Enactment',
@@ -154,6 +157,11 @@ test('uploaded legislation sources are queued and can be saved as new legislatio
 
     expect($legislation->jurisdiction_id)->toBe($review->jurisdiction_id)
         ->and($legislation->source_document_id)->toBe($document->id);
+
+    Livewire::test(DocumentsPage::class, ['review' => $review->fresh()])
+        ->assertSee('Stakeholder suggestions from legislation')
+        ->assertSee('Information Commissioner')
+        ->assertSee('Review suggestions');
 
     $this->assertDatabaseHas('pls_review_legislation', [
         'pls_review_id' => $review->id,

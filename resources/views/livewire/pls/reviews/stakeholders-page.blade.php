@@ -13,7 +13,7 @@
     <flux:card class="space-y-6">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="space-y-2">
-                <flux:heading size="lg">{{ __('Suggested by uploaded evidence') }}</flux:heading>
+                <flux:heading size="lg">{{ __('Suggestions from legislation and evidence') }}</flux:heading>
                 <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
                     {{ __('PLSAssist can suggest stakeholders and implementing agencies named or implied by uploaded legislation and evidence. Review each suggestion before adding it to the directory.') }}
                 </flux:text>

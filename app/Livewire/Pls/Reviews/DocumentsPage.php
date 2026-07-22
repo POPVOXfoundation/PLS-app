@@ -7,11 +7,16 @@ use App\Domain\Documents\Actions\StoreReviewDocumentMetadata;
 use App\Domain\Documents\Actions\UpdateReviewDocument;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
+use App\Domain\Legislation\Actions\PersistLegislationSourceState;
 use App\Domain\Reviews\PlsReview;
 use App\Jobs\ProcessReviewDocument;
+use App\Jobs\ProcessReviewLegislationSource;
+use App\Support\PlsAssistant\StakeholderSuggestionNormalizer;
 use App\Support\Toast;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -78,12 +83,21 @@ class DocumentsPage extends Workspace
     public function render(): View
     {
         $review = $this->loadReview();
+        $legislationSources = $this->legislationSources($review);
 
         return $this->renderWorkspaceView('livewire.pls.reviews.documents-page', [
             'review' => $review,
             'documentTypes' => DocumentType::reviewWorkspaceCases(),
             'hasProcessingRecords' => $this->hasProcessingRecords($review),
             'recordRows' => $this->recordRows($review),
+            'hasLegislationSources' => $legislationSources->isNotEmpty(),
+            'hasProcessingLegislationSuggestions' => $legislationSources->contains(
+                fn (Document $document): bool => $this->legislationSourceIsProcessing($document),
+            ),
+            'hasGeneratedLegislationStakeholderSuggestions' => $legislationSources->contains(
+                fn (Document $document): bool => $this->legislationDocumentSuggestions($document)->isNotEmpty(),
+            ),
+            'legislationStakeholderSuggestions' => $this->legislationStakeholderSuggestions($legislationSources),
         ], $review);
     }
 
@@ -242,6 +256,33 @@ class DocumentsPage extends Workspace
         ));
     }
 
+    public function generateLegislationStakeholderSuggestions(): void
+    {
+        $this->authorizeReviewMutation();
+
+        $sources = $this->legislationSources($this->review)
+            ->filter(fn (Document $document): bool => ! $this->legislationSourceIsProcessing($document))
+            ->filter(fn (Document $document): bool => $this->legislationDocumentSuggestions($document)->isEmpty());
+
+        if ($sources->isEmpty()) {
+            return;
+        }
+
+        $state = app(PersistLegislationSourceState::class);
+
+        foreach ($sources as $source) {
+            $state->resetForRetry($source);
+            ProcessReviewLegislationSource::dispatch($source->id);
+        }
+
+        $this->review = $this->loadReview();
+
+        $this->dispatchWorkspaceToast(Toast::warning(
+            __('Preparing stakeholder suggestions'),
+            __('PLSAssist is reading the legislation and identifying source-grounded stakeholders and implementing agencies.'),
+        ));
+    }
+
     public function refreshPendingAnalyses(): void
     {
         $this->review = $this->loadReview();
@@ -299,6 +340,54 @@ class DocumentsPage extends Workspace
     {
         return $this->review->documents()
             ->where('document_type', '!=', DocumentType::LegislationText->value);
+    }
+
+    /**
+     * @return EloquentCollection<int, Document>
+     */
+    private function legislationSources(PlsReview $review): EloquentCollection
+    {
+        return Document::query()
+            ->where('pls_review_id', $review->id)
+            ->where('document_type', DocumentType::LegislationText->value)
+            ->latest('updated_at')
+            ->latest('id')
+            ->get();
+    }
+
+    private function legislationSourceIsProcessing(Document $document): bool
+    {
+        return data_get($document->metadata, 'legislation_analysis.status') === 'processing'
+            || in_array(data_get($document->metadata, 'extraction.status'), ['queued', 'processing'], true);
+    }
+
+    /**
+     * @param  EloquentCollection<int, Document>  $sources
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function legislationStakeholderSuggestions(EloquentCollection $sources): Collection
+    {
+        return $sources
+            ->flatMap(fn (Document $document): array => $this->legislationDocumentSuggestions($document)->all())
+            ->filter(fn (array $suggestion): bool => $suggestion['status'] === 'suggested')
+            ->unique('id')
+            ->sortBy([
+                fn (array $suggestion): int => $suggestion['kind'] === 'implementing_agency' ? 0 : 1,
+                fn (array $suggestion): string => $suggestion['name'],
+            ])
+            ->values();
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function legislationDocumentSuggestions(Document $document): Collection
+    {
+        return collect(app(StakeholderSuggestionNormalizer::class)->normalize(
+            data_get($document->metadata, 'legislation_analysis.stakeholder_suggestions', []),
+            $document->id,
+            $document->title,
+        ));
     }
 
     /**
