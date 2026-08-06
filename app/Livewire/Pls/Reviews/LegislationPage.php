@@ -710,7 +710,9 @@ class LegislationPage extends Workspace
                 'status_label' => $this->statusLabel($status, $progressStage),
                 'status_color' => $this->statusColor($status, $progressStage),
                 'status_badge_class' => $this->statusBadgeClass($status, $progressStage),
-                'status_detail' => $this->statusDetail($status, $progressStage),
+                'status_detail' => $status === 'failed'
+                    ? ($this->analysisStringList($storedAnalysis, 'warnings')[0] ?? $this->statusDetail($status, $progressStage))
+                    : $this->statusDetail($status, $progressStage),
                 'action' => match ($status) {
                     'needs_review' => 'review',
                     'saved' => 'edit',

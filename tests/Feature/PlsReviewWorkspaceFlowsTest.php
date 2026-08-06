@@ -821,6 +821,7 @@ test('ai extraction failures do not fall back to heuristic legislation parsing',
     $component
         ->call('refreshPendingAnalyses')
         ->assertSee('Needs attention')
+        ->assertSee('AI record step failed')
         ->assertDontSee('Needs review')
         ->assertDontSee('Review record');
 

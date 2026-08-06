@@ -275,6 +275,7 @@ class AnalyzeLegislationSource
         try {
             $response = app(LegislationSourceExtractorAgent::class)->prompt($this->aiPrompt($document, $rawText));
         } catch (Throwable $exception) {
+            report($exception);
             $error = $exception->getMessage();
 
             return null;
@@ -298,6 +299,14 @@ class AnalyzeLegislationSource
         $warnings = $this->normalizeWarnings($response['warnings'] ?? []);
 
         if ($title === '' || $legislationType === null || $relationshipType === null) {
+            $error = 'The AI response did not include the minimum identifying legislation fields.';
+            logger()->warning('Legislation source AI response was incomplete.', [
+                'document_id' => $document->id,
+                'has_legislation_type' => $legislationType !== null,
+                'has_relationship_type' => $relationshipType !== null,
+                'has_title' => $title !== '',
+            ]);
+
             return null;
         }
 
@@ -337,14 +346,14 @@ class AnalyzeLegislationSource
             ->trim()
             ->toString();
 
-        $frontMatter = Str::limit($normalizedText, 18000, '');
+        $frontMatter = Str::limit($normalizedText, 12000, '');
 
         $signalLines = collect(preg_split("/\R/", $normalizedText) ?: [])
             ->filter(fn (string $line): bool => preg_match('/\b(short title|long title|bill|act|regulation|ordinance|enacted|assented|dated|made on|gazetted|commenced|commencement|shall|must|duty|regulations|guidance|code|report|review|consult|lay before|sunset|expire)\b/i', $line) === 1)
             ->map(fn (string $line): string => Str::limit(trim($line), 360, ''))
             ->filter()
             ->unique()
-            ->take(80)
+            ->take(32)
             ->implode("\n");
 
         return trim(implode("\n\n", array_filter([
@@ -355,8 +364,22 @@ class AnalyzeLegislationSource
 
     private function aiFailureWarning(?string $error): string
     {
-        if (is_string($error) && Str::contains(Str::lower($error), ['timed out', 'timeout', 'curl error 28'])) {
+        $normalizedError = Str::lower((string) $error);
+
+        if (Str::contains($normalizedError, ['timed out', 'timeout', 'curl error 28'])) {
             return 'The source text was extracted, but the AI record step timed out. Retry the source to try again.';
+        }
+
+        if (Str::contains($normalizedError, ['401', '403', 'api key', 'authentication', 'unauthorized', 'forbidden'])) {
+            return 'The source text was extracted, but PLSAssist could not connect to its AI service. Please contact the project team before retrying.';
+        }
+
+        if (Str::contains($normalizedError, ['429', 'rate limit', 'insufficient_quota', 'quota'])) {
+            return 'The source text was extracted, but the AI service is temporarily unavailable. Retry the source in a few minutes.';
+        }
+
+        if (Str::contains($normalizedError, ['minimum identifying legislation fields', 'incomplete', 'length', 'context'])) {
+            return 'The source text was extracted, but PLSAssist received an incomplete AI record. Retry the source to run the lighter record pass.';
         }
 
         return 'The source text was extracted, but the AI record step failed. Retry the source to try again.';

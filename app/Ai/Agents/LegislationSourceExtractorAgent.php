@@ -39,16 +39,16 @@ Rules:
 - Important dates should come from visible text only. Normalize exact dates when clear.
 - Build a source-grounded scrutiny preparation list in four categories: milestones and deadlines, implementation obligations, parliamentary follow-up, and records to locate.
 - Include only items that are explicit in, or directly required by, the visible source text. Do not infer implementation performance, policy effects, or missing evidence.
-- For each scrutiny preparation item, provide a short title, a concise factual detail, and a short verbatim source phrase that lets a reviewer find the relevant passage. Use an empty list when the source does not support a category.
+- For each scrutiny preparation item, provide a short title, a concise factual detail, and a short verbatim source phrase of no more than twenty words that lets a reviewer find the relevant passage. Use an empty list when the source does not support a category.
 - For milestones and deadlines, include Royal Assent, commencement, phased implementation, statutory review, reporting, sunset, and consultation dates only when they are visible in the source. The timing field may be null when the obligation is clear but no date is stated.
 - For records to locate, name only a record that the legislation itself calls for or directly implies, such as regulations, guidance, a report, a code, or a consultation response. Do not suggest general research or an assessment of effectiveness.
-- Keep each scrutiny preparation category to no more than twelve items. Prioritize the clearest and most material provisions when there are many.
+- Keep the full scrutiny preparation list to no more than six items across all categories. Prioritize the clearest and most material provisions when there are many. The basic legislation record is the priority: when the source is long or ambiguous, return empty preparation lists rather than omitting or weakening the title, type, relationship, summary, themes, excerpts, or dates.
 - Stakeholder suggestions should identify bodies or groups that appear relevant to implementation, oversight, consultation, or affected communities. Include implementing authorities, regulators, oversight bodies, and groups whose rights, duties, services, or protections are addressed when the source text supports them.
 - For stakeholder suggestions, use this exact string format: kind=<stakeholder|implementing_agency>; name=<name>; category=<enum value>; rationale=<short reason>; source=<short visible phrase>.
 - For stakeholder category use one of: ministry, government_agency, ngo, academic, expert, industry_group, citizen_group.
 - For implementing_agency category use one of: ministry, department, agency, regulator, authority, secretariat.
 - Suggest only entities or groups grounded in the visible source text. When the legislation describes a group without naming a specific organization, use the source's own description of that group. Do not infer views, support, opposition, or political positions.
-- Return no more than eight stakeholder suggestions.
+- Return no more than five stakeholder suggestions.
 - Exclude formulaic legislative text such as "BE IT ENACTED", arrangement-of-clauses material, citation clauses, and procedural boilerplate from the summary.
 - If the source is a bill or draft bill, treat it as primary legislation for relationship purposes.
 - If the text clearly describes regulations, rules, an order, or an ordinance as the source instrument itself, classify it as delegated.
