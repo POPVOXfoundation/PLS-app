@@ -86,7 +86,7 @@
                                 <flux:badge size="sm" color="amber">{{ __('Human review required') }}</flux:badge>
                             </div>
                             <flux:text class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                                {{ __('This outline is not a report record or publication. Review the structure and gaps before using it to create a working report.') }}
+                                {{ __('This working structure follows PLS practice: scope, legislative intent, evidence, implementation, findings, recommendations, publication, and follow-up. Review the material and gaps before creating a report record.') }}
                             </flux:text>
                         </div>
 

@@ -157,7 +157,7 @@ class ReportsPage extends Workspace
     #[On('report-outline-generated')]
     public function receiveReportOutline(string $content): void
     {
-        $this->reportOutline = $this->parseReportOutline($content);
+        $this->reportOutline = $this->parseReportOutline($content, $this->loadReview());
         $this->awaitingReportOutline = false;
         $this->reportOutlineError = null;
     }
@@ -565,6 +565,8 @@ class ReportsPage extends Workspace
             ->with([
                 'steps',
                 'documents',
+                'stakeholders',
+                'implementingAgencies',
                 'consultations.materials',
                 'submissions',
                 'findings',
@@ -792,13 +794,13 @@ class ReportsPage extends Workspace
 
     private function reportOutlinePrompt(): string
     {
-        return 'Using the current review scope and the confirmed findings and recommendations in the review record, propose a practical PLS report outline. Do not create, update, publish, or describe this as a final report. Keep the outline as a draft for review-team decisions. Return exactly this format:\n\nREPORT OUTLINE:\nReport title: <working title>\nSECTION:\nTitle: <section title>\nPurpose: <what this section should do>\nDraw on: <confirmed findings, recommendations, or source records to use>\nLimitations: <gaps or checks for the review team>\nEND SECTION\nEND OUTLINE\n\nInclude up to seven sections.';
+        return 'Prepare a provisional PLS report outline from the saved review record. Do not create, update, or publish a report record. Adapt this standard PLS structure to the evidence available: executive summary; mandate, scope, and scrutiny questions; legislative intent and implementation architecture; methodology and evidence base; implementation and delivery; confirmed findings; recommendations and expected government response; publication and follow-up. Use only material in the review record. Do not invent findings, recommendations, sources, institutions, or citations. For every section, clearly identify what the review team can draw on and what still needs checking. Keep this as a working structure for human review. Return exactly this format:\n\nREPORT OUTLINE:\nReport title: <working title>\nSECTION:\nTitle: <section title>\nPurpose: <what this section should do in a PLS report>\nDraw on: <specific saved findings, recommendations, legislation, evidence, consultations, or records>\nLimitations: <gaps or checks for the review team>\nEND SECTION\nEND OUTLINE\n\nInclude up to eight sections.';
     }
 
     /**
      * @return array{title: string, sections: list<array{id: string, title: string, purpose: string, material: string, limitations: string}>}
      */
-    private function parseReportOutline(string $content): array
+    private function parseReportOutline(string $content, PlsReview $review): array
     {
         $title = $this->reportOutlineField($content, 'Report title') ?: __('Draft PLS report');
         $sections = preg_split('/(?:^|\n)SECTION:\s*/i', trim($content)) ?: [];
@@ -828,19 +830,143 @@ class ReportsPage extends Workspace
         }
 
         if ($outlineSections === []) {
-            $outlineSections[] = [
-                'id' => (string) Str::uuid(),
-                'title' => __('Draft outline for review'),
-                'purpose' => trim($content),
-                'material' => '',
-                'limitations' => __('Check and structure this draft before using it in a report record.'),
-            ];
+            return $this->bestPracticeReportOutline($review);
         }
 
         return [
             'title' => $title,
-            'sections' => array_slice($outlineSections, 0, 7),
+            'sections' => array_slice($outlineSections, 0, 8),
         ];
+    }
+
+    /**
+     * Provide a useful PLS structure when the assistant response cannot be parsed.
+     *
+     * @return array{title: string, sections: list<array{id: string, title: string, purpose: string, material: string, limitations: string}>}
+     */
+    private function bestPracticeReportOutline(PlsReview $review): array
+    {
+        $legislationCount = $review->documents
+            ->filter(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
+            ->count();
+        $evidenceCount = $review->documents
+            ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
+            ->count();
+        $consultationMaterialCount = $review->consultations->sum(
+            fn ($consultation): int => $consultation->materials->count(),
+        );
+        $findingCount = $review->findings->count();
+        $recommendationCount = $review->recommendations->count();
+
+        $sections = [
+            [
+                'title' => __('Executive summary'),
+                'purpose' => __('Give a concise, plain-language account of the review scope, the strongest human-reviewed findings, recommendations, and the most important limitations.'),
+                'material' => __('Review: :title. :findings :recommendations', [
+                    'title' => $review->title,
+                    'findings' => trans_choice('{0} No reviewed findings are recorded yet.|{1} One reviewed finding is recorded.|[2,*] :count reviewed findings are recorded.', $findingCount, ['count' => $findingCount]),
+                    'recommendations' => trans_choice('{0} No recommendations are recorded yet.|{1} One recommendation is recorded.|[2,*] :count recommendations are recorded.', $recommendationCount, ['count' => $recommendationCount]),
+                ]),
+                'limitations' => $findingCount > 0
+                    ? __('Agree the headline messages and evidence caveats before drafting this section.')
+                    : __('Confirm human-reviewed findings before writing headline conclusions.'),
+            ],
+            [
+                'title' => __('Mandate, scope, and scrutiny questions'),
+                'purpose' => __('Set out why the review was undertaken, the legislation and objectives under review, the jurisdiction and period covered, and the questions guiding scrutiny.'),
+                'material' => filled($review->description)
+                    ? $review->description
+                    : __('The review record does not yet include a written purpose and scope.'),
+                'limitations' => filled($review->description)
+                    ? __('Check that the scope identifies the intended outcomes and any exclusions from the inquiry.')
+                    : __('Add the review purpose, scope, intended outcomes, and scrutiny questions.'),
+            ],
+            [
+                'title' => __('Legislative intent and implementation architecture'),
+                'purpose' => __('Explain the relevant provisions, intended outcomes, commencement or review points, delegated instruments, and the bodies expected to implement the legislation.'),
+                'material' => trans_choice('{0} No legislation source is saved in this review.|{1} One legislation source is available for this section.|[2,*] :count legislation sources are available for this section.', $legislationCount, ['count' => $legislationCount]),
+                'limitations' => $legislationCount > 0
+                    ? __('Check the legislative objectives, implementing responsibilities, and any regulations, orders, or guidance that shape delivery.')
+                    : __('Add the primary legislation and any relevant regulations or delegated instruments.'),
+            ],
+            [
+                'title' => __('Methodology and evidence base'),
+                'purpose' => __('Describe how the review assembled evidence, including documents, written submissions, consultations, and the limits of that evidence base.'),
+                'material' => __(':evidence :submissions :consultations', [
+                    'evidence' => trans_choice('{0} No evidence records are saved.|{1} One evidence record is saved.|[2,*] :count evidence records are saved.', $evidenceCount, ['count' => $evidenceCount]),
+                    'submissions' => trans_choice('{0} No written submissions are saved.|{1} One written submission is saved.|[2,*] :count written submissions are saved.', $review->submissions->count(), ['count' => $review->submissions->count()]),
+                    'consultations' => trans_choice('{0} No consultation materials are saved.|{1} One consultation material is saved.|[2,*] :count consultation materials are saved.', $consultationMaterialCount, ['count' => $consultationMaterialCount]),
+                ]),
+                'limitations' => __('Record the evidence-selection approach, consultation coverage, time period, and material gaps or limitations.'),
+            ],
+            [
+                'title' => __('Implementation and delivery'),
+                'purpose' => __('Assess how the legislation has been put into effect, focusing on responsible bodies, resources, regulations, guidance, governance, and operational delivery.'),
+                'material' => __(':agencies :stakeholders', [
+                    'agencies' => trans_choice('{0} No implementing agencies are recorded.|{1} One implementing agency is recorded.|[2,*] :count implementing agencies are recorded.', $review->implementingAgencies->count(), ['count' => $review->implementingAgencies->count()]),
+                    'stakeholders' => trans_choice('{0} No stakeholders are recorded.|{1} One stakeholder is recorded.|[2,*] :count stakeholders are recorded.', $review->stakeholders->count(), ['count' => $review->stakeholders->count()]),
+                ]),
+                'limitations' => __('Link claims about implementation to the source material, and separate questions of legal design, commencement, resourcing, guidance, and delivery.'),
+            ],
+            [
+                'title' => __('Findings'),
+                'purpose' => __('Present the review team’s human-reviewed findings against the scrutiny questions, distinguishing evidence from interpretation and noting uncertainty.'),
+                'material' => $this->outlineRecordTitles(
+                    $review->findings,
+                    __('No human-reviewed findings are saved yet.'),
+                ),
+                'limitations' => $findingCount > 0
+                    ? __('Check that each finding is evidence-grounded and linked to the relevant scrutiny question.')
+                    : __('Use the analysis workspace to review and confirm findings before treating this section as ready.'),
+            ],
+            [
+                'title' => __('Recommendations and expected government response'),
+                'purpose' => __('Set out the review team’s confirmed recommendations, who is expected to act, and the response or comply-or-explain process where it applies.'),
+                'material' => $this->outlineRecordTitles(
+                    $review->recommendations,
+                    __('No recommendations are saved yet.'),
+                ),
+                'limitations' => $recommendationCount > 0
+                    ? __('Check that each recommendation is specific, linked to a finding, and identifies the responsible body and response expectation.')
+                    : __('Confirm recommendations from the reviewed findings before drafting this section.'),
+            ],
+            [
+                'title' => __('Publication, response, and follow-up'),
+                'purpose' => __('Record the publication and accessibility plan, the expected government response timetable, and how the committee or inquiry team will monitor implementation after publication.'),
+                'material' => $review->reports->isNotEmpty()
+                    ? trans_choice('{1} One report record is being tracked.|[2,*] :count report records are being tracked.', $review->reports->count(), ['count' => $review->reports->count()])
+                    : __('No report record has been created yet.'),
+                'limitations' => __('Confirm the publication route, accessibility needs, response deadline, and follow-up responsibilities before release.'),
+            ],
+        ];
+
+        return [
+            'title' => __('Provisional PLS report: :title', ['title' => $review->title]),
+            'sections' => array_map(
+                fn (array $section): array => ['id' => (string) Str::uuid(), ...$section],
+                $sections,
+            ),
+        ];
+    }
+
+    /**
+     * @param  EloquentCollection<int, \Illuminate\Database\Eloquent\Model>  $records
+     */
+    private function outlineRecordTitles(EloquentCollection $records, string $emptyMessage): string
+    {
+        if ($records->isEmpty()) {
+            return $emptyMessage;
+        }
+
+        $titles = $records
+            ->take(3)
+            ->pluck('title')
+            ->filter()
+            ->implode('; ');
+
+        return $titles !== ''
+            ? $titles
+            : trans_choice('{1} One saved record is available.|[2,*] :count saved records are available.', $records->count(), ['count' => $records->count()]);
     }
 
     private function reportOutlineField(string $content, string $label): string

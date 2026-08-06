@@ -1926,6 +1926,35 @@ TEXT)
     $this->assertDatabaseCount('reports', 0);
 });
 
+test('report outline fallback provides a substantive PLS practice structure', function () {
+    $review = plsReview([
+        'title' => 'Review of implementation progress',
+        'description' => 'Assess whether the legislation has been implemented as intended.',
+    ]);
+
+    Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'document_type' => DocumentType::LegislationText,
+        'title' => 'Primary legislation',
+    ]);
+
+    $review->findings()->create([
+        'title' => 'Implementation reporting remains inconsistent',
+        'finding_type' => FindingType::ImplementationGap,
+        'summary' => 'Reports use inconsistent reporting measures.',
+        'detail' => null,
+    ]);
+
+    Livewire::test(ReportsPage::class, ['review' => $review])
+        ->call('receiveReportOutline', 'I can help with report structure and provisional drafting here.')
+        ->assertSee('Executive summary')
+        ->assertSee('Legislative intent and implementation architecture')
+        ->assertSee('Methodology and evidence base')
+        ->assertSee('Recommendations and expected government response')
+        ->assertSee('Publication, response, and follow-up')
+        ->assertDontSee('Draft outline for review');
+});
+
 test('reports can be edited and deleted from the review workspace', function () {
     $review = plsReview([
         'title' => 'Review of publication and dissemination obligations',

@@ -137,6 +137,10 @@ class ReviewAssistantRefusalGuard
 
     private function reportsRefusal(string $prompt, PlsReview $review): ?string
     {
+        if (Str::contains($prompt, 'report outline')) {
+            return null;
+        }
+
         if ($this->containsAny($prompt, ['final report', 'publish the final report', 'definitive recommendation', 'final recommendation'])) {
             $hasPublishedReport = $review->reports->contains(fn ($report): bool => $report->published_at !== null);
 
