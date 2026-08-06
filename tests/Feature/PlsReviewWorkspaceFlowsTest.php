@@ -1647,6 +1647,7 @@ test('analysis keeps assistant finding drafts provisional and lets users develop
         ->assertSee('Suggest provisional findings')
         ->assertSee('Develop my finding')
         ->call('requestProvisionalFindings')
+        ->assertSet('awaitingProvisionalFindings', true)
         ->assertDispatched('assistant-prompt-requested');
 
     $component
@@ -1656,6 +1657,41 @@ test('analysis keeps assistant finding drafts provisional and lets users develop
         ->call('developPotentialFinding')
         ->assertSet('showDevelopFindingModal', false)
         ->assertDispatched('assistant-prompt-requested');
+
+    $this->assertDatabaseCount('findings', 0);
+});
+
+test('provisional finding drafts are displayed for review before becoming findings', function () {
+    $review = plsReview([
+        'title' => 'Review of provisional finding drafts',
+    ]);
+
+    $component = Livewire::test(AnalysisPage::class, ['review' => $review])
+        ->call('receiveProvisionalFindings', <<<'TEXT'
+POTENTIAL FINDING:
+Title: Annual reporting is incomplete
+Type: implementation gap
+Draft: The available evidence suggests that annual reporting has not been completed consistently.
+Supporting record: Annual Reporting Template: "institutions report data and activities".
+Limitations: No implementing agency response has been recorded.
+Reviewer question: Has the responsible ministry published the missing annual reports?
+END FINDING
+TEXT)
+        ->assertSet('awaitingProvisionalFindings', false)
+        ->assertSet('provisionalFindings.0.title', 'Annual reporting is incomplete')
+        ->assertSee('Provisional finding drafts')
+        ->assertSee('Annual reporting is incomplete')
+        ->assertSee('Review and add')
+        ->assertSee('Annual Reporting Template');
+
+    $draftId = $component->get('provisionalFindings.0.id');
+
+    $component
+        ->call('prepareProvisionalFindingForReview', $draftId)
+        ->assertSet('showAddFindingModal', true)
+        ->assertSet('findingTitle', 'Annual reporting is incomplete')
+        ->assertSet('findingType', FindingType::ImplementationGap->value)
+        ->assertSet('findingSummary', 'The available evidence suggests that annual reporting has not been completed consistently.');
 
     $this->assertDatabaseCount('findings', 0);
 });

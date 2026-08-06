@@ -40,6 +40,8 @@ class AssistantSidebar extends Component
 
     public ?string $assistantError = null;
 
+    public bool $shouldSendProvisionalFindingsToInbox = false;
+
     public function mount(PlsReview $review, string $workspaceKey): void
     {
         $this->authorize('view', $review);
@@ -59,6 +61,8 @@ class AssistantSidebar extends Component
     public function submitAssistantPrompt(): void
     {
         $prompt = Str::of($this->assistantInput)->trim()->toString();
+        $sendProvisionalFindingsToInbox = $this->shouldSendProvisionalFindingsToInbox && $this->workspaceKey === 'analysis';
+        $this->shouldSendProvisionalFindingsToInbox = false;
 
         if ($prompt === '') {
             return;
@@ -83,6 +87,7 @@ class AssistantSidebar extends Component
         if ($refusal !== null) {
             $this->persistSyntheticAssistantExchange($agent, $prompt, $refusal, $context['playbook_version']);
             $this->assistantMessages = $this->conversationMessagesForDisplay();
+            $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox);
             $this->dispatch('assistant-message-added');
 
             return;
@@ -101,6 +106,10 @@ class AssistantSidebar extends Component
 
             $this->assistantError = __('The assistant is unavailable right now. Check the AI provider configuration or try again.');
 
+            if ($sendProvisionalFindingsToInbox) {
+                $this->dispatch('provisional-findings-failed')->to(AnalysisPage::class);
+            }
+
             $this->dispatch('assistant-message-added');
 
             return;
@@ -115,19 +124,21 @@ class AssistantSidebar extends Component
         }
 
         $this->assistantMessages = $this->conversationMessagesForDisplay();
+        $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox);
 
         $this->dispatch('assistant-message-added');
     }
 
-    public function sendPrompt(string $prompt): void
+    public function sendPrompt(string $prompt, bool $provisionalFindings = false): void
     {
         $this->assistantInput = $prompt;
+        $this->shouldSendProvisionalFindingsToInbox = $provisionalFindings;
 
         $this->submitAssistantPrompt();
     }
 
     #[On('assistant-prompt-requested')]
-    public function sendRequestedPrompt(string $prompt): void
+    public function sendRequestedPrompt(string $prompt, bool $provisionalFindings = false): void
     {
         $prompt = Str::of($prompt)->trim()->limit(2000, '')->toString();
 
@@ -135,7 +146,7 @@ class AssistantSidebar extends Component
             return;
         }
 
-        $this->sendPrompt($prompt);
+        $this->sendPrompt($prompt, $provisionalFindings);
     }
 
     public function assistantPlaceholder(string $workspaceKey): string
@@ -239,6 +250,26 @@ class AssistantSidebar extends Component
             'role' => 'user',
             'content' => $prompt,
         ];
+    }
+
+    private function sendProvisionalFindingsToInbox(bool $sendProvisionalFindingsToInbox): void
+    {
+        if (! $sendProvisionalFindingsToInbox) {
+            return;
+        }
+
+        $content = collect($this->assistantMessages)
+            ->reverse()
+            ->first(fn (array $message): bool => $message['role'] === 'assistant')['content'] ?? null;
+
+        if (! is_string($content) || trim($content) === '') {
+            $this->dispatch('provisional-findings-failed')->to(AnalysisPage::class);
+
+            return;
+        }
+
+        $this->dispatch('provisional-findings-generated', content: $content)
+            ->to(AnalysisPage::class);
     }
 
     private function normalizeAssistantMessage(string $content): string

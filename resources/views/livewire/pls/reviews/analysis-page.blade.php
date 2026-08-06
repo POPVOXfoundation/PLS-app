@@ -18,7 +18,7 @@
                         <flux:badge size="sm" color="amber">{{ __('Human review required') }}</flux:badge>
                     </div>
                     <flux:text class="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-                        {{ __('PLSAssist can test patterns across the legislation, evidence, and consultation record. Its drafts stay provisional in the assistant until the review team checks the sources and records a finding.') }}
+                        {{ __('PLSAssist can test patterns across the legislation, evidence, and consultation record. Proposed findings appear below for the review team to check, refine, or dismiss.') }}
                     </flux:text>
                 </div>
 
@@ -32,6 +32,89 @@
                 </div>
             </div>
         </div>
+
+        @if ($awaitingProvisionalFindings || $provisionalFindingsError || $provisionalFindings !== [])
+            <section class="border-b border-zinc-200 pb-6 dark:border-zinc-800" aria-live="polite">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <flux:heading size="lg">{{ __('Provisional finding drafts') }}</flux:heading>
+                            <flux:badge size="sm" color="amber">{{ __('Human review required') }}</flux:badge>
+                        </div>
+                        <flux:text class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                            {{ __('These drafts are not findings in the review record until a team member reviews and saves them.') }}
+                        </flux:text>
+                    </div>
+
+                    @if ($provisionalFindings !== [])
+                        <flux:button variant="filled" size="sm" icon="sparkles" wire:click="requestProvisionalFindings">
+                            {{ __('Refresh drafts') }}
+                        </flux:button>
+                    @endif
+                </div>
+
+                @if ($awaitingProvisionalFindings)
+                    <div class="mt-4 flex items-center gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-4 text-sm text-violet-900 dark:border-violet-400/20 dark:bg-violet-500/10 dark:text-violet-100">
+                        <flux:icon icon="sparkles" class="size-5 animate-pulse text-violet-600 dark:text-violet-300" />
+                        <span>{{ __('PLSAssist is preparing provisional findings from the saved review record...') }}</span>
+                    </div>
+                @elseif ($provisionalFindingsError)
+                    <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-900 dark:border-rose-400/20 dark:bg-rose-500/10 dark:text-rose-100">
+                        <span>{{ $provisionalFindingsError }}</span>
+                        <flux:button variant="filled" size="sm" wire:click="requestProvisionalFindings">{{ __('Try again') }}</flux:button>
+                    </div>
+                @else
+                    <div class="mt-5 space-y-4">
+                        @foreach ($provisionalFindings as $draft)
+                            <article wire:key="provisional-finding-{{ $draft['id'] }}" class="overflow-hidden rounded-xl border border-amber-200 bg-amber-50/40 dark:border-amber-400/20 dark:bg-amber-500/5">
+                                <div class="flex flex-col gap-3 border-b border-amber-200/80 bg-amber-50/70 px-4 py-3 sm:flex-row sm:items-start sm:justify-between dark:border-amber-400/15 dark:bg-amber-500/10">
+                                    <div class="min-w-0">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <h3 class="text-base font-semibold text-zinc-900 dark:text-white">{{ $draft['title'] }}</h3>
+                                            <flux:badge size="sm" color="amber">{{ __('Provisional') }}</flux:badge>
+                                            <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($draft['finding_type']) }}</flux:badge>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex shrink-0 flex-wrap gap-2">
+                                        <flux:button variant="primary" size="sm" icon="pencil-square" wire:click="prepareProvisionalFindingForReview(@js($draft['id']))">
+                                            {{ __('Review and add') }}
+                                        </flux:button>
+                                        <flux:button variant="ghost" size="sm" icon="x-mark" wire:click="dismissProvisionalFinding(@js($draft['id']))">
+                                            {{ __('Dismiss') }}
+                                        </flux:button>
+                                    </div>
+                                </div>
+
+                                <div class="grid gap-5 px-4 py-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(16rem,0.75fr)]">
+                                    <div>
+                                        <span class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Proposed finding') }}</span>
+                                        <p class="mt-2 text-sm leading-6 text-zinc-800 dark:text-zinc-200 whitespace-pre-line">{{ $draft['draft'] }}</p>
+                                    </div>
+
+                                    <div class="space-y-4 border-t border-amber-200/80 pt-4 lg:border-t-0 lg:border-l lg:pl-5 lg:pt-0 dark:border-amber-400/15">
+                                        <div>
+                                            <span class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Supporting record') }}</span>
+                                            <p class="mt-1 text-sm leading-5 text-zinc-700 dark:text-zinc-300 whitespace-pre-line">{{ $draft['supporting_record'] ?: __('No verified source passage identified.') }}</p>
+                                        </div>
+                                        <div>
+                                            <span class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Limitations and checks') }}</span>
+                                            <p class="mt-1 text-sm leading-5 text-zinc-700 dark:text-zinc-300 whitespace-pre-line">{{ $draft['limitations'] ?: __('No limitations were identified in this draft.') }}</p>
+                                        </div>
+                                        @if ($draft['reviewer_question'])
+                                            <div>
+                                                <span class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Question for the review team') }}</span>
+                                                <p class="mt-1 text-sm leading-5 text-zinc-700 dark:text-zinc-300">{{ $draft['reviewer_question'] }}</p>
+                                            </div>
+                                        @endif
+                                    </div>
+                                </div>
+                            </article>
+                        @endforeach
+                    </div>
+                @endif
+            </section>
+        @endif
 
         @if ($review->findings->isEmpty())
             <div class="flex items-center justify-between gap-4">

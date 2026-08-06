@@ -17,6 +17,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\On;
 
 class AnalysisPage extends Workspace
 {
@@ -54,6 +55,15 @@ class AnalysisPage extends Workspace
 
     public string $recommendationType = RecommendationType::ImproveImplementation->value;
 
+    public bool $awaitingProvisionalFindings = false;
+
+    public ?string $provisionalFindingsError = null;
+
+    /**
+     * @var list<array{id: string, title: string, finding_type: string, draft: string, supporting_record: string, limitations: string, reviewer_question: string}>
+     */
+    public array $provisionalFindings = [];
+
     public function mount(PlsReview $review): void
     {
         parent::mount($review);
@@ -69,8 +79,59 @@ class AnalysisPage extends Workspace
     {
         $this->authorize('view', $this->review);
 
-        $this->dispatch('assistant-prompt-requested', prompt: $this->provisionalFindingsPrompt())
+        $this->awaitingProvisionalFindings = true;
+        $this->provisionalFindingsError = null;
+        $this->provisionalFindings = [];
+
+        $this->dispatch('assistant-prompt-requested', prompt: $this->provisionalFindingsPrompt(), provisionalFindings: true)
             ->to(AssistantSidebar::class);
+    }
+
+    #[On('provisional-findings-generated')]
+    public function receiveProvisionalFindings(string $content): void
+    {
+        $this->provisionalFindings = $this->parseProvisionalFindings($content);
+        $this->awaitingProvisionalFindings = false;
+        $this->provisionalFindingsError = null;
+    }
+
+    #[On('provisional-findings-failed')]
+    public function handleProvisionalFindingsFailure(): void
+    {
+        $this->awaitingProvisionalFindings = false;
+        $this->provisionalFindingsError = __('PLSAssist could not prepare provisional findings just now. You can try again.');
+    }
+
+    public function dismissProvisionalFinding(string $draftId): void
+    {
+        $this->authorize('view', $this->review);
+
+        $this->provisionalFindings = array_values(array_filter(
+            $this->provisionalFindings,
+            fn (array $draft): bool => $draft['id'] !== $draftId,
+        ));
+    }
+
+    public function prepareProvisionalFindingForReview(string $draftId): void
+    {
+        $this->authorizeReviewMutation();
+
+        $draft = collect($this->provisionalFindings)->firstWhere('id', $draftId);
+
+        if (! is_array($draft)) {
+            return;
+        }
+
+        $this->resetFindingForm();
+        $this->findingTitle = $draft['title'];
+        $this->findingType = $draft['finding_type'];
+        $this->findingSummary = $draft['draft'];
+        $this->findingDetail = trim(implode("\n\n", array_filter([
+            $draft['supporting_record'] !== '' ? __('Supporting record:')."\n".$draft['supporting_record'] : null,
+            $draft['limitations'] !== '' ? __('Limitations:')."\n".$draft['limitations'] : null,
+            $draft['reviewer_question'] !== '' ? __('Question for review team:')."\n".$draft['reviewer_question'] : null,
+        ])));
+        $this->showAddFindingModal = true;
     }
 
     public function prepareFindingDevelopment(): void
@@ -574,7 +635,67 @@ class AnalysisPage extends Workspace
 
     private function provisionalFindingsPrompt(): string
     {
-        return 'Review the current review record, including linked legislation, uploaded evidence, stakeholder submissions, and recorded consultation results. Identify up to three potential findings only where the available sources provide real support. For each potential finding, provide: 1) cautious draft wording, 2) suggested finding type, 3) supporting sources and short direct quotes only when they appear in the review record, 4) any contradictory evidence or limitations, and 5) a question for the human reviewer. Do not create a permanent finding, present a conclusion as final, infer public opinion, or invent citations. If the evidence is too thin, say what is missing instead.';
+        return 'Review the current review record, including linked legislation, uploaded evidence, stakeholder submissions, and recorded consultation results. Identify up to three potential findings only where the available sources provide real support. Do not create a permanent finding, present a conclusion as final, infer public opinion, or invent citations. If the evidence is too thin, say what is missing instead. Return each draft in exactly this format:\n\nPOTENTIAL FINDING:\nTitle: <short title>\nType: <one of implementation gap, effectiveness issue, unintended consequence, compliance problem, administrative issue>\nDraft: <cautious proposed wording>\nSupporting record: <named sources and short direct quotes, or "No verified source passage identified">\nLimitations: <contradictory evidence, limits, or missing information>\nReviewer question: <one question for the review team>\nEND FINDING';
+    }
+
+    /**
+     * @return list<array{id: string, title: string, finding_type: string, draft: string, supporting_record: string, limitations: string, reviewer_question: string}>
+     */
+    private function parseProvisionalFindings(string $content): array
+    {
+        $sections = preg_split('/(?:^|\n)POTENTIAL FINDING:\s*/i', trim($content)) ?: [];
+        $drafts = [];
+
+        foreach ($sections as $section) {
+            $section = trim((string) preg_replace('/\nEND FINDING\s*$/i', '', $section));
+
+            if ($section === '') {
+                continue;
+            }
+
+            $draft = $this->provisionalFindingField($section, 'Draft');
+
+            if ($draft === '') {
+                continue;
+            }
+
+            $drafts[] = [
+                'id' => (string) Str::uuid(),
+                'title' => $this->provisionalFindingField($section, 'Title') ?: __('Potential finding'),
+                'finding_type' => $this->provisionalFindingType($this->provisionalFindingField($section, 'Type')),
+                'draft' => $draft,
+                'supporting_record' => $this->provisionalFindingField($section, 'Supporting record'),
+                'limitations' => $this->provisionalFindingField($section, 'Limitations'),
+                'reviewer_question' => $this->provisionalFindingField($section, 'Reviewer question'),
+            ];
+        }
+
+        return array_slice($drafts, 0, 3);
+    }
+
+    private function provisionalFindingField(string $section, string $label): string
+    {
+        $labels = ['Title', 'Type', 'Draft', 'Supporting record', 'Limitations', 'Reviewer question', 'END FINDING'];
+        $otherLabels = array_values(array_filter($labels, fn (string $candidate): bool => $candidate !== $label));
+        $followingLabels = implode('|', array_map(fn (string $candidate): string => preg_quote($candidate, '/'), $otherLabels));
+        $pattern = '/(?:^|\n)'.preg_quote($label, '/').':\s*(.*?)(?=\n(?:'.$followingLabels.'):\s*|\z)/is';
+
+        preg_match($pattern, $section, $matches);
+
+        return isset($matches[1])
+            ? trim(preg_replace('/\n{3,}/', "\n\n", trim($matches[1])) ?? '')
+            : '';
+    }
+
+    private function provisionalFindingType(string $value): string
+    {
+        $normalized = Str::of($value)
+            ->lower()
+            ->replace(['-', ' '], '_')
+            ->trim()
+            ->toString();
+
+        return FindingType::tryFrom($normalized)?->value ?? FindingType::ImplementationGap->value;
     }
 
     private function potentialFindingPrompt(string $potentialFinding): string
