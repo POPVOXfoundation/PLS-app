@@ -1,6 +1,7 @@
 <?php
 
 use App\Ai\Agents\LegislationSourceExtractorAgent;
+use App\Ai\Agents\LegislationSourceFallbackExtractorAgent;
 use App\Ai\Agents\ReviewDocumentExtractorAgent;
 use App\Domain\Analysis\Enums\FindingType;
 use App\Domain\Analysis\Enums\RecommendationType;
@@ -772,7 +773,7 @@ test('large legislation source prompts are trimmed before the ai extraction step
         ->assertSee('Southern Deep Port Development Facility Bill, 2024');
 });
 
-test('ai extraction failures become editable legislation drafts after text extraction', function () {
+test('full legislation extraction failures use a lighter record pass', function () {
     Storage::fake('s3');
     Queue::fake();
     config()->set('pls_assistant.assistant_sources.extractor', 'textract');
@@ -808,6 +809,16 @@ test('ai extraction failures become editable legislation drafts after text extra
     LegislationSourceExtractorAgent::fake(function () {
         throw new \RuntimeException('AI extraction failed');
     });
+    LegislationSourceFallbackExtractorAgent::fake([[
+        'title' => 'Southern Deep Port Development Facility Bill, 2024',
+        'legislation_type' => LegislationType::Act->value,
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+        'date_enacted' => null,
+        'summary' => 'Provides for the development and operation of a southern deep port facility.',
+        'key_themes' => ['Port development'],
+        'important_dates' => [],
+        'warnings' => [],
+    ]]);
 
     $component = Livewire::test(LegislationPage::class, ['review' => $review])
         ->set('sourceUpload', UploadedFile::fake()->create('southern-deep-port-development-facility-bill-2024.pdf', 256, 'application/pdf'))
@@ -821,16 +832,16 @@ test('ai extraction failures become editable legislation drafts after text extra
     $component
         ->call('refreshPendingAnalyses')
         ->assertSee('Needs review')
-        ->assertSee('basic editable draft')
+        ->assertSee('shorter record pass')
         ->call('startReviewDocument', $document->id)
-        ->assertSet('analysisTitle', 'SOUTHERN DEEP PORT DEVELOPMENT FACILITY BILL, 2024')
+        ->assertSet('analysisTitle', 'Southern Deep Port Development Facility Bill, 2024')
         ->assertSet('analysisType', LegislationType::Act->value)
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
         ->assertSee('Review record');
 
     expect(data_get($document->fresh()->metadata, 'legislation_analysis.status'))->toBe('needs_review')
-        ->and(data_get($document->fresh()->metadata, 'legislation_analysis.summary'))->toBe('')
-        ->and(data_get($document->fresh()->metadata, 'legislation_analysis.title'))->toBe('SOUTHERN DEEP PORT DEVELOPMENT FACILITY BILL, 2024');
+        ->and(data_get($document->fresh()->metadata, 'legislation_analysis.summary'))->toBe('Provides for the development and operation of a southern deep port facility.')
+        ->and(data_get($document->fresh()->metadata, 'legislation_analysis.title'))->toBe('Southern Deep Port Development Facility Bill, 2024');
 });
 
 test('failed legislation analysis can be retried on the same source row', function () {

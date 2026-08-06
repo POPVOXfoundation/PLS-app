@@ -3,6 +3,7 @@
 namespace App\Domain\Legislation\Actions;
 
 use App\Ai\Agents\LegislationSourceExtractorAgent;
+use App\Ai\Agents\LegislationSourceFallbackExtractorAgent;
 use App\Domain\Documents\Document;
 use App\Domain\Legislation\Enums\LegislationType;
 use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
@@ -261,13 +262,22 @@ class AnalyzeLegislationSource
             return null;
         }
 
+        $usedLighterPass = false;
+
         try {
             $response = app(LegislationSourceExtractorAgent::class)->prompt($this->aiPrompt($document, $rawText));
         } catch (Throwable $exception) {
             report($exception);
-            $error = $exception->getMessage();
 
-            return null;
+            try {
+                $response = app(LegislationSourceFallbackExtractorAgent::class)->prompt($this->lighterAiPrompt($document, $rawText));
+                $usedLighterPass = true;
+            } catch (Throwable $fallbackException) {
+                report($fallbackException);
+                $error = $fallbackException->getMessage();
+
+                return null;
+            }
         }
 
         $title = $this->normalizeTitle((string) ($response['title'] ?? ''));
@@ -286,6 +296,10 @@ class AnalyzeLegislationSource
         );
         $relationshipType = $this->normalizeRelationshipType($response['relationship_type'] ?? null);
         $warnings = $this->normalizeWarnings($response['warnings'] ?? []);
+
+        if ($usedLighterPass) {
+            $warnings[] = 'PLSAssist used a shorter record pass for this source. Review the extracted details before saving.';
+        }
 
         if ($title === '' || $legislationType === null || $relationshipType === null) {
             logger()->warning('Legislation source AI response was incomplete.', [
@@ -408,6 +422,15 @@ class AnalyzeLegislationSource
             'Return every structured field. When a field is uncertain, use the closest allowed classification and add a concise technical warning rather than leaving it blank.',
             'Source text excerpt:'."\n".$sourceExcerpt,
         ]));
+    }
+
+    private function lighterAiPrompt(Document $document, string $rawText): string
+    {
+        return implode("\n\n", [
+            'Document title: '.$document->title,
+            'Extract only the core legislation record fields from this source text.',
+            'Source text excerpt:'."\n".$this->sourceExcerptForAi($rawText),
+        ]);
     }
 
     private function sourceExcerptForAi(string $rawText): string
