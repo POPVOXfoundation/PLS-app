@@ -299,15 +299,27 @@ class AnalyzeLegislationSource
         $warnings = $this->normalizeWarnings($response['warnings'] ?? []);
 
         if ($title === '' || $legislationType === null || $relationshipType === null) {
-            $error = 'The AI response did not include the minimum identifying legislation fields.';
             logger()->warning('Legislation source AI response was incomplete.', [
                 'document_id' => $document->id,
                 'has_legislation_type' => $legislationType !== null,
                 'has_relationship_type' => $relationshipType !== null,
                 'has_title' => $title !== '',
             ]);
+        }
 
-            return null;
+        if ($title === '') {
+            $title = $this->fallbackTitle($document, $rawText);
+            $warnings[] = 'PLSAssist could not identify a clean official title, so this draft uses the source title. Review and correct it before saving.';
+        }
+
+        if ($legislationType === null) {
+            $legislationType = $this->fallbackLegislationType($document, $rawText);
+            $warnings[] = 'PLSAssist could not classify this source, so this draft uses a suggested legislation type. Review and correct it before saving.';
+        }
+
+        if ($relationshipType === null) {
+            $relationshipType = $this->fallbackRelationshipType($legislationType);
+            $warnings[] = 'PLSAssist could not determine this source\'s relationship to the review, so this draft uses a suggested relationship. Review and correct it before saving.';
         }
 
         return [
@@ -322,8 +334,41 @@ class AnalyzeLegislationSource
             'scrutiny_preparation' => $scrutinyPreparation,
             'stakeholder_suggestions' => $stakeholderSuggestions,
             'relationship_type' => $relationshipType->value,
-            'warnings' => $warnings,
+            'warnings' => array_values(array_unique($warnings)),
         ];
+    }
+
+    private function fallbackTitle(Document $document, string $rawText): string
+    {
+        $titleLine = collect(preg_split("/\R/", $rawText) ?: [])
+            ->map(fn (string $line): string => $this->normalizeTitle($line))
+            ->first(fn (string $line): bool => $line !== ''
+                && mb_strlen($line) <= 255
+                && preg_match('/\b(bill|act|regulation|ordinance|rules?|order)\b/i', $line) === 1);
+
+        return $this->normalizeTitle((string) ($titleLine ?: $document->title)) ?: 'Untitled legislation source';
+    }
+
+    private function fallbackLegislationType(Document $document, string $rawText): LegislationType
+    {
+        $source = Str::lower($document->title."\n".Str::limit($rawText, 2000, ''));
+
+        if (Str::contains($source, 'ordinance')) {
+            return LegislationType::Ordinance;
+        }
+
+        if (Str::contains($source, ['regulation', 'regulations', 'rules', 'order'])) {
+            return LegislationType::Regulation;
+        }
+
+        return LegislationType::Act;
+    }
+
+    private function fallbackRelationshipType(LegislationType $legislationType): ReviewLegislationRelationshipType
+    {
+        return in_array($legislationType, [LegislationType::Regulation, LegislationType::Ordinance], true)
+            ? ReviewLegislationRelationshipType::Delegated
+            : ReviewLegislationRelationshipType::Primary;
     }
 
     private function aiPrompt(Document $document, string $rawText): string
@@ -333,7 +378,7 @@ class AnalyzeLegislationSource
         return implode("\n\n", array_filter([
             'Document title: '.$document->title,
             'Extract the legislation fields and source-grounded scrutiny preparation from this source text.',
-            'Return the structured fields only.',
+            'Return every structured field. When a field is uncertain, use the closest allowed classification and add a concise technical warning rather than leaving it blank.',
             'Source text excerpt:'."\n".$sourceExcerpt,
         ]));
     }

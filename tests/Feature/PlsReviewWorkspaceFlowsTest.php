@@ -1392,6 +1392,70 @@ test('best effort legislation parsing still enters the review state with warning
         ->assertSee('Review record');
 });
 
+test('incomplete AI legislation records become editable review drafts', function () {
+    Storage::fake('s3');
+    Queue::fake();
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
+
+    $review = plsReview([
+        'title' => 'Review of an incomplete AI record',
+    ]);
+
+    $extractor = new class implements AssistantSourceTextExtractor
+    {
+        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        {
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: "Affirmative Action (Gender Equality) Bill 2024\n\nThis Bill provides for affirmative action measures.",
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+    LegislationSourceExtractorAgent::fake([[
+        'title' => '',
+        'short_title' => null,
+        'legislation_type' => '',
+        'date_enacted' => null,
+        'summary' => null,
+        'key_themes' => [],
+        'notable_excerpts' => [],
+        'important_dates' => [],
+        'scrutiny_preparation' => [
+            'milestones' => [],
+            'implementation_obligations' => [],
+            'parliamentary_follow_up' => [],
+            'records_to_locate' => [],
+        ],
+        'stakeholder_suggestions' => [],
+        'relationship_type' => '',
+        'warnings' => [],
+    ]]);
+
+    $component = Livewire::test(LegislationPage::class, ['review' => $review])
+        ->set('sourceUpload', UploadedFile::fake()->create('affirmative-action-bill.pdf', 128, 'application/pdf'))
+        ->assertSee('Processing');
+
+    $document = $review->fresh()->documents()->sole();
+
+    runLegislationSourcePipeline($document->id);
+
+    $component
+        ->call('refreshPendingAnalyses')
+        ->assertSee('Needs review')
+        ->assertSee('Affirmative Action (Gender Equality) Bill 2024')
+        ->call('startReviewDocument', $document->id)
+        ->assertSet('analysisTitle', 'Affirmative Action (Gender Equality) Bill 2024')
+        ->assertSet('analysisType', LegislationType::Act->value)
+        ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
+        ->assertSee('could not classify this source');
+});
+
 test('stale legislation rows are surfaced for retry instead of refreshing inline', function () {
     Storage::fake('s3');
     config()->set('pls_assistant.assistant_sources.extractor', 'textract');

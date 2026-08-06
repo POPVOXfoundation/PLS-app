@@ -29,6 +29,7 @@ Return a best-effort structured result using only the supplied source text.
 
 Rules:
 - Be conservative and practical.
+- Every required field must be populated. If the title, legislation type, or relationship is unclear, provide the closest supported value and include a concise warning instead of leaving it blank.
 - Return the official instrument or bill name only, not page numbers, jurisdiction headers, running headers, or all-caps prefixes like "BELIZE:".
 - For bill-style documents, prefer a clean bill title such as "Southern Deep Port Development Facility Bill, 2024".
 - The short title must be shorter than the title. If the visible short title is the same as the title, return a shorter cleaned version or null.
