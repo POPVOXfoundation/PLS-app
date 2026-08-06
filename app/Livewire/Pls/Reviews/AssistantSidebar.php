@@ -42,6 +42,8 @@ class AssistantSidebar extends Component
 
     public bool $shouldSendProvisionalFindingsToInbox = false;
 
+    public bool $shouldSendReportOutlineToWorkspace = false;
+
     public function mount(PlsReview $review, string $workspaceKey): void
     {
         $this->authorize('view', $review);
@@ -62,7 +64,9 @@ class AssistantSidebar extends Component
     {
         $prompt = Str::of($this->assistantInput)->trim()->toString();
         $sendProvisionalFindingsToInbox = $this->shouldSendProvisionalFindingsToInbox && $this->workspaceKey === 'analysis';
+        $sendReportOutlineToWorkspace = $this->shouldSendReportOutlineToWorkspace && $this->workspaceKey === 'reports';
         $this->shouldSendProvisionalFindingsToInbox = false;
+        $this->shouldSendReportOutlineToWorkspace = false;
 
         if ($prompt === '') {
             return;
@@ -88,6 +92,7 @@ class AssistantSidebar extends Component
             $this->persistSyntheticAssistantExchange($agent, $prompt, $refusal, $context['playbook_version']);
             $this->assistantMessages = $this->conversationMessagesForDisplay();
             $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox);
+            $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace);
             $this->dispatch('assistant-message-added');
 
             return;
@@ -110,6 +115,10 @@ class AssistantSidebar extends Component
                 $this->dispatch('provisional-findings-failed')->to(AnalysisPage::class);
             }
 
+            if ($sendReportOutlineToWorkspace) {
+                $this->dispatch('report-outline-failed')->to(ReportsPage::class);
+            }
+
             $this->dispatch('assistant-message-added');
 
             return;
@@ -125,20 +134,22 @@ class AssistantSidebar extends Component
 
         $this->assistantMessages = $this->conversationMessagesForDisplay();
         $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox);
+        $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace);
 
         $this->dispatch('assistant-message-added');
     }
 
-    public function sendPrompt(string $prompt, bool $provisionalFindings = false): void
+    public function sendPrompt(string $prompt, bool $provisionalFindings = false, bool $reportOutline = false): void
     {
         $this->assistantInput = $prompt;
         $this->shouldSendProvisionalFindingsToInbox = $provisionalFindings;
+        $this->shouldSendReportOutlineToWorkspace = $reportOutline;
 
         $this->submitAssistantPrompt();
     }
 
     #[On('assistant-prompt-requested')]
-    public function sendRequestedPrompt(string $prompt, bool $provisionalFindings = false): void
+    public function sendRequestedPrompt(string $prompt, bool $provisionalFindings = false, bool $reportOutline = false): void
     {
         $prompt = Str::of($prompt)->trim()->limit(2000, '')->toString();
 
@@ -146,7 +157,7 @@ class AssistantSidebar extends Component
             return;
         }
 
-        $this->sendPrompt($prompt, $provisionalFindings);
+        $this->sendPrompt($prompt, $provisionalFindings, $reportOutline);
     }
 
     public function assistantPlaceholder(string $workspaceKey): string
@@ -270,6 +281,26 @@ class AssistantSidebar extends Component
 
         $this->dispatch('provisional-findings-generated', content: $content)
             ->to(AnalysisPage::class);
+    }
+
+    private function sendReportOutlineToWorkspace(bool $sendReportOutlineToWorkspace): void
+    {
+        if (! $sendReportOutlineToWorkspace) {
+            return;
+        }
+
+        $content = collect($this->assistantMessages)
+            ->reverse()
+            ->first(fn (array $message): bool => $message['role'] === 'assistant')['content'] ?? null;
+
+        if (! is_string($content) || trim($content) === '') {
+            $this->dispatch('report-outline-failed')->to(ReportsPage::class);
+
+            return;
+        }
+
+        $this->dispatch('report-outline-generated', content: $content)
+            ->to(ReportsPage::class);
     }
 
     private function normalizeAssistantMessage(string $content): string

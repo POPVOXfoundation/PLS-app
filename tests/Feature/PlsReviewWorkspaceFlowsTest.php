@@ -1870,6 +1870,7 @@ test('report assistance keeps drafting in the assistant for human review', funct
         ->assertSee('Draft findings section')
         ->assertSee('Check report coverage')
         ->call('requestReportOutline')
+        ->assertSet('awaitingReportOutline', true)
         ->assertDispatched('assistant-prompt-requested')
         ->call('requestFindingsSectionDraft')
         ->assertDispatched('assistant-prompt-requested');
@@ -1883,6 +1884,45 @@ test('report assistance keeps drafting in the assistant for human review', funct
         ->assertDispatched('assistant-prompt-requested');
 
     expect($finding->fresh()->exists)->toBeTrue();
+    $this->assertDatabaseCount('reports', 0);
+});
+
+test('report outlines are displayed for review before creating a report record', function () {
+    $review = plsReview([
+        'title' => 'Review of report outline drafting',
+    ]);
+
+    $component = Livewire::test(ReportsPage::class, ['review' => $review])
+        ->call('receiveReportOutline', <<<'TEXT'
+REPORT OUTLINE:
+Report title: Draft report on implementation
+SECTION:
+Title: Purpose and scope
+Purpose: Set out the legislation and questions under review.
+Draw on: Review overview and linked legislation.
+Limitations: Confirm the final scope with the review team.
+END SECTION
+SECTION:
+Title: Findings and recommendations
+Purpose: Present the human-reviewed findings and linked recommendations.
+Draw on: Confirmed analysis record.
+Limitations: No recommendations are linked yet.
+END SECTION
+END OUTLINE
+TEXT)
+        ->assertSet('awaitingReportOutline', false)
+        ->assertSet('reportOutline.title', 'Draft report on implementation')
+        ->assertSee('Provisional report outline')
+        ->assertSee('Purpose and scope')
+        ->assertSee('Create draft report record');
+
+    $component
+        ->call('prepareReportFromOutline')
+        ->assertSet('showAddReportModal', true)
+        ->assertSet('reportTitle', 'Draft report on implementation')
+        ->assertSet('reportType', ReportType::DraftReport->value)
+        ->assertSet('reportStatus', ReportStatus::Draft->value);
+
     $this->assertDatabaseCount('reports', 0);
 });
 

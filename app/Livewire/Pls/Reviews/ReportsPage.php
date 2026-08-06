@@ -17,7 +17,9 @@ use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\On;
 
 class ReportsPage extends Workspace
 {
@@ -56,6 +58,15 @@ class ReportsPage extends Workspace
     public string $governmentResponseReceivedAt = '';
 
     public string $governmentResponseSummary = '';
+
+    public bool $awaitingReportOutline = false;
+
+    public ?string $reportOutlineError = null;
+
+    /**
+     * @var array{title: string, sections: list<array{id: string, title: string, purpose: string, material: string, limitations: string}>}|null
+     */
+    public ?array $reportOutline = null;
 
     public function mount(PlsReview $review): void
     {
@@ -135,8 +146,47 @@ class ReportsPage extends Workspace
     {
         $this->authorize('view', $this->review);
 
-        $this->dispatch('assistant-prompt-requested', prompt: $this->reportOutlinePrompt())
+        $this->awaitingReportOutline = true;
+        $this->reportOutlineError = null;
+        $this->reportOutline = null;
+
+        $this->dispatch('assistant-prompt-requested', prompt: $this->reportOutlinePrompt(), reportOutline: true)
             ->to(AssistantSidebar::class);
+    }
+
+    #[On('report-outline-generated')]
+    public function receiveReportOutline(string $content): void
+    {
+        $this->reportOutline = $this->parseReportOutline($content);
+        $this->awaitingReportOutline = false;
+        $this->reportOutlineError = null;
+    }
+
+    #[On('report-outline-failed')]
+    public function handleReportOutlineFailure(): void
+    {
+        $this->awaitingReportOutline = false;
+        $this->reportOutlineError = __('PLSAssist could not prepare a report outline just now. You can try again.');
+    }
+
+    public function dismissReportOutline(): void
+    {
+        $this->authorize('view', $this->review);
+
+        $this->reportOutline = null;
+        $this->reportOutlineError = null;
+    }
+
+    public function prepareReportFromOutline(): void
+    {
+        $this->authorizeReviewMutation();
+
+        if ($this->reportOutline === null) {
+            return;
+        }
+
+        $this->prepareReportCreate(ReportType::DraftReport->value, ReportStatus::Draft->value);
+        $this->reportTitle = $this->reportOutline['title'];
     }
 
     public function requestFindingsSectionDraft(): void
@@ -742,7 +792,69 @@ class ReportsPage extends Workspace
 
     private function reportOutlinePrompt(): string
     {
-        return 'Using the current review scope and the confirmed findings and recommendations in the review record, propose a practical PLS report outline. For each section, state its purpose and the confirmed material it should draw on. Flag evidence limitations or missing sections. Do not create, update, publish, or describe this as a final report. Keep the outline as a draft for review-team decisions.';
+        return 'Using the current review scope and the confirmed findings and recommendations in the review record, propose a practical PLS report outline. Do not create, update, publish, or describe this as a final report. Keep the outline as a draft for review-team decisions. Return exactly this format:\n\nREPORT OUTLINE:\nReport title: <working title>\nSECTION:\nTitle: <section title>\nPurpose: <what this section should do>\nDraw on: <confirmed findings, recommendations, or source records to use>\nLimitations: <gaps or checks for the review team>\nEND SECTION\nEND OUTLINE\n\nInclude up to seven sections.';
+    }
+
+    /**
+     * @return array{title: string, sections: list<array{id: string, title: string, purpose: string, material: string, limitations: string}>}
+     */
+    private function parseReportOutline(string $content): array
+    {
+        $title = $this->reportOutlineField($content, 'Report title') ?: __('Draft PLS report');
+        $sections = preg_split('/(?:^|\n)SECTION:\s*/i', trim($content)) ?: [];
+        $outlineSections = [];
+
+        foreach ($sections as $section) {
+            $section = trim((string) preg_replace('/(?:\nEND (?:SECTION|OUTLINE)\s*)+$/i', '', $section));
+
+            if ($section === '') {
+                continue;
+            }
+
+            $sectionTitle = $this->reportOutlineField($section, 'Title');
+            $purpose = $this->reportOutlineField($section, 'Purpose');
+
+            if ($sectionTitle === '' || $purpose === '') {
+                continue;
+            }
+
+            $outlineSections[] = [
+                'id' => (string) Str::uuid(),
+                'title' => $sectionTitle,
+                'purpose' => $purpose,
+                'material' => $this->reportOutlineField($section, 'Draw on'),
+                'limitations' => $this->reportOutlineField($section, 'Limitations'),
+            ];
+        }
+
+        if ($outlineSections === []) {
+            $outlineSections[] = [
+                'id' => (string) Str::uuid(),
+                'title' => __('Draft outline for review'),
+                'purpose' => trim($content),
+                'material' => '',
+                'limitations' => __('Check and structure this draft before using it in a report record.'),
+            ];
+        }
+
+        return [
+            'title' => $title,
+            'sections' => array_slice($outlineSections, 0, 7),
+        ];
+    }
+
+    private function reportOutlineField(string $content, string $label): string
+    {
+        $labels = ['Report title', 'SECTION', 'Title', 'Purpose', 'Draw on', 'Limitations', 'END SECTION', 'END OUTLINE'];
+        $otherLabels = array_values(array_filter($labels, fn (string $candidate): bool => $candidate !== $label));
+        $followingLabels = implode('|', array_map(fn (string $candidate): string => preg_quote($candidate, '/'), $otherLabels));
+        $pattern = '/(?:^|\n)'.preg_quote($label, '/').':\s*(.*?)(?=\n(?:'.$followingLabels.'):\s*|\z)/is';
+
+        preg_match($pattern, $content, $matches);
+
+        return isset($matches[1])
+            ? trim(preg_replace('/\n{3,}/', "\n\n", trim($matches[1])) ?? '')
+            : '';
     }
 
     private function findingsSectionPrompt(): string

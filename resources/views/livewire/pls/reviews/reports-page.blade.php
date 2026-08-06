@@ -63,7 +63,7 @@
                         <flux:badge size="sm" color="amber">{{ __('Human review required') }}</flux:badge>
                     </div>
                     <flux:text class="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-                        {{ __('Build report drafts from the review scope and confirmed analysis. PLSAssist keeps all drafting in the assistant so the review team can check the wording and sources before adding it to a working report.') }}
+                        {{ __('Build report drafts from the review scope and confirmed analysis. Report outlines appear below for the review team to check before creating a working report record.') }}
                     </flux:text>
                 </div>
 
@@ -76,6 +76,74 @@
                     </flux:button>
                 </div>
             </div>
+
+            @if ($awaitingReportOutline || $reportOutlineError || $reportOutline)
+                <section class="border-t border-zinc-200 pt-5 dark:border-zinc-800" aria-live="polite">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <flux:heading size="lg">{{ __('Provisional report outline') }}</flux:heading>
+                                <flux:badge size="sm" color="amber">{{ __('Human review required') }}</flux:badge>
+                            </div>
+                            <flux:text class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                                {{ __('This outline is not a report record or publication. Review the structure and gaps before using it to create a working report.') }}
+                            </flux:text>
+                        </div>
+
+                        @if ($reportOutline)
+                            <div class="flex flex-wrap gap-2">
+                                <flux:button variant="primary" size="sm" icon="document-plus" wire:click="prepareReportFromOutline">
+                                    {{ __('Create draft report record') }}
+                                </flux:button>
+                                <flux:button variant="ghost" size="sm" icon="x-mark" wire:click="dismissReportOutline">
+                                    {{ __('Dismiss') }}
+                                </flux:button>
+                            </div>
+                        @endif
+                    </div>
+
+                    @if ($awaitingReportOutline)
+                        <div class="mt-4 flex items-center gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-4 text-sm text-violet-900 dark:border-violet-400/20 dark:bg-violet-500/10 dark:text-violet-100">
+                            <flux:icon icon="sparkles" class="size-5 animate-pulse text-violet-600 dark:text-violet-300" />
+                            <span>{{ __('PLSAssist is preparing a provisional report outline from the saved review record...') }}</span>
+                        </div>
+                    @elseif ($reportOutlineError)
+                        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-900 dark:border-rose-400/20 dark:bg-rose-500/10 dark:text-rose-100">
+                            <span>{{ $reportOutlineError }}</span>
+                            <flux:button variant="filled" size="sm" wire:click="requestReportOutline">{{ __('Try again') }}</flux:button>
+                        </div>
+                    @elseif ($reportOutline)
+                        <div class="mt-5 overflow-hidden rounded-xl border border-violet-200 dark:border-violet-400/20">
+                            <div class="border-b border-violet-200 bg-violet-50/70 px-4 py-3 dark:border-violet-400/15 dark:bg-violet-500/10">
+                                <span class="text-base font-semibold text-zinc-900 dark:text-white">{{ $reportOutline['title'] }}</span>
+                            </div>
+                            <ol class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                                @foreach ($reportOutline['sections'] as $index => $section)
+                                    <li wire:key="report-outline-section-{{ $section['id'] }}" class="grid gap-4 px-4 py-4 lg:grid-cols-[2.5rem_minmax(0,1fr)_minmax(15rem,0.7fr)]">
+                                        <span class="flex size-8 items-center justify-center rounded-full bg-violet-100 text-sm font-semibold text-violet-800 dark:bg-violet-500/15 dark:text-violet-300">{{ $index + 1 }}</span>
+                                        <div>
+                                            <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ $section['title'] }}</h3>
+                                            <p class="mt-1 text-sm leading-6 text-zinc-700 dark:text-zinc-300 whitespace-pre-line">{{ $section['purpose'] }}</p>
+                                        </div>
+                                        <div class="space-y-3 border-t border-zinc-200 pt-3 lg:border-t-0 lg:border-l lg:pl-4 lg:pt-0 dark:border-zinc-800">
+                                            <div>
+                                                <span class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Draw on') }}</span>
+                                                <p class="mt-1 text-sm leading-5 text-zinc-700 dark:text-zinc-300 whitespace-pre-line">{{ $section['material'] ?: __('Confirm the relevant review record before drafting.') }}</p>
+                                            </div>
+                                            @if ($section['limitations'])
+                                                <div>
+                                                    <span class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Checks and gaps') }}</span>
+                                                    <p class="mt-1 text-sm leading-5 text-zinc-700 dark:text-zinc-300 whitespace-pre-line">{{ $section['limitations'] }}</p>
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </li>
+                                @endforeach
+                            </ol>
+                        </div>
+                    @endif
+                </section>
+            @endif
 
             <div class="flex flex-wrap gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
                 <flux:button variant="ghost" size="sm" icon="document-text" wire:click="requestFindingsSectionDraft" :disabled="$review->findings->isEmpty()">
