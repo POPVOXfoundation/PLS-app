@@ -92,18 +92,7 @@ class AnalyzeLegislationSource
         $aiExtraction = $this->extractWithAi($document, $rawText, $aiError);
 
         if ($aiExtraction === null) {
-            return $this->buildFailureResult(
-                document: $document,
-                status: 'failed',
-                warnings: [
-                    $this->aiFailureWarning($aiError),
-                ],
-                extractionDriver: $extractionContext['extraction_driver'] ?? null,
-                extractionMethod: $extractionContext['extraction_method'] ?? null,
-                extractionMetadata: $extractionContext['extraction_metadata'] ?? [],
-                rawText: $rawText,
-                pollAfterSeconds: $extractionContext['poll_after_seconds'] ?? null,
-            );
+            $aiExtraction = $this->fallbackAiExtraction($document, $rawText);
         }
 
         return [
@@ -341,7 +330,7 @@ class AnalyzeLegislationSource
     private function fallbackTitle(Document $document, string $rawText): string
     {
         $titleLine = collect(preg_split("/\R/", $rawText) ?: [])
-            ->map(fn (string $line): string => $this->normalizeTitle($line))
+            ->map(fn (string $line): string => $this->normalizeTitle((string) preg_replace('/^[A-Z][A-Z\s]{2,}:\s*/', '', $line)))
             ->first(fn (string $line): bool => $line !== ''
                 && mb_strlen($line) <= 255
                 && preg_match('/\b(bill|act|regulation|ordinance|rules?|order)\b/i', $line) === 1);
@@ -369,6 +358,44 @@ class AnalyzeLegislationSource
         return in_array($legislationType, [LegislationType::Regulation, LegislationType::Ordinance], true)
             ? ReviewLegislationRelationshipType::Delegated
             : ReviewLegislationRelationshipType::Primary;
+    }
+
+    /**
+     * @return array{
+     *     title: string,
+     *     short_title: string|null,
+     *     legislation_type: string,
+     *     date_enacted: string|null,
+     *     summary: string|null,
+     *     key_themes: list<string>,
+     *     notable_excerpts: list<string>,
+     *     important_dates: list<string>,
+     *     scrutiny_preparation: array{milestones: list<array{title: string, detail: string, timing: string|null, source_text: string}>, implementation_obligations: list<array{title: string, detail: string, timing: string|null, source_text: string}>, parliamentary_follow_up: list<array{title: string, detail: string, timing: string|null, source_text: string}>, records_to_locate: list<array{title: string, detail: string, timing: string|null, source_text: string}>},
+     *     stakeholder_suggestions: list<array<string, mixed>>,
+     *     relationship_type: string,
+     *     warnings: list<string>
+     * }
+     */
+    private function fallbackAiExtraction(Document $document, string $rawText): array
+    {
+        $legislationType = $this->fallbackLegislationType($document, $rawText);
+
+        return [
+            'title' => $this->fallbackTitle($document, $rawText),
+            'short_title' => null,
+            'legislation_type' => $legislationType->value,
+            'date_enacted' => null,
+            'summary' => null,
+            'key_themes' => [],
+            'notable_excerpts' => [],
+            'important_dates' => [],
+            'scrutiny_preparation' => $this->emptyScrutinyPreparation(),
+            'stakeholder_suggestions' => [],
+            'relationship_type' => $this->fallbackRelationshipType($legislationType)->value,
+            'warnings' => [
+                'PLSAssist could not complete the AI record for this source. A basic editable draft has been prepared from the extracted text. Review and complete it before saving.',
+            ],
+        ];
     }
 
     private function aiPrompt(Document $document, string $rawText): string

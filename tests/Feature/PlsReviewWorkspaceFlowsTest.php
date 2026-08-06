@@ -772,7 +772,7 @@ test('large legislation source prompts are trimmed before the ai extraction step
         ->assertSee('Southern Deep Port Development Facility Bill, 2024');
 });
 
-test('ai extraction failures do not fall back to heuristic legislation parsing', function () {
+test('ai extraction failures become editable legislation drafts after text extraction', function () {
     Storage::fake('s3');
     Queue::fake();
     config()->set('pls_assistant.assistant_sources.extractor', 'textract');
@@ -820,14 +820,17 @@ test('ai extraction failures do not fall back to heuristic legislation parsing',
 
     $component
         ->call('refreshPendingAnalyses')
-        ->assertSee('Needs attention')
-        ->assertSee('AI record step failed')
-        ->assertDontSee('Needs review')
-        ->assertDontSee('Review record');
+        ->assertSee('Needs review')
+        ->assertSee('basic editable draft')
+        ->call('startReviewDocument', $document->id)
+        ->assertSet('analysisTitle', 'SOUTHERN DEEP PORT DEVELOPMENT FACILITY BILL, 2024')
+        ->assertSet('analysisType', LegislationType::Act->value)
+        ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
+        ->assertSee('Review record');
 
-    expect(data_get($document->fresh()->metadata, 'legislation_analysis.status'))->toBe('failed')
+    expect(data_get($document->fresh()->metadata, 'legislation_analysis.status'))->toBe('needs_review')
         ->and(data_get($document->fresh()->metadata, 'legislation_analysis.summary'))->toBe('')
-        ->and(data_get($document->fresh()->metadata, 'legislation_analysis.title'))->toBe('Southern Deep Port Development Facility Bill 2024');
+        ->and(data_get($document->fresh()->metadata, 'legislation_analysis.title'))->toBe('SOUTHERN DEEP PORT DEVELOPMENT FACILITY BILL, 2024');
 });
 
 test('failed legislation analysis can be retried on the same source row', function () {
