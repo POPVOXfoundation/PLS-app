@@ -1887,6 +1887,38 @@ test('report assistance keeps drafting in the assistant for human review', funct
     $this->assertDatabaseCount('reports', 0);
 });
 
+test('report page accepts institutional templates as drafting guidance', function () {
+    Storage::fake('local');
+    Queue::fake();
+    config()->set('pls_assistant.assistant_sources.extractor', 'local');
+    config()->set('pls_assistant.assistant_sources.source_disk', 'local');
+
+    $review = plsReview([
+        'title' => 'Review using a parliamentary report format',
+    ]);
+
+    Livewire::test(ReportsPage::class, ['review' => $review])
+        ->assertSee('Institutional template or PLS framework')
+        ->set('reportTemplateUploads', [
+            UploadedFile::fake()->create('committee-pls-template.docx', 12, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+        ])
+        ->assertHasNoErrors()
+        ->assertSee('Committee Pls Template')
+        ->call('requestReportOutline')
+        ->assertDispatched('assistant-prompt-requested');
+
+    $document = Document::query()
+        ->where('pls_review_id', $review->id)
+        ->where('document_type', DocumentType::DraftReport)
+        ->first();
+
+    expect($document)->not->toBeNull()
+        ->and(data_get($document->metadata, 'purpose'))->toBe('report_template')
+        ->and($document->summary)->toContain('Institutional PLS framework');
+
+    Queue::assertPushed(ProcessReviewDocument::class);
+});
+
 test('report outlines are displayed for review before creating a report record', function () {
     $review = plsReview([
         'title' => 'Review of report outline drafting',

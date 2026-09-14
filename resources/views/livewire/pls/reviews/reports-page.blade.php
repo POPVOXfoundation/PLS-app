@@ -56,6 +56,98 @@
         </flux:card>
 
         <flux:card class="space-y-5">
+            <div
+                x-data="{ uploading: false, progress: 0 }"
+                x-on:livewire-upload-start="uploading = true; progress = 0"
+                x-on:livewire-upload-finish="uploading = false; progress = 100"
+                x-on:livewire-upload-cancel="uploading = false; progress = 0"
+                x-on:livewire-upload-error="uploading = false"
+                x-on:livewire-upload-progress="progress = $event.detail.progress"
+                class="space-y-5"
+            >
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div class="max-w-2xl space-y-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <flux:heading size="lg">{{ __('Institutional template or PLS framework') }}</flux:heading>
+                            <flux:badge size="sm" color="violet">{{ __('Drafting guidance') }}</flux:badge>
+                        </div>
+                        <flux:text class="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+                            {{ __('Upload your parliament’s PLS report template, framework, methodology note, or a prior sample report. PLSAssist will use it to align report outlines and drafts with your institution’s structure.') }}
+                        </flux:text>
+                    </div>
+
+                    <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('PDF, DOCX, TXT, or MD') }}</flux:text>
+                </div>
+
+                @can('update', $review)
+                    <flux:file-upload
+                        wire:model="reportTemplateUploads"
+                        accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+                        multiple
+                        :label="__('Upload template or framework')"
+                    >
+                        <flux:file-upload.dropzone
+                            class="!min-h-20 !py-3"
+                            :heading="__('Drag template here or choose files')"
+                            :text="__('PDF, DOCX, TXT, or MD, 50 MB max')"
+                        />
+                    </flux:file-upload>
+
+                    <flux:field>
+                        <flux:error name="reportTemplateUploads" />
+                        <flux:error name="reportTemplateUploads.*" />
+                    </flux:field>
+
+                    <flux:field x-cloak x-show="uploading" class="space-y-2">
+                        <div class="flex items-center justify-between gap-3">
+                            <flux:label>{{ __('Uploading template') }}</flux:label>
+                            <flux:text color="sky">
+                                <span x-text="`${progress}%`"></span>
+                            </flux:text>
+                        </div>
+
+                        <flux:progress value="0" color="sky" x-bind:value="progress" />
+
+                        <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                            {{ __('PLSAssist will read the template and use it as structure and style guidance for report assistance.') }}
+                        </flux:text>
+                    </flux:field>
+
+                    <div class="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400" wire:loading.flex wire:target="reportTemplateUploads">
+                        <flux:icon icon="arrow-path" class="size-4 animate-spin text-sky-500" />
+                        <span>{{ __('Adding template to the review record...') }}</span>
+                    </div>
+                @else
+                    <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                        {{ __('You can review uploaded templates here, but only contributors can add new files.') }}
+                    </flux:text>
+                @endcan
+
+                @if ($reportTemplateDocuments->isNotEmpty())
+                    <div class="divide-y divide-zinc-200 rounded-xl border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+                        @foreach ($reportTemplateDocuments as $templateDocument)
+                            <div class="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $templateDocument->title }}</p>
+                                    <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
+                                        {{ __('Uploaded :date', ['date' => $templateDocument->created_at?->toFormattedDateString() ?? __('recently')]) }}
+                                    </flux:text>
+                                </div>
+                                <flux:badge size="sm" color="violet">{{ __('Template guidance') }}</flux:badge>
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <div class="rounded-xl border border-dashed border-zinc-200 px-4 py-3 dark:border-zinc-800">
+                        <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
+                            {{ __('No institutional template is uploaded yet. Without one, PLSAssist will use standard PLS report structure and flag that local formatting may need review.') }}
+                        </flux:text>
+                    </div>
+                @endif
+            </div>
+        </flux:card>
+
+        <flux:card class="space-y-5">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div class="max-w-2xl space-y-1">
                     <div class="flex flex-wrap items-center gap-2">

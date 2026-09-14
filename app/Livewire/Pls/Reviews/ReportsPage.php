@@ -2,6 +2,8 @@
 
 namespace App\Livewire\Pls\Reviews;
 
+use App\Domain\Documents\Actions\PersistReviewDocumentState;
+use App\Domain\Documents\Actions\StoreReviewDocumentMetadata;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Reporting\Actions\StoreGovernmentResponse;
@@ -13,6 +15,7 @@ use App\Domain\Reporting\Enums\ReportType;
 use App\Domain\Reporting\GovernmentResponse;
 use App\Domain\Reporting\Report;
 use App\Domain\Reviews\PlsReview;
+use App\Jobs\ProcessReviewDocument;
 use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -20,10 +23,15 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\On;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Livewire\WithFileUploads;
 
 class ReportsPage extends Workspace
 {
     use AuthorizesRequests;
+    use WithFileUploads;
+
+    private const MAX_UPLOAD_KB = 51200;
 
     protected string $workspace = 'reports';
 
@@ -36,6 +44,11 @@ class ReportsPage extends Workspace
     public bool $showAddGovernmentResponseModal = false;
 
     public string $reportDraftRequest = '';
+
+    /**
+     * @var array<int, TemporaryUploadedFile>
+     */
+    public array $reportTemplateUploads = [];
 
     public string $reportTitle = '';
 
@@ -106,7 +119,68 @@ class ReportsPage extends Workspace
                 ? null
                 : $this->latestGovernmentResponseForReport($selectedGovernmentResponseReport),
             'selectedGovernmentResponseDocument' => $this->selectedDocument($review, $this->governmentResponseDocumentId),
+            'reportTemplateDocuments' => $this->reportTemplateDocuments($review),
         ], $review);
+    }
+
+    public function updatedReportTemplateUploads(): void
+    {
+        $this->authorizeReviewMutation();
+
+        if ($this->reportTemplateUploads === []) {
+            return;
+        }
+
+        $this->validate([
+            'reportTemplateUploads' => ['array', 'min:1'],
+            'reportTemplateUploads.*' => ['file', 'mimes:pdf,docx,txt,md', 'max:'.self::MAX_UPLOAD_KB],
+        ], [
+            'reportTemplateUploads.*.max' => __('Choose files that are 50 MB or smaller.'),
+            'reportTemplateUploads.*.mimes' => __('Choose PDF, DOCX, TXT, or MD files only.'),
+        ]);
+
+        foreach ($this->reportTemplateUploads as $upload) {
+            $storedReview = app(StoreReviewDocumentMetadata::class)->store([
+                'pls_review_id' => $this->review->id,
+                'title' => $this->documentTitleFromUpload($upload),
+                'document_type' => DocumentType::DraftReport->value,
+                'storage_path' => null,
+                'file' => $upload,
+                'mime_type' => null,
+                'file_size' => null,
+                'summary' => __('Institutional PLS framework, report template, or sample report uploaded to guide drafting.'),
+                'metadata' => [
+                    'disk' => $this->documentStorageDisk(),
+                    'original_name' => $upload->getClientOriginalName(),
+                    'purpose' => 'report_template',
+                ],
+            ]);
+
+            $this->review = $storedReview->fresh();
+            $document = $this->review->documents()
+                ->where('document_type', DocumentType::DraftReport->value)
+                ->where('metadata->purpose', 'report_template')
+                ->latest('id')
+                ->first();
+
+            if (! $document instanceof Document) {
+                $this->addError('reportTemplateUploads', __('One of the uploaded templates could not be stored.'));
+
+                continue;
+            }
+
+            app(PersistReviewDocumentState::class)->markQueued($document);
+            ProcessReviewDocument::dispatch($document->id);
+        }
+
+        $this->reportTemplateUploads = [];
+        $this->resetValidation(['reportTemplateUploads', 'reportTemplateUploads.*']);
+        $this->review = $this->loadReview();
+
+        $this->dispatchWorkspaceToast(Toast::success(
+            __('Template uploaded'),
+            __('PLSAssist will read the template and use it as drafting guidance in report assistance.'),
+        ));
     }
 
     public function prepareReportCreate(?string $reportType = null, ?string $reportStatus = null): void
@@ -794,7 +868,9 @@ class ReportsPage extends Workspace
 
     private function reportOutlinePrompt(): string
     {
-        return 'Prepare a provisional PLS report outline from the saved review record. Do not create, update, or publish a report record. Adapt this standard PLS structure to the evidence available: executive summary; mandate, scope, and scrutiny questions; legislative intent and implementation architecture; methodology and evidence base; implementation and delivery; confirmed findings; recommendations and expected government response; publication and follow-up. Use only material in the review record. Do not invent findings, recommendations, sources, institutions, or citations. For every section, clearly identify what the review team can draw on and what still needs checking. Keep this as a working structure for human review. Return exactly this format:\n\nREPORT OUTLINE:\nReport title: <working title>\nSECTION:\nTitle: <section title>\nPurpose: <what this section should do in a PLS report>\nDraw on: <specific saved findings, recommendations, legislation, evidence, consultations, or records>\nLimitations: <gaps or checks for the review team>\nEND SECTION\nEND OUTLINE\n\nInclude up to eight sections.';
+        $templateContext = $this->reportTemplateContext($this->loadReview());
+
+        return "Prepare a provisional PLS report outline from the saved review record. Do not create, update, or publish a report record. {$templateContext} Adapt this standard PLS structure to the evidence available: executive summary; mandate, scope, and scrutiny questions; legislative intent and implementation architecture; methodology and evidence base; implementation and delivery; confirmed findings; recommendations and expected government response; publication and follow-up. Use only material in the review record. Do not invent findings, recommendations, sources, institutions, or citations. For every section, clearly identify what the review team can draw on and what still needs checking. Keep this as a working structure for human review. Return exactly this format:\n\nREPORT OUTLINE:\nReport title: <working title>\nSECTION:\nTitle: <section title>\nPurpose: <what this section should do in a PLS report>\nDraw on: <specific saved findings, recommendations, legislation, evidence, consultations, or template/framework records>\nLimitations: <gaps or checks for the review team>\nEND SECTION\nEND OUTLINE\n\nInclude up to eight sections.";
     }
 
     /**
@@ -857,6 +933,7 @@ class ReportsPage extends Workspace
         );
         $findingCount = $review->findings->count();
         $recommendationCount = $review->recommendations->count();
+        $templateDocuments = $this->reportTemplateDocuments($review);
 
         $sections = [
             [
@@ -875,7 +952,7 @@ class ReportsPage extends Workspace
                 'title' => __('Mandate, scope, and scrutiny questions'),
                 'purpose' => __('Set out why the review was undertaken, the legislation and objectives under review, the jurisdiction and period covered, and the questions guiding scrutiny.'),
                 'material' => filled($review->description)
-                    ? $review->description
+                    ? trim($review->description."\n\n".$this->templateSummaryForOutline($templateDocuments))
                     : __('The review record does not yet include a written purpose and scope.'),
                 'limitations' => filled($review->description)
                     ? __('Check that the scope identifies the intended outcomes and any exclusions from the inquiry.')
@@ -897,7 +974,9 @@ class ReportsPage extends Workspace
                     'submissions' => trans_choice('{0} No written submissions are saved.|{1} One written submission is saved.|[2,*] :count written submissions are saved.', $review->submissions->count(), ['count' => $review->submissions->count()]),
                     'consultations' => trans_choice('{0} No consultation materials are saved.|{1} One consultation material is saved.|[2,*] :count consultation materials are saved.', $consultationMaterialCount, ['count' => $consultationMaterialCount]),
                 ]),
-                'limitations' => __('Record the evidence-selection approach, consultation coverage, time period, and material gaps or limitations.'),
+                'limitations' => $templateDocuments->isNotEmpty()
+                    ? __('Use the uploaded institutional framework or sample report to align section order, headings, and required methodology notes.')
+                    : __('Record the evidence-selection approach, consultation coverage, time period, and material gaps or limitations.'),
             ],
             [
                 'title' => __('Implementation and delivery'),
@@ -985,20 +1064,66 @@ class ReportsPage extends Workspace
 
     private function findingsSectionPrompt(): string
     {
-        return 'Draft a report section that presents the confirmed findings and associated recommendations currently recorded in this review. Preserve their substance and evidence limitations, distinguish findings from recommendations, and use cautious report language. Mention the source record where it is available, but do not invent citations, add new findings, or present the report as final. End with a short list of points the review team should verify before using the draft.';
+        return 'Draft a report section that presents the confirmed findings and associated recommendations currently recorded in this review. '.$this->reportTemplateContext($this->loadReview()).' Preserve their substance and evidence limitations, distinguish findings from recommendations, and use cautious report language. Mention the source record where it is available, but do not invent citations, add new findings, or present the report as final. End with a short list of points the review team should verify before using the draft.';
     }
 
     private function reportCoveragePrompt(): string
     {
-        return 'Check the current review record for report-drafting readiness. Compare the review scope, confirmed findings, recommendations, evidence record, consultations, and report records. Identify the strongest available material, missing sections or evidence, and questions the review team should resolve before publishing. Do not create a report, make new findings, or treat draft material as final.';
+        return 'Check the current review record for report-drafting readiness. '.$this->reportTemplateContext($this->loadReview()).' Compare the review scope, confirmed findings, recommendations, evidence record, consultations, uploaded templates or frameworks, and report records. Identify the strongest available material, missing sections or evidence, and questions the review team should resolve before publishing. Do not create a report, make new findings, or treat draft material as final.';
     }
 
     private function customReportDraftPrompt(string $request): string
     {
         return sprintf(
-            'The review team needs help with this report drafting task: "%s". Use only the current review record, especially the confirmed findings and recommendations. Provide a clearly labelled draft with any source limitations or unresolved questions. Do not create or update a report record, add new findings, invent citations, or present the output as final publication language.',
+            'The review team needs help with this report drafting task: "%s". %s Use only the current review record, especially the confirmed findings, recommendations, and any uploaded parliamentary template or framework. Provide a clearly labelled draft with any source limitations or unresolved questions. Do not create or update a report record, add new findings, invent citations, or present the output as final publication language.',
             $request,
+            $this->reportTemplateContext($this->loadReview()),
         );
+    }
+
+    /**
+     * @return EloquentCollection<int, Document>
+     */
+    private function reportTemplateDocuments(PlsReview $review): EloquentCollection
+    {
+        return $review->documents
+            ->filter(fn (Document $document): bool => data_get($document->metadata, 'purpose') === 'report_template')
+            ->sortByDesc(fn (Document $document): int => $document->updated_at?->timestamp ?? $document->created_at?->timestamp ?? 0)
+            ->values();
+    }
+
+    private function reportTemplateContext(PlsReview $review): string
+    {
+        $templates = $this->reportTemplateDocuments($review);
+
+        if ($templates->isEmpty()) {
+            return 'If no institutional PLS template or sample report is uploaded, use the standard PLS structure and flag that the review team may need to adapt it to its parliament’s format.';
+        }
+
+        $titles = $templates
+            ->take(3)
+            ->pluck('title')
+            ->filter()
+            ->implode('; ');
+
+        return sprintf(
+            'The review includes uploaded institutional PLS template/framework material%s. Treat those files as formatting and structure guidance for report drafting. Follow their headings, required sections, tone, and ordering where they are clear, while keeping all substantive claims grounded in the review record.',
+            $titles === '' ? '' : ': '.$titles,
+        );
+    }
+
+    /**
+     * @param  EloquentCollection<int, Document>  $templates
+     */
+    private function templateSummaryForOutline(EloquentCollection $templates): string
+    {
+        if ($templates->isEmpty()) {
+            return '';
+        }
+
+        return __('Institutional template/framework uploaded: :titles', [
+            'titles' => $templates->take(3)->pluck('title')->filter()->implode('; '),
+        ]);
     }
 
     /**
@@ -1054,5 +1179,36 @@ class ReportsPage extends Workspace
             'governmentResponseReceivedAt',
             'governmentResponseSummary',
         ]);
+    }
+
+    private function documentTitleFromUpload(TemporaryUploadedFile $upload): string
+    {
+        $baseName = pathinfo($upload->getClientOriginalName(), PATHINFO_FILENAME);
+        $baseName = preg_replace('/[_-][a-f0-9]{8,}$/i', '', $baseName) ?? $baseName;
+
+        return Str::of($baseName)
+            ->replace(['_', '-'], ' ')
+            ->headline()
+            ->trim()
+            ->toString();
+    }
+
+    private function documentStorageDisk(): string
+    {
+        $configuredSourceDisk = trim((string) config('pls_assistant.assistant_sources.source_disk', ''));
+        $configuredExtractor = (string) config('pls_assistant.assistant_sources.extractor', 'local');
+
+        if (
+            $configuredExtractor === 'textract'
+            && (string) config('filesystems.disks.s3.driver', '') === 's3'
+        ) {
+            return 's3';
+        }
+
+        if ($configuredSourceDisk !== '') {
+            return $configuredSourceDisk;
+        }
+
+        return (string) config('filesystems.default');
     }
 }

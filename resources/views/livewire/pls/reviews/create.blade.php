@@ -59,11 +59,14 @@
                                     wire:model="start_date"
                                     error:class="!block min-h-5 mt-1.5"
                                     :invalid="$errors->has('start_date')"
-                                    :label="__('Start date')"
+                                    :label="__('Review start date')"
                                     :badge="__('Optional')"
                                     type="date"
                                 />
                             </div>
+                            <flux:text class="-mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                                {{ __('Use this for when the PLS review or inquiry begins. The date the Act was passed, commenced, or reviewed can be captured later with the legislation record.') }}
+                            </flux:text>
                         </section>
 
                         <section class="space-y-4 border-t border-zinc-200/80 pt-6 dark:border-zinc-800">
@@ -73,7 +76,7 @@
                                     <flux:heading size="lg">{{ __('Place the inquiry') }}</flux:heading>
                                 </div>
                                 <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                                    {{ __('This keeps the workspace connected to the right country, legislature, and committee or office.') }}
+                                    {{ __('This keeps the workspace connected to the right country, parliament or legislature, and committee or office.') }}
                                 </flux:text>
                             </div>
 
@@ -162,12 +165,12 @@
 
                                 @if ($usingSingleLegislature && $selectedLegislature)
                                     <div class="space-y-1">
-                                        <flux:label>{{ __('Legislature') }}</flux:label>
+                                        <flux:label>{{ __('Parliament or legislature') }}</flux:label>
                                         <div class="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-white">
                                             {{ $selectedLegislature->name }}
                                         </div>
                                         <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
-                                            {{ __('Only one matching legislature is available, so PLSAssist will use it automatically.') }}
+                                            {{ __('Only one matching parliament or legislature is available, so PLSAssist will use it automatically.') }}
                                         </flux:text>
                                     </div>
                                 @else
@@ -179,16 +182,16 @@
                                         label:class="!opacity-100 !text-zinc-800 dark:!text-white"
                                         error:class="!block min-h-5 mt-1.5"
                                         :invalid="$errors->has('legislature_id') || $errors->has('new_legislature_name')"
-                                        :label="__('Legislature')"
+                                        :label="__('Parliament or legislature')"
                                         :badge="__('Required')"
                                         :placeholder="$scope === 'national'
-                                            ? __('Search national legislatures')
+                                            ? __('Search national parliaments or legislatures')
                                             : ($scope === 'subnational'
-                                            ? (($creating_jurisdiction || $selectedSubnationalJurisdiction) ? __('Search or create a legislature') : __('Choose or create the jurisdiction first'))
+                                            ? (($creating_jurisdiction || $selectedSubnationalJurisdiction) ? __('Search or create a parliament, assembly, or legislature') : __('Choose or create the jurisdiction first'))
                                             : __('Choose the inquiry scope first'))"
                                         :empty="$scope === 'national'
-                                            ? __('No national legislatures found for this country.')
-                                            : __('No legislatures found for this sub-national context.')"
+                                            ? __('No national parliaments or legislatures found for this country.')
+                                            : __('No parliaments or legislatures found for this sub-national context.')"
                                         :disabled="$scope === '' || ($scope === 'subnational' && ! $creating_jurisdiction && ! $selectedSubnationalJurisdiction)"
                                     >
                                         <x-slot name="input">
@@ -196,15 +199,15 @@
                                                 wire:model.live="legislature_search"
                                                 :invalid="$errors->has('legislature_id') || $errors->has('new_legislature_name')"
                                                 :placeholder="$scope === 'national'
-                                                    ? __('Search national legislatures')
-                                                : ($scope === 'subnational' ? __('Search or create a legislature') : __('Choose the inquiry scope first'))"
+                                                    ? __('Search national parliaments or legislatures')
+                                                : ($scope === 'subnational' ? __('Search or create a parliament, assembly, or legislature') : __('Choose the inquiry scope first'))"
                                             />
                                         </x-slot>
 
                                         <x-slot name="empty">
                                             @if ($scope === 'national')
                                                 <flux:select.option.empty>
-                                                    {{ __('No national legislatures found for this country.') }}
+                                                    {{ __('No national parliaments or legislatures found for this country.') }}
                                                 </flux:select.option.empty>
                                             @else
                                                 <flux:select.option.empty class="hidden" />
@@ -219,7 +222,7 @@
 
                                         @if ($scope === 'subnational' && ($creating_jurisdiction || $selectedSubnationalJurisdiction) && mb_strlen(trim($legislature_search)) >= 1)
                                             <flux:select.option.create wire:click="createLegislature" min-length="1">
-                                                {{ __('Create legislature') }}
+                                                {{ __('Create parliament or legislature') }}
                                             </flux:select.option.create>
                                         @endif
 
@@ -229,7 +232,7 @@
                             </div>
 
                             <div class="rounded-lg border border-zinc-200/80 bg-zinc-50/80 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300">
-                                {{ __('National reviews use the imported legislature list. Sub-national reviews can use an existing legislature or create one inline.') }}
+                                {{ __('National reviews use the imported parliament and legislature list. Sub-national reviews can use an existing parliamentary body or create one inline.') }}
                             </div>
                         </div>
 
@@ -355,7 +358,7 @@
                             </flux:table.row>
                         @endif
                         <flux:table.row>
-                            <flux:table.cell variant="strong">{{ __('Legislature') }}</flux:table.cell>
+                            <flux:table.cell variant="strong">{{ __('Parliament or legislature') }}</flux:table.cell>
                             <flux:table.cell>
                                 {{ $creating_legislature && $new_legislature_name !== '' ? $new_legislature_name : ($selectedLegislature?->name ?? '—') }}
                             </flux:table.cell>

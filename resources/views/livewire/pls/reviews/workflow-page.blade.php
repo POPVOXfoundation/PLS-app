@@ -41,7 +41,7 @@
                     <dd class="mt-1 break-words font-medium text-zinc-900 dark:text-white">{{ $review->assignmentLabel() }}</dd>
                 </div>
                 <div class="min-w-0 border-b border-zinc-200 p-4 dark:border-zinc-800">
-                    <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ __('Legislature') }}</dt>
+                    <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ __('Parliament or legislature') }}</dt>
                     <dd class="mt-1 break-words font-medium text-zinc-900 dark:text-white">{{ $review->legislature?->name ?? __('Not recorded') }}</dd>
                 </div>
                 <div class="min-w-0 border-e border-zinc-200 p-4 dark:border-zinc-800">
@@ -211,7 +211,7 @@
         <form wire:submit="saveReviewDetails" class="space-y-6">
             <div>
                 <flux:heading size="lg">{{ __('Edit review details') }}</flux:heading>
-                <flux:text class="mt-1">{{ __('Keep the working title, scope, and start date accurate as the inquiry takes shape.') }}</flux:text>
+                <flux:text class="mt-1">{{ __('Keep the working title, scope, and review start date accurate as the inquiry takes shape.') }}</flux:text>
             </div>
 
             <flux:input wire:model="reviewTitle" :invalid="$errors->has('reviewTitle')" :label="__('Working title')" />
@@ -224,7 +224,12 @@
                 :placeholder="__('Describe the purpose, scope, and questions the inquiry will explore.')"
             />
 
-            <flux:input wire:model="reviewStartDate" :invalid="$errors->has('reviewStartDate')" :label="__('Start date')" type="date" />
+            <div class="space-y-1">
+                <flux:input wire:model="reviewStartDate" :invalid="$errors->has('reviewStartDate')" :label="__('Review start date')" type="date" />
+                <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
+                    {{ __('Use this for when the PLS review or inquiry begins, not necessarily when the Act was passed or commenced.') }}
+                </flux:text>
+            </div>
 
             <div class="flex justify-end gap-2">
                 <flux:modal.close>

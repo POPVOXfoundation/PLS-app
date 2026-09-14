@@ -9,6 +9,7 @@
     x-data="{
         pendingMessage: '',
         assistantOpen: false,
+        assistantExpanded: false,
         queuePrompt(prompt) {
             this.pendingMessage = prompt;
             this.assistantOpen = true;
@@ -31,13 +32,17 @@
     }"
     x-on:assistant-message-added.window="pendingMessage = ''; assistantOpen = true; scrollToBottom()"
     x-on:assistant-open-requested.window="queuePrompt($event.detail.prompt || '')"
-    class="fixed inset-x-3 bottom-3 z-50 sm:left-auto sm:w-[22rem] xl:right-6 print:hidden"
+    x-bind:class="assistantExpanded
+        ? 'fixed inset-x-3 bottom-3 z-50 sm:left-auto sm:w-[min(46rem,calc(100vw-1.5rem))] xl:right-6 print:hidden'
+        : 'fixed inset-x-3 bottom-3 z-50 sm:left-auto sm:w-[22rem] xl:right-6 print:hidden'"
 >
     <section
         x-show="assistantOpen"
         x-cloak
         x-transition
-        class="mb-3 flex max-h-[58vh] min-h-[22rem] flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_24px_80px_-36px_rgba(15,23,42,0.45)] sm:max-h-[34rem] dark:border-zinc-700 dark:bg-zinc-900"
+        x-bind:class="assistantExpanded
+            ? 'mb-3 flex h-[min(74vh,44rem)] min-h-[28rem] flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_24px_80px_-36px_rgba(15,23,42,0.45)] dark:border-zinc-700 dark:bg-zinc-900'
+            : 'mb-3 flex max-h-[58vh] min-h-[22rem] flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_24px_80px_-36px_rgba(15,23,42,0.45)] sm:max-h-[34rem] dark:border-zinc-700 dark:bg-zinc-900'"
     >
         <div class="border-b border-violet-700 bg-violet-800 px-4 py-2.5">
             <div class="flex items-center justify-between gap-3">
@@ -51,14 +56,27 @@
                     </flux:text>
                 </div>
 
-                <button
-                    type="button"
-                    x-on:click="assistantOpen = false"
-                    class="flex size-8 shrink-0 items-center justify-center rounded-lg text-white/80 hover:bg-white/10 hover:text-white"
-                    aria-label="{{ __('Collapse assistant') }}"
-                >
-                    <flux:icon icon="chevron-down" class="size-4" />
-                </button>
+                <div class="flex shrink-0 items-center gap-1">
+                    <button
+                        type="button"
+                        x-on:click="assistantExpanded = ! assistantExpanded; scrollToBottom()"
+                        class="hidden h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white sm:flex"
+                        x-bind:aria-label="assistantExpanded ? @js(__('Use compact assistant')) : @js(__('Expand assistant'))"
+                    >
+                        <flux:icon icon="arrows-pointing-out" x-show="! assistantExpanded" class="size-4" />
+                        <flux:icon icon="arrows-pointing-in" x-show="assistantExpanded" x-cloak class="size-4" />
+                        <span x-text="assistantExpanded ? @js(__('Compact')) : @js(__('Expand'))"></span>
+                    </button>
+
+                    <button
+                        type="button"
+                        x-on:click="assistantOpen = false"
+                        class="flex size-8 shrink-0 items-center justify-center rounded-lg text-white/80 hover:bg-white/10 hover:text-white"
+                        aria-label="{{ __('Collapse assistant') }}"
+                    >
+                        <flux:icon icon="chevron-down" class="size-4" />
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -212,7 +230,7 @@
                 <flux:composer
                     wire:model="assistantInput"
                     submit="enter"
-                    rows="1"
+                    x-bind:rows="assistantExpanded ? 3 : 1"
                     placeholder="{{ $this->assistantPlaceholder($assistantContext['workspace_key']) }}"
                 >
                     <x-slot:actionsTrailing>
