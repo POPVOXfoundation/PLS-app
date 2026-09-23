@@ -289,6 +289,44 @@ test('workflow tab refuses finding generation before the llm call', function () 
         ->and(DB::table('agent_conversation_messages')->count())->toBe(2);
 });
 
+test('analysis sends provisional findings to the workspace without duplicating them in chat', function () {
+    $review = plsReview([
+        'title' => 'Provisional findings workspace review',
+    ]);
+    $generatedFinding = <<<'TEXT'
+POTENTIAL FINDING:
+Title: Reporting remains incomplete
+Type: implementation gap
+Draft: The available evidence suggests reporting is incomplete.
+Supporting record: Annual report: "Reporting was delayed."
+Limitations: Agency responses have not been recorded.
+Reviewer question: Has the missing report now been published?
+END FINDING
+TEXT;
+
+    ReviewAssistantAgent::fake([$generatedFinding]);
+
+    $component = Livewire::test(AssistantSidebar::class, [
+        'review' => $review,
+        'workspaceKey' => 'analysis',
+    ])->call('sendPrompt', 'Suggest provisional findings. POTENTIAL FINDING:', true);
+
+    expect($component->get('assistantMessages'))->toEqual([
+        [
+            'role' => 'user',
+            'content' => 'Suggest provisional findings',
+        ],
+        [
+            'role' => 'assistant',
+            'content' => 'Provisional findings have been prepared and added to the Analysis workspace for review.',
+        ],
+    ]);
+
+    $component
+        ->assertDispatched('provisional-findings-generated')
+        ->assertDontSee('The available evidence suggests reporting is incomplete.');
+});
+
 test('documents tab refuses unsupported claims about missing documents without support', function () {
     $review = plsReview([
         'title' => 'Sparse document review',

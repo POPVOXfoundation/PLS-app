@@ -133,7 +133,7 @@ class AssistantSidebar extends Component
         }
 
         $this->assistantMessages = $this->conversationMessagesForDisplay();
-        $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox);
+        $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox, (string) $response);
         $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace);
 
         $this->dispatch('assistant-message-added', focus: 'response');
@@ -244,9 +244,10 @@ class AssistantSidebar extends Component
             ->getLatestConversationMessages($this->assistantConversationId, 20)
             ->filter(fn (Message $message): bool => in_array($message->role->value, ['assistant', 'user'], true))
             ->map(fn (Message $message): array => [
-                'content' => $message->role->value === 'assistant'
-                    ? $this->normalizeAssistantMessage((string) $message->content)
-                    : $message->content,
+                'content' => $this->messageContentForDisplay(
+                    $message->role->value,
+                    (string) $message->content,
+                ),
                 'role' => $message->role->value,
             ])
             ->values()
@@ -263,15 +264,17 @@ class AssistantSidebar extends Component
         ];
     }
 
-    private function sendProvisionalFindingsToInbox(bool $sendProvisionalFindingsToInbox): void
+    private function sendProvisionalFindingsToInbox(bool $sendProvisionalFindingsToInbox, ?string $generatedContent = null): void
     {
         if (! $sendProvisionalFindingsToInbox) {
             return;
         }
 
-        $content = collect($this->assistantMessages)
-            ->reverse()
-            ->first(fn (array $message): bool => $message['role'] === 'assistant')['content'] ?? null;
+        $content = $generatedContent ?? (
+            collect($this->assistantMessages)
+                ->reverse()
+                ->first(fn (array $message): bool => $message['role'] === 'assistant')['content'] ?? null
+        );
 
         if (! is_string($content) || trim($content) === '') {
             $this->dispatch('provisional-findings-failed')->to(AnalysisPage::class);
@@ -281,6 +284,19 @@ class AssistantSidebar extends Component
 
         $this->dispatch('provisional-findings-generated', content: $content)
             ->to(AnalysisPage::class);
+    }
+
+    private function messageContentForDisplay(string $role, string $content): string
+    {
+        if ($this->workspaceKey === 'analysis' && str_contains($content, 'POTENTIAL FINDING:')) {
+            return $role === 'assistant'
+                ? __('Provisional findings have been prepared and added to the Analysis workspace for review.')
+                : __('Suggest provisional findings');
+        }
+
+        return $role === 'assistant'
+            ? $this->normalizeAssistantMessage($content)
+            : $content;
     }
 
     private function sendReportOutlineToWorkspace(bool $sendReportOutlineToWorkspace): void
