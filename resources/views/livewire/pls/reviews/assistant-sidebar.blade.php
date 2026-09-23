@@ -29,8 +29,29 @@
                 setTimeout(scroll, 420);
             });
         },
+        scrollToLatestResponse() {
+            $nextTick(() => {
+                const scroll = () => {
+                    if (! this.$refs.messages) {
+                        return;
+                    }
+
+                    const responses = this.$refs.messages.querySelectorAll('[data-message-role="assistant"]');
+                    const latest = responses[responses.length - 1];
+
+                    if (latest) {
+                        this.$refs.messages.scrollTo({ top: Math.max(0, latest.offsetTop - 12), behavior: 'smooth' });
+                    }
+                };
+
+                scroll();
+                requestAnimationFrame(scroll);
+                setTimeout(scroll, 180);
+                setTimeout(scroll, 420);
+            });
+        },
     }"
-    x-on:assistant-message-added.window="pendingMessage = ''; assistantOpen = true; scrollToBottom()"
+    x-on:assistant-message-added.window="pendingMessage = ''; assistantOpen = true; ($event.detail || {}).focus === 'response' ? scrollToLatestResponse() : scrollToBottom()"
     x-on:assistant-open-requested.window="queuePrompt($event.detail.prompt || '')"
     x-bind:class="assistantExpanded
         ? 'fixed inset-x-3 bottom-3 z-50 sm:left-auto sm:w-[min(46rem,calc(100vw-1.5rem))] xl:right-6 print:hidden'
@@ -120,7 +141,7 @@
                 @endif
 
                 @foreach ($assistantMessages as $message)
-                    <div data-message @class([
+                    <div data-message data-message-role="{{ $message['role'] }}" @class([
                         'flex justify-end pl-10' => $message['role'] === 'user',
                         'flex items-start gap-2 pr-2' => $message['role'] === 'assistant',
                     ])>

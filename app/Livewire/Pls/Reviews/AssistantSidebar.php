@@ -93,7 +93,7 @@ class AssistantSidebar extends Component
             $this->assistantMessages = $this->conversationMessagesForDisplay();
             $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox);
             $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace);
-            $this->dispatch('assistant-message-added');
+            $this->dispatch('assistant-message-added', focus: 'response');
 
             return;
         }
@@ -136,7 +136,7 @@ class AssistantSidebar extends Component
         $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox);
         $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace);
 
-        $this->dispatch('assistant-message-added');
+        $this->dispatch('assistant-message-added', focus: 'response');
     }
 
     public function sendPrompt(string $prompt, bool $provisionalFindings = false, bool $reportOutline = false): void
