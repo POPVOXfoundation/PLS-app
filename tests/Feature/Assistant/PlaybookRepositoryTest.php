@@ -3,6 +3,8 @@
 use App\Domain\Assistant\Actions\ImportAssistantTabPlaybooksFromDocs;
 use App\Domain\Assistant\AssistantTabPlaybook;
 use App\Domain\Assistant\AssistantTabPlaybookVersion;
+use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
+use App\Domain\Legislation\Legislation;
 use App\Models\User;
 use App\Support\PlsAssistant\PlaybookRepository;
 use App\Support\PlsAssistant\ReviewAssistantContextBuilder;
@@ -104,6 +106,28 @@ test('context builder uses the active db playbook and changes version metadata w
         ->and($updatedContext['intro'])->toContain('This intro should now come from the active database version.')
         ->and($updatedContext['playbook_version'])->toBe('db:v2:workflow')
         ->and($updatedContext['context'])->toContain('Active tab: Workflow');
+});
+
+test('context builder refreshes legislation that was linked after the assistant mounted', function () {
+    $review = plsReview([
+        'title' => 'Review with newly linked legislation',
+    ]);
+    $review->setRelation('legislation', collect());
+
+    $legislation = Legislation::factory()->create([
+        'jurisdiction_id' => $review->jurisdiction_id,
+        'title' => 'Gender Equality Act 2024',
+    ]);
+    $review->legislation()->attach($legislation->id, [
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+    ]);
+
+    $context = app(ReviewAssistantContextBuilder::class)->build($review, 'analysis');
+
+    expect($context['context'])
+        ->toContain('Linked legislation: 1')
+        ->toContain('Gender Equality Act 2024')
+        ->not->toContain('No legislation is linked to this review.');
 });
 
 test('compiled playbook seed data can be imported without the source docs being present', function () {

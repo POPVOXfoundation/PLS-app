@@ -12,6 +12,7 @@ use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
 use App\Domain\Legislation\Legislation;
 use App\Domain\Reviews\PlsReview;
 use App\Jobs\ProcessReviewLegislationSource;
+use App\Support\PlsAssistant\LegislationExcerptExtractor;
 use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -553,6 +554,7 @@ class LegislationPage extends Workspace
         return PlsReview::query()
             ->with([
                 'legislation',
+                'documents.chunks',
                 'documents.sourcedLegislation',
             ])
             ->findOrFail($this->review->getKey());
@@ -700,7 +702,7 @@ class LegislationPage extends Workspace
                 'summary' => $savedLegislation?->summary
                     ?? $this->blankToNull((string) ($storedAnalysis['summary'] ?? '')),
                 'key_themes' => $this->analysisStringList($storedAnalysis, 'key_themes'),
-                'notable_excerpts' => $this->analysisStringList($storedAnalysis, 'notable_excerpts'),
+                'notable_excerpts' => $this->notableExcerpts($document, $storedAnalysis),
                 'important_dates' => $this->analysisStringList($storedAnalysis, 'important_dates'),
                 'scrutiny_preparation' => $this->scrutinyPreparationGroups($storedAnalysis),
                 'preparation_status' => $this->sourceRecordStatus($document),
@@ -1114,6 +1116,23 @@ class LegislationPage extends Workspace
             ->replaceMatches('/\s+/', ' ')
             ->trim(" \t\n\r\0\x0B\"'")
             ->toString();
+    }
+
+    /**
+     * @param  array<string, mixed>  $storedAnalysis
+     * @return list<string>
+     */
+    private function notableExcerpts(Document $document, array $storedAnalysis): array
+    {
+        $excerpts = $this->analysisStringList($storedAnalysis, 'notable_excerpts');
+
+        if ($excerpts !== []) {
+            return $excerpts;
+        }
+
+        return app(LegislationExcerptExtractor::class)->extract(
+            $document->chunks->pluck('content')->implode("\n\n"),
+        );
     }
 
     private function sourceInsightExcerpt(string $content, string $term): string

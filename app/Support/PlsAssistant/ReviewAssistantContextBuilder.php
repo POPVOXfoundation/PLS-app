@@ -88,7 +88,7 @@ class ReviewAssistantContextBuilder
 
     public function hydrateReview(PlsReview $review): PlsReview
     {
-        return $review->loadMissing([
+        return $review->load([
             'owner',
             'country',
             'reviewGroup.legislature.jurisdiction.country',
@@ -96,7 +96,7 @@ class ReviewAssistantContextBuilder
             'jurisdiction.country',
             'memberships.user',
             'steps',
-            'legislation',
+            'legislation.sourceDocument.chunks',
             'legislationObjectives',
             'documents.chunks',
             'stakeholders.submissions',
@@ -409,13 +409,35 @@ class ReviewAssistantContextBuilder
         return [
             'Linked legislation: '.$review->legislation->count(),
             ...$this->formatList($review->legislation, fn (Legislation $legislation): string => sprintf(
-                '%s [%s]%s%s',
+                '%s [%s]%s%s%s',
                 $legislation->title,
                 Str::headline($legislation->legislation_type->value),
                 $legislation->pivot?->relationship_type ? ' Relationship: '.Str::headline((string) $legislation->pivot->relationship_type) : '',
                 $legislation->summary ? ' Summary: '.$legislation->summary : '',
+                $this->legislationExcerpts($legislation),
             )),
         ];
+    }
+
+    private function legislationExcerpts(Legislation $legislation): string
+    {
+        $document = $legislation->sourceDocument;
+
+        if (! $document instanceof Document) {
+            return '';
+        }
+
+        $stored = data_get($document->metadata, 'legislation_analysis.notable_excerpts', []);
+        $excerpts = is_array($stored) ? array_values(array_filter($stored, 'is_string')) : [];
+
+        if ($excerpts === []) {
+            $excerpts = app(LegislationExcerptExtractor::class)->extract(
+                $document->chunks->pluck('content')->implode("\n\n"),
+                2,
+            );
+        }
+
+        return $excerpts === [] ? '' : ' Source excerpts: '.implode(' | ', $excerpts);
     }
 
     /**

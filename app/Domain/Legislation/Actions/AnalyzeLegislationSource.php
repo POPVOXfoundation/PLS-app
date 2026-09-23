@@ -9,6 +9,7 @@ use App\Domain\Legislation\Enums\LegislationType;
 use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
 use App\Domain\Legislation\Legislation;
 use App\Support\PlsAssistant\AssistantSourceTextExtractorFactory;
+use App\Support\PlsAssistant\LegislationExcerptExtractor;
 use App\Support\PlsAssistant\StakeholderSuggestionNormalizer;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -287,6 +288,10 @@ class AnalyzeLegislationSource
         $summary = $this->normalizeSummary($response['summary'] ?? null);
         $keyThemes = $this->normalizeStringList($response['key_themes'] ?? [], 5, 120);
         $notableExcerpts = $this->normalizeStringList($response['notable_excerpts'] ?? [], 3, 320);
+
+        if ($notableExcerpts === []) {
+            $notableExcerpts = app(LegislationExcerptExtractor::class)->extract($rawText);
+        }
         $importantDates = $this->normalizeImportantDates($response['important_dates'] ?? []);
         $scrutinyPreparation = $this->normalizeScrutinyPreparation($response['scrutiny_preparation'] ?? []);
         $stakeholderSuggestions = app(StakeholderSuggestionNormalizer::class)->normalize(
