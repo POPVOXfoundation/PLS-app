@@ -86,12 +86,18 @@ class AssistantSidebar extends Component
         $context = $this->contextBuilder()->build($this->review, $this->workspaceKey, $prompt);
         $agent = $this->assistantAgent($context);
 
-        $conversationId = $this->conversationResolver()->resolve(
-            $this->review,
-            auth()->id(),
-            Str::limit($prompt, 100),
-            $context['playbook_version'],
-        );
+        try {
+            $conversationId = $this->conversationResolver()->resolve(
+                $this->review,
+                auth()->id(),
+                Str::limit($prompt, 100),
+                $context['playbook_version'],
+            );
+        } catch (Throwable $exception) {
+            $this->failExchangeStorage($exception, $sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace);
+
+            return;
+        }
 
         $refusal = $this->refusalGuard()->refuseOrAllow(
             $this->review,
@@ -101,7 +107,15 @@ class AssistantSidebar extends Component
         );
 
         if ($refusal !== null) {
-            if (! $this->persistSyntheticAssistantExchange($agent, $conversationId, $prompt, $refusal, $context['playbook_version'])) {
+            try {
+                $exchangeStored = $this->persistSyntheticAssistantExchange($agent, $conversationId, $prompt, $refusal, $context['playbook_version']);
+            } catch (Throwable $exception) {
+                $this->failExchangeStorage($exception, $sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace);
+
+                return;
+            }
+
+            if (! $exchangeStored) {
                 $this->discardExchangeAfterReset($sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace);
 
                 return;
@@ -109,8 +123,8 @@ class AssistantSidebar extends Component
 
             $this->assistantConversationId = $conversationId;
             $this->assistantMessages = $this->conversationMessagesForDisplay();
-            $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox);
-            $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace);
+            $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox, $this->messageContentForDisplay('assistant', $refusal));
+            $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace, $this->messageContentForDisplay('assistant', $refusal));
             $this->dispatch('assistant-message-added', focus: 'response');
 
             return;
@@ -138,7 +152,15 @@ class AssistantSidebar extends Component
             return;
         }
 
-        if (! $this->storeExchangeIfConversationStillExists($conversationId, $agent, $prompt, $response, $context['playbook_version'])) {
+        try {
+            $exchangeStored = $this->storeExchangeIfConversationStillExists($conversationId, $agent, $prompt, $response, $context['playbook_version']);
+        } catch (Throwable $exception) {
+            $this->failExchangeStorage($exception, $sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace);
+
+            return;
+        }
+
+        if (! $exchangeStored) {
             $this->discardExchangeAfterReset($sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace);
 
             return;
@@ -147,7 +169,7 @@ class AssistantSidebar extends Component
         $this->assistantConversationId = $conversationId;
         $this->assistantMessages = $this->conversationMessagesForDisplay();
         $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox, (string) $response);
-        $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace);
+        $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace, $this->messageContentForDisplay('assistant', (string) $response));
 
         $this->dispatch('assistant-message-added', focus: 'response');
     }
@@ -279,19 +301,13 @@ class AssistantSidebar extends Component
         ];
     }
 
-    private function sendProvisionalFindingsToInbox(bool $sendProvisionalFindingsToInbox, ?string $generatedContent = null): void
+    private function sendProvisionalFindingsToInbox(bool $sendProvisionalFindingsToInbox, string $content): void
     {
         if (! $sendProvisionalFindingsToInbox) {
             return;
         }
 
-        $content = $generatedContent ?? (
-            collect($this->assistantMessages)
-                ->reverse()
-                ->first(fn (array $message): bool => $message['role'] === 'assistant')['content'] ?? null
-        );
-
-        if (! is_string($content) || trim($content) === '') {
+        if (trim($content) === '') {
             $this->dispatch('provisional-findings-failed')->to(AnalysisPage::class);
 
             return;
@@ -314,17 +330,13 @@ class AssistantSidebar extends Component
             : $content;
     }
 
-    private function sendReportOutlineToWorkspace(bool $sendReportOutlineToWorkspace): void
+    private function sendReportOutlineToWorkspace(bool $sendReportOutlineToWorkspace, string $content): void
     {
         if (! $sendReportOutlineToWorkspace) {
             return;
         }
 
-        $content = collect($this->assistantMessages)
-            ->reverse()
-            ->first(fn (array $message): bool => $message['role'] === 'assistant')['content'] ?? null;
-
-        if (! is_string($content) || trim($content) === '') {
+        if (trim($content) === '') {
             $this->dispatch('report-outline-failed')->to(ReportsPage::class);
 
             return;
@@ -513,6 +525,29 @@ class AssistantSidebar extends Component
         $this->assistantMessages = [];
         $this->bootConversationState();
         $this->assistantError = __('This chat was reset in another window. Your message was not saved.');
+
+        if ($sendProvisionalFindingsToInbox) {
+            $this->dispatch('provisional-findings-failed')->to(AnalysisPage::class);
+        }
+
+        if ($sendReportOutlineToWorkspace) {
+            $this->dispatch('report-outline-failed')->to(ReportsPage::class);
+        }
+
+        $this->dispatch('assistant-message-added');
+    }
+
+    /**
+     * Report a database failure while resolving or storing an exchange and show it inline.
+     *
+     * The local user message stays in the chat so it can be resent. The conversation id is
+     * not assigned and nothing is reloaded from the database, which has just failed.
+     */
+    private function failExchangeStorage(Throwable $exception, bool $sendProvisionalFindingsToInbox, bool $sendReportOutlineToWorkspace): void
+    {
+        report($exception);
+
+        $this->assistantError = __('The assistant could not save this message. Try again.');
 
         if ($sendProvisionalFindingsToInbox) {
             $this->dispatch('provisional-findings-failed')->to(AnalysisPage::class);
