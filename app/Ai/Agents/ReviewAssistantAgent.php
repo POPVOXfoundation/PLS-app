@@ -64,6 +64,23 @@ class ReviewAssistantAgent implements Agent, Conversational
         ]);
     }
 
+    /**
+     * Load the given conversation's history for the next prompt without remembering it.
+     *
+     * Only the conversation id is set. The trait's messages() loads the latest
+     * maxConversationMessages() messages from it (RemembersConversations.php:51-62).
+     * No conversation participant is set, so GeneratesText::gatherMiddlewareFor() does
+     * not attach RememberConversation (GeneratesText.php:98-100). The SDK therefore
+     * creates no conversation, generates no title, and writes no messages; the caller
+     * owns persistence.
+     */
+    public function withConversationHistory(string $conversationId): static
+    {
+        $this->conversationId = $conversationId;
+
+        return $this;
+    }
+
     protected function maxConversationMessages(): int
     {
         return 20;
