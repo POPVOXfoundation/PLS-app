@@ -499,7 +499,7 @@ test('saved source rows can be reopened for editing after the initial review', f
         ->assertSee('Save changes');
 });
 
-test('saved legislation rows show warnings without the needs review heading', function () {
+test('saved legislation records retain warnings without returning to needs review', function () {
     $review = plsReview([
         'title' => 'Review of saved legislation warnings',
     ]);
@@ -525,9 +525,9 @@ test('saved legislation rows show warnings without the needs review heading', fu
 
     Livewire::test(LegislationPage::class, ['review' => $review])
         ->call('startReviewDocument', $document->id)
-        ->assertSee('Warnings')
-        ->assertDontSee('Needs review')
-        ->assertSee('Double-check the enactment date against the gazette.');
+        ->assertSet('analysisStatus', 'saved')
+        ->assertSet('analysisWarnings', ['Double-check the enactment date against the gazette.'])
+        ->assertDontSee('Needs review');
 });
 
 test('uploaded legislation docx sources use the shared extractor and can be saved', function () {
@@ -663,7 +663,8 @@ test('bill-style source text is kept as a primary record and avoids structural s
         ->assertSet('analysisType', LegislationType::Act->value)
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
         ->assertSet('analysisSummary', fn (string $summary): bool => str_contains(strtolower($summary), 'deep port facility'))
-        ->assertSee('This looks like a bill or draft text, so an enactment date may not be available yet.')
+        ->assertSet('analysisDateEnacted', '')
+        ->assertSet('analysisWarnings', ['This looks like a bill or draft text, so an enactment date may not be available yet.'])
         ->assertDontSee('Ready');
 });
 
@@ -931,8 +932,8 @@ test('full legislation extraction failures use a lighter record pass', function 
     $component
         ->call('refreshPendingAnalyses')
         ->assertSee('Needs review')
-        ->assertSee('shorter record pass')
         ->call('startReviewDocument', $document->id)
+        ->assertSet('analysisWarnings', ['PLSAssist used a shorter record pass for this source. Review the extracted details before saving.'])
         ->assertSet('analysisTitle', 'Southern Deep Port Development Facility Bill, 2024')
         ->assertSet('analysisType', LegislationType::Act->value)
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
@@ -1712,7 +1713,8 @@ test('incomplete AI legislation records become editable review drafts', function
         ->assertSet('analysisTitle', 'Affirmative Action (Gender Equality) Bill 2024')
         ->assertSet('analysisType', LegislationType::Act->value)
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
-        ->assertSee('could not classify this source');
+        ->assertSet('analysisWarnings', fn (array $warnings): bool => collect($warnings)
+            ->contains(fn (string $warning): bool => str_contains($warning, 'could not classify this source')));
 });
 
 test('stale legislation rows are surfaced for retry instead of refreshing inline', function () {

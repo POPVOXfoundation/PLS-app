@@ -330,8 +330,8 @@ test('all review section routes render inside the shared workspace shell', funct
         'pls.reviews.legislation' => 'No records saved for this review yet.',
         'pls.reviews.documents' => 'Add evidence',
         'pls.reviews.stakeholders' => 'Stakeholders',
-        'pls.reviews.consultations' => 'Consultation activity',
-        'pls.reviews.analysis' => 'Findings & recommendations',
+        'pls.reviews.consultations' => 'Consultation plan',
+        'pls.reviews.analysis' => 'Confirmed findings & recommendations',
         'pls.reviews.reports' => 'Government responses',
         'pls.reviews.settings' => 'Workspace settings',
     ];
@@ -359,9 +359,9 @@ test('legislation page uses inline source analysis instead of attach and create 
     $this->get(route('pls.reviews.legislation', ['review' => $review->id]))
         ->assertOk()
         ->assertSee('Source file')
-        ->assertSee('Add the source text and it will appear in the records table below.')
+        ->assertSee('PLSAssist will read each source and prepare a structured record for review.')
         ->assertSee('50 MB max')
-        ->assertSee('Records')
+        ->assertSee('Legislation analysis')
         ->assertDontSee('Attach legislation')
         ->assertDontSee('Create legislation');
 });
@@ -374,7 +374,7 @@ test('documents page uses inline upload analysis instead of metadata-first add a
     $this->get(route('pls.reviews.documents', ['review' => $review->id]))
         ->assertOk()
         ->assertSee('Add evidence')
-        ->assertSee('Choose files')
+        ->assertSee('Drag files here or choose files')
         ->assertSee('Records')
         ->assertDontSee('Storage path')
         ->assertDontSee('File size (bytes)');
