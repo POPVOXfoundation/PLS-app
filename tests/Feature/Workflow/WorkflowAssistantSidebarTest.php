@@ -42,7 +42,7 @@ it('shows the configured role and prompts for the current tab', function (string
     ],
     'documents' => [
         'documents',
-        'Document Intelligence Assistant',
+        'Evidence Intelligence Assistant',
         [
             'What documents do I have so far?',
             "What's missing for this type of inquiry?",
@@ -73,7 +73,7 @@ test('assistant intro changes by tab', function () {
     Livewire::test(AssistantSidebar::class, [
         'review' => $review,
         'workspaceKey' => 'documents',
-    ])->assertSee("You're in Documents. I can help you review what you've uploaded");
+    ])->assertSee("You're in Evidence. I can help you review what you've uploaded");
 });
 
 test('assistant composer submits on enter while preserving shift enter for new lines', function () {
@@ -175,7 +175,7 @@ test('workflow prompts compile current step progress and shared guidance into th
             ->toContain('Progress: Step 1 of 11')
             ->toContain('Current step: Define the objectives and scope of PLS')
             ->toContain('Focus: Define the review scope')
-            ->toContain('Suggested action: Link the governing law and upload the initial briefing, bill text, or background pack.');
+            ->toContain('Suggested action: Link the governing legislation and upload the initial briefing, bill text, or background pack.');
 
         return $prompt->contains('Summarize the current step.');
     });
@@ -216,8 +216,8 @@ test('documents prompts are grounded in the current review record', function () 
 
     ReviewAssistantAgent::assertPrompted(function (AgentPrompt $prompt) {
         expect((string) $prompt->agent->instructions())
-            ->toContain('Active tab: Documents')
-            ->toContain('Tab role: Document Intelligence Assistant')
+            ->toContain('Active tab: Evidence')
+            ->toContain('Tab role: Evidence Intelligence Assistant')
             ->toContain('Implementation Progress Report')
             ->toContain('Tracks implementation delays across ministries.');
 

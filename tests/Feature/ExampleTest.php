@@ -1,7 +1,7 @@
 <?php
 
-test('home redirects to login', function () {
-    $response = $this->get(route('home'));
-
-    $response->assertRedirect('/login');
+test('guests can open the public PLSAssist landing page', function () {
+    $this->get(route('home'))
+        ->assertOk()
+        ->assertSee('PLSAssist helps parliaments review whether legislation works after adoption');
 });
