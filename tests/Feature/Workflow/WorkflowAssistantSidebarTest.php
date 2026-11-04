@@ -6,6 +6,7 @@ use App\Domain\Documents\Document;
 use App\Domain\Documents\DocumentChunk;
 use App\Domain\Documents\Enums\AssistantSourceScope;
 use App\Domain\Documents\Enums\DocumentType;
+use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Livewire\Pls\Reviews\AssistantSidebar;
 use App\Models\User;
 use App\Support\PlsAssistant\PlaybookRepository;
@@ -460,6 +461,68 @@ test('the same review keeps one assistant conversation across tab changes for th
     $workflow->assertSet('assistantConversationId', $firstConversationId);
 });
 
+test('pages opened before the first prompt reuse the review conversation without losing replies', function (string $secondWorkspace, string $secondPrompt, string $expectedReply) {
+    $review = plsReview();
+    ReviewAssistantAgent::fake(['First page response', 'Second page response']);
+
+    $first = Livewire::test(AssistantSidebar::class, ['review' => $review, 'workspaceKey' => 'workflow']);
+    $stale = Livewire::test(AssistantSidebar::class, ['review' => $review, 'workspaceKey' => $secondWorkspace]);
+    $first->assertSet('assistantConversationId', null);
+    $stale->assertSet('assistantConversationId', null);
+
+    $first->call('sendPrompt', 'Summarize the current step.')->assertHasNoErrors();
+    $conversationId = $first->get('assistantConversationId');
+    $stale->call('sendPrompt', $secondPrompt)->assertHasNoErrors()
+        ->assertSet('assistantConversationId', $conversationId)
+        ->assertSee('First page response')->assertSee($expectedReply);
+
+    expect(DB::table('agent_conversations')->count())->toBe(1)
+        ->and(DB::table('agent_conversation_messages')->where('conversation_id', $conversationId)->count())->toBe(4)
+        ->and(DB::table('agent_conversations')->value('playbook_version'))->toBe(app(PlaybookRepository::class)->versionForTab($secondWorkspace));
+})->with([
+    'model response' => ['analysis', 'Group the current evidence into themes.', 'Second page response'],
+    'local guidance response' => ['workflow', 'Generate final findings.', 'I can help with workflow stages and next steps'],
+]);
+
+test('overlapping first prompts reserve one conversation before either response is stored', function () {
+    $review = plsReview();
+    $first = Livewire::test(AssistantSidebar::class, ['review' => $review, 'workspaceKey' => 'analysis']);
+    $second = Livewire::test(AssistantSidebar::class, ['review' => $review, 'workspaceKey' => 'analysis']);
+
+    ReviewAssistantAgent::fake(function (string $prompt) use ($second, $review) {
+        expect(DB::table('agent_conversations')->where('pls_review_id', $review->id)->where('user_id', auth()->id())->count())->toBe(1);
+        if ($prompt === 'First concurrent question') {
+            $second->call('sendPrompt', 'Second concurrent question')->assertHasNoErrors();
+        }
+
+        return 'Reply to '.$prompt;
+    });
+
+    $first->call('sendPrompt', 'First concurrent question')->assertHasNoErrors()
+        ->assertSee('Reply to First concurrent question')->assertSee('Reply to Second concurrent question');
+    expect($first->get('assistantConversationId'))->toBe($second->get('assistantConversationId'))
+        ->and(DB::table('agent_conversations')->count())->toBe(1)
+        ->and(DB::table('agent_conversations')->value('title'))->toBe('First concurrent question')
+        ->and(DB::table('agent_conversation_messages')->count())->toBe(4);
+});
+
+test('review members keep private conversations when reserving conversations in the same review', function () {
+    $review = plsReview();
+    $member = User::factory()->create();
+    $review->memberships()->create(['user_id' => $member->id, 'role' => PlsReviewMembershipRole::Viewer]);
+    ReviewAssistantAgent::fake(['Owner private reply', 'Member private reply']);
+    $owner = Livewire::test(AssistantSidebar::class, ['review' => $review, 'workspaceKey' => 'analysis'])
+        ->call('sendPrompt', 'Owner private question');
+
+    $this->actingAs($member);
+    $viewer = Livewire::test(AssistantSidebar::class, ['review' => $review, 'workspaceKey' => 'analysis'])
+        ->assertSet('assistantConversationId', null)
+        ->call('sendPrompt', 'Member private question')->assertHasNoErrors()
+        ->assertSee('Member private reply')->assertDontSee('Owner private reply');
+    expect($viewer->get('assistantConversationId'))->not->toBe($owner->get('assistantConversationId'))
+        ->and(DB::table('agent_conversations')->count())->toBe(2);
+});
+
 test('different reviews keep separate assistant conversations', function () {
     $firstReview = plsReview([
         'title' => 'First assistant conversation review',
@@ -562,6 +625,14 @@ test('assistant shows an inline error state when the sdk call fails', function (
     $component
         ->assertSet('assistantInput', 'Summarize the current step.')
         ->assertSee('The assistant could not complete this response. Your question is preserved below; please try again.');
+
+    $conversationId = $component->get('assistantConversationId');
+    ReviewAssistantAgent::fake(['Recovered reply']);
+    $component->call('submitAssistantPrompt')->assertHasNoErrors()
+        ->assertSet('assistantConversationId', $conversationId)->assertSet('assistantError', null)
+        ->assertSee('Recovered reply');
+    expect(DB::table('agent_conversations')->count())->toBe(1)
+        ->and(DB::table('agent_conversation_messages')->count())->toBe(2);
 });
 
 test('global reference docs are included for process questions', function () {

@@ -97,6 +97,8 @@ class AssistantSidebar extends Component
             return;
         }
 
+        // Another open workspace may have started the shared conversation since mount.
+        $this->bootConversationState();
         $this->assistantInput = '';
         $this->assistantError = null;
 
@@ -131,24 +133,18 @@ class AssistantSidebar extends Component
             $context['structured_context'],
         );
 
-        if ($refusal !== null) {
-            $this->persistSyntheticAssistantExchange($agent, $prompt, $refusal, $context['playbook_version']);
-            $this->assistantMessages = $this->conversationMessagesForDisplay();
-            $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox);
-            $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace);
-            $this->dispatch('assistant-message-added', focus: 'response');
-
-            return;
-        }
-
-        if ($this->assistantConversationId !== null) {
-            $agent->continue($this->assistantConversationId, auth()->user());
-        } else {
-            $agent->forUser(auth()->user());
-        }
-
         try {
-            $response = $agent->prompt($prompt);
+            $this->prepareConversation($prompt, $context['playbook_version']);
+            $agent->continue($this->assistantConversationId, auth()->user());
+
+            if ($refusal !== null) {
+                $this->persistSyntheticAssistantExchange($agent, $prompt, $refusal);
+                $generatedContent = $refusal;
+            } else {
+                $response = $agent->prompt($prompt);
+                $this->storePromptExchangeIfMissing($agent, $prompt, $response);
+                $generatedContent = (string) $response;
+            }
         } catch (Throwable $exception) {
             report($exception);
 
@@ -169,17 +165,9 @@ class AssistantSidebar extends Component
             return;
         }
 
-        $this->assistantConversationId = $agent->currentConversation();
-
-        $this->storePromptExchangeIfMissing($agent, $prompt, $response);
-
-        if ($this->assistantConversationId !== null) {
-            $this->persistConversation($this->assistantConversationId, $context['playbook_version']);
-        }
-
         $this->assistantMessages = $this->conversationMessagesForDisplay();
-        $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox, (string) $response);
-        $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace);
+        $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox, $generatedContent);
+        $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace, $generatedContent);
 
         $this->dispatch('assistant-message-added', focus: 'response');
     }
@@ -265,17 +253,25 @@ class AssistantSidebar extends Component
         $this->assistantMessages = $this->conversationMessagesForDisplay();
     }
 
-    private function persistConversation(string $conversationId, string $playbookVersion): void
+    private function prepareConversation(string $prompt, string $playbookVersion): void
     {
-        DB::table('agent_conversations')
-            ->where('id', $conversationId)
+        // Reserve the unique review/user pair atomically before the SDK stores messages.
+        // Concurrent first prompts must keep the existing ID, title and history.
+        DB::table('agent_conversations')->upsert([
+            'id' => (string) Str::uuid7(),
+            'pls_review_id' => $this->review->getKey(),
+            'user_id' => auth()->id(),
+            'title' => Str::limit($prompt, 100, preserveWords: true),
+            'playbook_version' => $playbookVersion,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ], ['pls_review_id', 'user_id'], ['playbook_version', 'updated_at']);
+
+        $this->assistantConversationId = DB::table('agent_conversations')
+            ->useWritePdo()
+            ->where('pls_review_id', $this->review->getKey())
             ->where('user_id', auth()->id())
-            ->where(fn ($query) => $query->whereNull('pls_review_id')->orWhere('pls_review_id', $this->review->id))
-            ->update([
-                'pls_review_id' => $this->review->getKey(),
-                'playbook_version' => $playbookVersion,
-                'updated_at' => now(),
-            ]);
+            ->soleValue('id');
     }
 
     /**
@@ -348,15 +344,15 @@ class AssistantSidebar extends Component
             : $content;
     }
 
-    private function sendReportOutlineToWorkspace(bool $sendReportOutlineToWorkspace): void
+    private function sendReportOutlineToWorkspace(bool $sendReportOutlineToWorkspace, ?string $generatedContent = null): void
     {
         if (! $sendReportOutlineToWorkspace) {
             return;
         }
 
-        $content = collect($this->assistantMessages)
+        $content = $generatedContent ?? (collect($this->assistantMessages)
             ->reverse()
-            ->first(fn (array $message): bool => $message['role'] === 'assistant')['content'] ?? null;
+            ->first(fn (array $message): bool => $message['role'] === 'assistant')['content'] ?? null);
 
         if (! is_string($content) || trim($content) === '') {
             $this->dispatch('report-outline-failed')->to(ReportsPage::class);
@@ -493,11 +489,7 @@ class AssistantSidebar extends Component
             $provider->defaultTextModel(),
         );
 
-        $conversationId = $existingConversationId
-            ?? $store->storeConversation(
-                auth()->id(),
-                Str::limit($prompt, 100, preserveWords: true),
-            );
+        $conversationId = $existingConversationId;
 
         $store->storeUserMessage($conversationId, auth()->id(), $agentPrompt);
         $store->storeAssistantMessage($conversationId, auth()->id(), $agentPrompt, $response);
@@ -509,7 +501,6 @@ class AssistantSidebar extends Component
         ReviewAssistantAgent $agent,
         string $prompt,
         string $assistantReply,
-        string $playbookVersion,
     ): void {
         $store = resolve(ConversationStore::class);
         $provider = Ai::textProviderFor($agent, config('ai.default'));
@@ -521,11 +512,7 @@ class AssistantSidebar extends Component
             $provider->defaultTextModel(),
         );
 
-        $conversationId = $this->assistantConversationId
-            ?? $store->storeConversation(
-                auth()->id(),
-                Str::limit($prompt, 100, preserveWords: true),
-            );
+        $conversationId = $this->assistantConversationId;
 
         $store->storeUserMessage($conversationId, auth()->id(), $agentPrompt);
         $store->storeAssistantMessage(
@@ -540,8 +527,6 @@ class AssistantSidebar extends Component
             ),
         );
 
-        $this->assistantConversationId = $conversationId;
-        $this->persistConversation($conversationId, $playbookVersion);
     }
 
     /**
