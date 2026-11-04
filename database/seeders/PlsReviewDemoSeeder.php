@@ -681,6 +681,7 @@ class PlsReviewDemoSeeder extends Seeder
             [
                 'name' => 'PLS Demo Reviewer',
                 'password' => 'password',
+                'email_verified_at' => now(),
                 'country_id' => $country->id,
             ],
         );

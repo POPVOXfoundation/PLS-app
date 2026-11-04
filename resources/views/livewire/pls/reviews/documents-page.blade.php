@@ -163,6 +163,18 @@
         </flux:card>
     @endif
 
+    @if ($review->documents->contains('document_type', \App\Domain\Documents\Enums\DocumentType::LegislationText))
+        <flux:card class="space-y-3">
+            <flux:heading>{{ __('Legislation in this evidence base') }}</flux:heading>
+            <flux:text>{{ __('Legislation is included in assistant responses. Legislative sources uploaded here are also available in Legislation for review and confirmation.') }}</flux:text>
+            <ul class="space-y-2">
+                @foreach ($review->documents->where('document_type', \App\Domain\Documents\Enums\DocumentType::LegislationText) as $source)
+                    <li><flux:link :href="route('pls.reviews.documents.show', [$review, $source])" wire:navigate>{{ $source->title }}</flux:link></li>
+                @endforeach
+            </ul>
+        </flux:card>
+    @endif
+
     <flux:card wire:poll.2s.keep-alive="refreshPendingAnalyses" class="space-y-5">
         <div class="flex items-center justify-between gap-4">
             <div class="space-y-1">
@@ -200,17 +212,10 @@
                         class="grid min-w-0 gap-3 border-b border-zinc-200 py-4 last:border-b-0 dark:border-zinc-800 lg:grid-cols-[minmax(0,1fr)_9rem_7rem_8rem_auto] lg:items-center lg:gap-4"
                     >
                         <div class="min-w-0 space-y-1">
-                            @if (in_array($row['action'], ['review', 'edit'], true))
-                                <button
-                                    type="button"
-                                    wire:click="startEditingDocument({{ $row['id'] }})"
-                                    class="block max-w-full text-left text-base font-normal text-zinc-900 transition hover:text-violet-700 dark:text-white dark:hover:text-violet-300"
-                                >
-                                    <span class="break-words">{{ $row['title'] }}</span>
-                                </button>
-                            @else
-                                <div class="break-words text-base text-zinc-900 dark:text-white">{{ $row['title'] }}</div>
-                            @endif
+                            <a href="{{ route('pls.reviews.documents.show', [$review, $row['id']]) }}" wire:navigate
+                                class="block max-w-full break-words text-left text-base text-violet-700 underline decoration-violet-300 underline-offset-4 hover:text-violet-900 dark:text-violet-300">
+                                {{ $row['title'] }}
+                            </a>
 
                             @if ($row['summary'] !== '')
                                 <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">

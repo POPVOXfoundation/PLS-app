@@ -403,7 +403,9 @@ class ReviewAssistantContextBuilder
     private function legislationFacts(PlsReview $review): array
     {
         if ($review->legislation->isEmpty()) {
-            return ['No legislation is linked to this review yet.'];
+            return $review->documents->contains('document_type', DocumentType::LegislationText)
+                ? ['Legislation source files are uploaded. Their extracted text is included below; the formal legislation record is awaiting confirmation.']
+                : ['No legislation is uploaded or linked to this review yet.'];
         }
 
         return [
@@ -631,7 +633,7 @@ class ReviewAssistantContextBuilder
         $documents = $this->documentsForWorkspace($review);
 
         return array_values(array_filter([
-            $review->legislation->isEmpty() ? 'No legislation is linked to this review.' : null,
+            ($review->legislation->isEmpty() && ! $review->documents->contains('document_type', DocumentType::LegislationText)) ? 'No legislation is uploaded or linked to this review.' : null,
             $documents->isEmpty() ? 'No documents are uploaded for this review yet.' : null,
             $review->stakeholders->isEmpty() ? 'No stakeholders are recorded yet.' : null,
             ($review->consultations->isEmpty() && $review->submissions->isEmpty()) ? 'No consultations or submissions are recorded yet.' : null,
@@ -664,7 +666,7 @@ class ReviewAssistantContextBuilder
         $documents = $this->documentsForWorkspace($review);
 
         return array_values(array_filter([
-            $review->legislation->isNotEmpty() ? 'Legislation record present.' : 'Legislation record missing.',
+            ($review->legislation->isNotEmpty() || $review->documents->contains('document_type', DocumentType::LegislationText)) ? 'Legislation source or record present.' : 'Legislation record missing.',
             $documents->isNotEmpty() ? 'Document record present.' : 'Document record missing.',
             $review->stakeholders->isNotEmpty() ? 'Stakeholder record present.' : 'Stakeholder record missing.',
             $review->consultations->isNotEmpty() || $review->submissions->isNotEmpty() ? 'Consultation evidence present.' : 'Consultation evidence missing.',
@@ -678,9 +680,7 @@ class ReviewAssistantContextBuilder
      */
     private function documentsForWorkspace(PlsReview $review): Collection
     {
-        return $review->documents->reject(
-            fn (Document $document): bool => $document->document_type === DocumentType::LegislationText,
-        )->values();
+        return $review->documents->values();
     }
 
     /**

@@ -42,7 +42,7 @@ it('shows the configured role and prompts for the current tab', function (string
     ],
     'documents' => [
         'documents',
-        'Document Intelligence Assistant',
+        'Evidence Intelligence Assistant',
         [
             'What documents do I have so far?',
             "What's missing for this type of inquiry?",
@@ -73,7 +73,7 @@ test('assistant intro changes by tab', function () {
     Livewire::test(AssistantSidebar::class, [
         'review' => $review,
         'workspaceKey' => 'documents',
-    ])->assertSee("You're in Documents. I can help you review what you've uploaded");
+    ])->assertSee("You're in Evidence. I can help you review what you've uploaded");
 });
 
 test('assistant composer submits on enter while preserving shift enter for new lines', function () {
@@ -175,7 +175,7 @@ test('workflow prompts compile current step progress and shared guidance into th
             ->toContain('Progress: Step 1 of 11')
             ->toContain('Current step: Define the objectives and scope of PLS')
             ->toContain('Focus: Define the review scope')
-            ->toContain('Suggested action: Link the governing law and upload the initial briefing, bill text, or background pack.');
+            ->toContain('Suggested action: Link the governing legislation and upload the initial briefing, bill text, or background pack.');
 
         return $prompt->contains('Summarize the current step.');
     });
@@ -216,8 +216,8 @@ test('documents prompts are grounded in the current review record', function () 
 
     ReviewAssistantAgent::assertPrompted(function (AgentPrompt $prompt) {
         expect((string) $prompt->agent->instructions())
-            ->toContain('Active tab: Documents')
-            ->toContain('Tab role: Document Intelligence Assistant')
+            ->toContain('Active tab: Evidence')
+            ->toContain('Tab role: Evidence Intelligence Assistant')
             ->toContain('Implementation Progress Report')
             ->toContain('Tracks implementation delays across ministries.');
 
@@ -225,7 +225,7 @@ test('documents prompts are grounded in the current review record', function () 
     });
 });
 
-test('documents prompts exclude legislation source documents from document facts and review grounding', function () {
+test('documents prompts include uploaded legislation in document facts and review grounding', function () {
     $review = plsReview([
         'title' => 'Separated grounding review',
     ]);
@@ -263,7 +263,7 @@ test('documents prompts exclude legislation source documents from document facts
     ReviewAssistantAgent::assertPrompted(function (AgentPrompt $prompt) {
         expect((string) $prompt->agent->instructions())
             ->toContain('Implementation Memo')
-            ->not->toContain('Legislation source upload');
+            ->toContain('Legislation source upload');
 
         return $prompt->contains('Summarize the uploaded documents.');
     });
@@ -557,16 +557,11 @@ test('assistant shows an inline error state when the sdk call fails', function (
     ])
         ->call('sendPrompt', 'Summarize the current step.');
 
-    expect($component->get('assistantMessages'))->toBe([
-        [
-            'role' => 'user',
-            'content' => 'Summarize the current step.',
-        ],
-    ]);
+    expect($component->get('assistantMessages'))->toBe([]);
 
     $component
-        ->assertSet('assistantError', 'The assistant is unavailable right now. Check the AI provider configuration or try again.')
-        ->assertSee('The assistant is unavailable right now. Check the AI provider configuration or try again.');
+        ->assertSet('assistantInput', 'Summarize the current step.')
+        ->assertSee('The assistant could not complete this response. Your question is preserved below; please try again.');
 });
 
 test('global reference docs are included for process questions', function () {

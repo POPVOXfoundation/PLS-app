@@ -7,6 +7,7 @@ use App\Domain\Documents\Actions\ChunkDocumentText;
 use App\Domain\Documents\Actions\PersistReviewDocumentState;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
+use App\Domain\Legislation\Actions\PersistLegislationSourceState;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -113,6 +114,12 @@ class ProcessReviewDocument implements ShouldQueue
         ]);
 
         $state->persistResult($document, $result);
+
+        if (($result['status'] ?? null) === 'completed'
+            && ($result['document_type'] ?? null) === DocumentType::LegislationText->value) {
+            app(PersistLegislationSourceState::class)->markQueued($document->fresh());
+            ProcessReviewLegislationSource::dispatch($document->id, 'enrich');
+        }
     }
 
     public function backoff(): array

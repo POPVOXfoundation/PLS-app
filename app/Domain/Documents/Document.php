@@ -11,6 +11,7 @@ use App\Domain\Legislation\Legislation;
 use App\Domain\Reporting\GovernmentResponse;
 use App\Domain\Reporting\Report;
 use App\Domain\Reviews\PlsReview;
+use Database\Factories\Domain\Documents\DocumentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Document extends Model
 {
-    /** @use HasFactory<\Database\Factories\Domain\Documents\DocumentFactory> */
+    /** @use HasFactory<DocumentFactory> */
     use HasFactory;
 
     /**
@@ -91,6 +92,11 @@ class Document extends Model
     public function governmentResponses(): HasMany
     {
         return $this->hasMany(GovernmentResponse::class);
+    }
+
+    public function extractedText(): string
+    {
+        return trim($this->chunks->sortBy('chunk_index')->pluck('content')->implode("\n\n"));
     }
 
     public function fileSizeLabel(): string

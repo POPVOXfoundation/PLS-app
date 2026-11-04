@@ -36,7 +36,7 @@
                         return;
                     }
 
-                    const responses = this.$refs.messages.querySelectorAll('[data-message-role="assistant"]');
+                    const responses = this.$refs.messages.querySelectorAll('[data-message-role=assistant]');
                     const latest = responses[responses.length - 1];
 
                     if (latest) {
@@ -54,8 +54,8 @@
     x-on:assistant-message-added.window="pendingMessage = ''; assistantOpen = true; ($event.detail || {}).focus === 'response' ? scrollToLatestResponse() : scrollToBottom()"
     x-on:assistant-open-requested.window="queuePrompt($event.detail.prompt || '')"
     x-bind:class="assistantExpanded
-        ? 'fixed inset-x-3 bottom-3 z-50 sm:left-auto sm:w-[min(46rem,calc(100vw-1.5rem))] xl:right-6 print:hidden'
-        : 'fixed inset-x-3 bottom-3 z-50 sm:left-auto sm:w-[22rem] xl:right-6 print:hidden'"
+        ? 'fixed inset-x-3 bottom-20 z-50 sm:bottom-3 sm:left-auto sm:w-[min(46rem,calc(100vw-1.5rem))] xl:right-6 print:hidden'
+        : 'fixed inset-x-3 bottom-20 z-50 sm:bottom-3 sm:left-auto sm:w-[22rem] xl:right-6 print:hidden'"
 >
     <section
         x-show="assistantOpen"
@@ -63,7 +63,7 @@
         x-transition
         x-bind:class="assistantExpanded
             ? 'mb-3 flex h-[min(74vh,44rem)] min-h-[28rem] flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_24px_80px_-36px_rgba(15,23,42,0.45)] dark:border-zinc-700 dark:bg-zinc-900'
-            : 'mb-3 flex max-h-[58vh] min-h-[22rem] flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_24px_80px_-36px_rgba(15,23,42,0.45)] sm:max-h-[34rem] dark:border-zinc-700 dark:bg-zinc-900'"
+            : 'mb-3 flex h-[58dvh] max-h-[calc(100dvh-14rem)] flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_24px_80px_-36px_rgba(15,23,42,0.45)] sm:max-h-[34rem] dark:border-zinc-700 dark:bg-zinc-900'"
     >
         <div class="border-b border-violet-700 bg-violet-800 px-4 py-2.5">
             <div class="flex items-center justify-between gap-3">
@@ -250,6 +250,7 @@
             >
                 <flux:composer
                     wire:model="assistantInput"
+                    maxlength="10000"
                     submit="enter"
                     x-bind:rows="assistantExpanded ? 3 : 1"
                     placeholder="{{ $this->assistantPlaceholder($assistantContext['workspace_key']) }}"
@@ -343,6 +344,7 @@
             >
                 <flux:composer
                     wire:model="assistantInput"
+                    maxlength="10000"
                     submit="enter"
                     rows="1"
                     placeholder="{{ $this->assistantPlaceholder($assistantContext['workspace_key']) }}"

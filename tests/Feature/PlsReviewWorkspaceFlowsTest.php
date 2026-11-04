@@ -5,6 +5,7 @@ use App\Ai\Agents\LegislationSourceFallbackExtractorAgent;
 use App\Ai\Agents\ReviewDocumentExtractorAgent;
 use App\Domain\Analysis\Enums\FindingType;
 use App\Domain\Analysis\Enums\RecommendationType;
+use App\Domain\Documents\AssistantSourceDocument;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Legislation\Enums\LegislationType;
@@ -60,7 +61,7 @@ test('uploaded legislation sources are queued and can be saved as new legislatio
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -198,7 +199,7 @@ test('legislation source rows can be deleted from records', function () {
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -258,7 +259,7 @@ test('deleting a saved source row removes the saved legislation from the current
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -341,7 +342,7 @@ test('saved source rows can be reopened for editing after the initial review', f
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -443,7 +444,7 @@ test('uploaded legislation docx sources use the shared extractor and can be save
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             expect($document)->toBeInstanceOf(Document::class)
                 ->and(data_get($document->metadata, 'disk'))->toBe('s3');
@@ -517,7 +518,7 @@ test('bill-style source text is kept as a primary record and avoids structural s
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -580,7 +581,7 @@ test('processing legislation extraction requeues in the background until text is
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             if (data_get($document->metadata, 'extraction.textract_job_id') === null) {
                 return AssistantSourceExtractionResult::processing(
@@ -728,7 +729,7 @@ test('large legislation source prompts are trimmed before the ai extraction step
     {
         public function __construct(private readonly string $content) {}
 
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -785,7 +786,7 @@ test('full legislation extraction failures use a lighter record pass', function 
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -807,7 +808,7 @@ test('full legislation extraction failures use a lighter record pass', function 
     $factory->shouldReceive('make')->once()->andReturn($extractor);
     app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
     LegislationSourceExtractorAgent::fake(function () {
-        throw new \RuntimeException('AI extraction failed');
+        throw new RuntimeException('AI extraction failed');
     });
     LegislationSourceFallbackExtractorAgent::fake([[
         'title' => 'Southern Deep Port Development Facility Bill, 2024',
@@ -903,7 +904,7 @@ test('review documents can be uploaded in batches analyzed and saved from the re
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -1025,7 +1026,7 @@ test('failed document analysis can be retried on the same review document row', 
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -1042,7 +1043,7 @@ test('failed document analysis can be retried on the same review document row', 
     $factory->shouldReceive('make')->once()->andReturn($extractor);
     app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
     ReviewDocumentExtractorAgent::fake(function () {
-        throw new \RuntimeException('AI extraction failed');
+        throw new RuntimeException('AI extraction failed');
     });
 
     $component = Livewire::test(DocumentsPage::class, ['review' => $review])
@@ -1104,7 +1105,7 @@ test('processing document extraction requeues in the background until text is re
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             if (data_get($document->metadata, 'extraction.textract_job_id') === null) {
                 return AssistantSourceExtractionResult::processing(
@@ -1232,7 +1233,7 @@ test('processing document rows show the active progress stage in the records tab
         ->assertSee('Filling record');
 });
 
-test('legislation source documents do not appear in the documents workspace', function () {
+test('legislation source documents are linked from the evidence workspace', function () {
     $review = plsReview([
         'title' => 'Review of separated workspaces',
     ]);
@@ -1251,7 +1252,8 @@ test('legislation source documents do not appear in the documents workspace', fu
 
     Livewire::test(DocumentsPage::class, ['review' => $review])
         ->assertSee('Implementation memo')
-        ->assertDontSee('Legislation upload');
+        ->assertSee('Legislation upload')
+        ->assertSee('Legislation in this evidence base');
 });
 
 test('workflow document metrics exclude legislation source uploads', function () {
@@ -1306,7 +1308,7 @@ test('uploaded legislation can infer delegated relationship details', function (
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -1366,7 +1368,7 @@ test('best effort legislation parsing still enters the review state with warning
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -1418,7 +1420,7 @@ test('incomplete AI legislation records become editable review drafts', function
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -1536,7 +1538,7 @@ test('duplicate legislation matches can be updated from the inline review state'
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -1731,7 +1733,7 @@ test('findings and recommendations can be edited and deleted from the review wor
 
     $finding = $review->findings()->create([
         'title' => 'Agency reporting remains inconsistent',
-        'finding_type' => \App\Domain\Analysis\Enums\FindingType::ImplementationGap,
+        'finding_type' => FindingType::ImplementationGap,
         'summary' => 'Quarterly implementation reports are incomplete across multiple agencies.',
         'detail' => null,
     ]);
@@ -1740,7 +1742,7 @@ test('findings and recommendations can be edited and deleted from the review wor
         'finding_id' => $finding->id,
         'title' => 'Mandate a standard reporting template',
         'description' => 'Require a common quarterly template and review-group compliance review.',
-        'recommendation_type' => \App\Domain\Analysis\Enums\RecommendationType::ImproveImplementation,
+        'recommendation_type' => RecommendationType::ImproveImplementation,
     ]);
 
     $component = Livewire::test(AnalysisPage::class, ['review' => $review])
@@ -1789,7 +1791,7 @@ test('analysis workspace renders findings in a compact table layout', function (
 
     $finding = $review->findings()->create([
         'title' => 'Delegated regulations were not updated in line with reporting reforms',
-        'finding_type' => \App\Domain\Analysis\Enums\FindingType::ImplementationGap,
+        'finding_type' => FindingType::ImplementationGap,
         'summary' => 'This finding summary is intentionally long so the workspace shows a compact preview instead of rendering a large narrative block for every analytical record in the list, while still letting the reviewer expand it in place to read the complete wording when they need the full context.',
         'detail' => null,
     ]);
@@ -1798,7 +1800,7 @@ test('analysis workspace renders findings in a compact table layout', function (
         'finding_id' => $finding->id,
         'title' => 'Update delegated regulations',
         'description' => 'Align delegated regulations with the reporting reforms, publish a short implementation note for stakeholders, issue updated guidance for agencies, and confirm the revised reporting obligations in the next quarterly compliance cycle.',
-        'recommendation_type' => \App\Domain\Analysis\Enums\RecommendationType::ImproveImplementation,
+        'recommendation_type' => RecommendationType::ImproveImplementation,
     ]);
 
     Livewire::test(AnalysisPage::class, ['review' => $review])

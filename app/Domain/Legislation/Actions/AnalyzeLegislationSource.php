@@ -95,6 +95,7 @@ class AnalyzeLegislationSource
 
         if ($aiExtraction === null) {
             $aiExtraction = $this->fallbackAiExtraction($document, $rawText);
+            $aiExtraction['warnings'][] = $this->aiFailureWarning($aiError);
         }
 
         return [
@@ -263,6 +264,12 @@ class AnalyzeLegislationSource
             return null;
         }
 
+        if (mb_strlen($rawText) > config('pls_assistant.max_context_characters')) {
+            $error = 'full-document size limit';
+
+            return null;
+        }
+
         $usedLighterPass = false;
 
         try {
@@ -425,7 +432,7 @@ class AnalyzeLegislationSource
             'Document title: '.$document->title,
             'Extract the legislation fields and source-grounded scrutiny preparation from this source text.',
             'Return every structured field. When a field is uncertain, use the closest allowed classification and add a concise technical warning rather than leaving it blank.',
-            'Source text excerpt:'."\n".$sourceExcerpt,
+            'Complete extracted source text:'."\n".$sourceExcerpt,
         ]));
     }
 
@@ -434,7 +441,7 @@ class AnalyzeLegislationSource
         return implode("\n\n", [
             'Document title: '.$document->title,
             'Extract only the core legislation record fields from this source text.',
-            'Source text excerpt:'."\n".$this->sourceExcerptForAi($rawText),
+            'Complete extracted source text:'."\n".$this->sourceExcerptForAi($rawText),
         ]);
     }
 
@@ -446,25 +453,16 @@ class AnalyzeLegislationSource
             ->trim()
             ->toString();
 
-        $frontMatter = Str::limit($normalizedText, 12000, '');
-
-        $signalLines = collect(preg_split("/\R/", $normalizedText) ?: [])
-            ->filter(fn (string $line): bool => preg_match('/\b(short title|long title|bill|act|regulation|ordinance|enacted|assented|dated|made on|gazetted|commenced|commencement|shall|must|duty|regulations|guidance|code|report|review|consult|lay before|sunset|expire)\b/i', $line) === 1)
-            ->map(fn (string $line): string => Str::limit(trim($line), 360, ''))
-            ->filter()
-            ->unique()
-            ->take(32)
-            ->implode("\n");
-
-        return trim(implode("\n\n", array_filter([
-            $frontMatter,
-            $signalLines !== '' ? "Key lines:\n".$signalLines : null,
-        ])));
+        return $normalizedText;
     }
 
     private function aiFailureWarning(?string $error): string
     {
         $normalizedError = Str::lower((string) $error);
+
+        if ($normalizedError === 'full-document size limit') {
+            return 'This source exceeds the full-document AI review limit. Only a provisional record was created; the full text is preserved, but AI review has not completed. Contact support before relying on this record.';
+        }
 
         if (Str::contains($normalizedError, ['timed out', 'timeout', 'curl error 28'])) {
             return 'The source text was extracted, but the AI record step timed out. Retry the source to try again.';

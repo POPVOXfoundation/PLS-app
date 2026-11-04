@@ -416,7 +416,7 @@ class AnalyzeReviewDocument
 
         $type = DocumentType::tryFrom(trim($value));
 
-        if ($type === null || $type === DocumentType::LegislationText) {
+        if ($type === null) {
             return null;
         }
 

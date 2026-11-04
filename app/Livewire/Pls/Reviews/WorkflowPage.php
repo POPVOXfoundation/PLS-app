@@ -437,7 +437,7 @@ class WorkflowPage extends Workspace
                 return [
                     'date' => $document->updated_at?->format('j M Y') ?? '',
                     'label' => $isLegislation ? __('Legislation') : $this->documentTypeLabel($document->document_type),
-                    'route' => route($isLegislation ? 'pls.reviews.legislation' : 'pls.reviews.documents', ['review' => $review]),
+                    'route' => route('pls.reviews.documents.show', ['review' => $review, 'document' => $document]),
                     'status' => $this->documentStatusLabel(is_string($analysisStatus) ? $analysisStatus : null),
                     'title' => $document->title,
                 ];

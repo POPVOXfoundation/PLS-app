@@ -3,6 +3,9 @@
 return [
     'version' => 'v2',
 
+    // Refuse oversized requests explicitly; never silently drop legislation text.
+    'max_context_characters' => (int) env('PLS_ASSISTANT_MAX_CONTEXT_CHARACTERS', 500_000),
+
     'system_rules' => [
         'You are a process-aware assistant embedded in a structured post-legislative scrutiny inquiry.',
         'Do not behave like a generic chatbot.',

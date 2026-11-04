@@ -396,20 +396,27 @@
                     @foreach ($recordRows as $row)
                         <flux:table.row :key="$row['id']">
                             <flux:table.cell variant="strong">
-                                @if (in_array($row['action'], ['review', 'edit'], true) && $row['source_document_id'] !== null)
-                                    <button
-                                        type="button"
-                                        wire:click="startReviewDocument({{ $row['source_document_id'] }})"
-                                        class="text-left text-base font-normal text-zinc-900 transition hover:text-violet-700 dark:text-white dark:hover:text-violet-300"
-                                    >
+                                @if ($row['source_document_id'] !== null)
+                                    <a href="{{ route('pls.reviews.documents.show', [$review, $row['source_document_id']]) }}" wire:navigate
+                                        class="text-base text-violet-700 underline decoration-violet-300 underline-offset-4 hover:text-violet-900 dark:text-violet-300">
                                         {{ $row['title'] }}
-                                    </button>
+                                    </a>
                                 @else
                                     {{ $row['title'] }}
                                 @endif
 
                                 @if ($row['subtitle'])
                                     <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ $row['subtitle'] }}</flux:text>
+                                @endif
+                                @if (! empty($row['warnings']))
+                                    <details class="mt-2 text-xs text-amber-800 dark:text-amber-200">
+                                        <summary class="cursor-pointer">{{ __('Review notes') }} ({{ count($row['warnings']) }})</summary>
+                                        <ul class="mt-2 list-disc space-y-1 whitespace-normal pl-4">
+                                            @foreach ($row['warnings'] as $warning)
+                                                <li>{{ $warning }}</li>
+                                            @endforeach
+                                        </ul>
+                                    </details>
                                 @endif
 
                                 @php
@@ -667,6 +674,16 @@
                         </flux:text>
                     </div>
                 </div>
+                @if ($analysisWarnings !== [])
+                    <div role="status" class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+                        <strong>{{ __('Warnings') }}</strong>
+                        <ul class="mt-2 list-disc space-y-1 pl-5">
+                            @foreach ($analysisWarnings as $warning)
+                                <li>{{ $warning }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
                 @if ($analysisDuplicateCandidates !== [] && $analysisStatus !== 'saved')
                     <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
                         <div class="space-y-3">

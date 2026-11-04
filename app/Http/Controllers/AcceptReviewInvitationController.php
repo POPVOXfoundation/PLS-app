@@ -18,7 +18,7 @@ class AcceptReviewInvitationController extends Controller
         $user = $request->user();
 
         if ($user === null) {
-            session(['pending_invitation_token' => $token]);
+            session(['url.intended' => route('pls.invitations.accept', ['token' => $token])]);
 
             return redirect()->route('login');
         }
