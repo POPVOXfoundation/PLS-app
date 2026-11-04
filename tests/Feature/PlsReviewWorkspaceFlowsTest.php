@@ -5,6 +5,7 @@ use App\Ai\Agents\LegislationSourceFallbackExtractorAgent;
 use App\Ai\Agents\ReviewDocumentExtractorAgent;
 use App\Domain\Analysis\Enums\FindingType;
 use App\Domain\Analysis\Enums\RecommendationType;
+use App\Domain\Documents\AssistantSourceDocument;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Legislation\Enums\LegislationType;
@@ -26,8 +27,13 @@ use App\Support\PlsAssistant\AssistantSourceExtractionResult;
 use App\Support\PlsAssistant\AssistantSourceTextExtractor;
 use App\Support\PlsAssistant\AssistantSourceTextExtractorFactory;
 use App\Support\Toast;
+use GuzzleHttp\Psr7\Response as Psr7Response;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
@@ -48,6 +54,99 @@ function runReviewDocumentPipeline(int $documentId): void
     app()->call([(new ProcessReviewDocument($documentId, 'enrich')), 'handle']);
 }
 
+/**
+ * Create a legislation source document whose text extraction is stubbed to return the given text.
+ */
+function legislationSourceDocumentWithStubbedText(string $title, string $text): Document
+{
+    Storage::fake('s3');
+    config()->set('pls_assistant.assistant_sources.extractor', 'textract');
+    config()->set('pls_assistant.assistant_sources.source_disk', 's3');
+
+    $review = plsReview(['title' => 'Review of '.$title]);
+
+    $extractor = new class($text) implements AssistantSourceTextExtractor
+    {
+        public function __construct(private string $text) {}
+
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
+        {
+            return AssistantSourceExtractionResult::completed(
+                driver: 'stub',
+                method: 'stubbed shared extractor',
+                content: $this->text,
+            );
+        }
+    };
+
+    $factory = Mockery::mock(AssistantSourceTextExtractorFactory::class);
+    $factory->shouldReceive('make')->once()->andReturn($extractor);
+    app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
+
+    return Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => $title,
+        'document_type' => DocumentType::LegislationText,
+        'storage_path' => 'pls/reviews/'.$review->id.'/documents/source.pdf',
+        'mime_type' => 'application/pdf',
+        'metadata' => [
+            'disk' => 's3',
+            'original_name' => 'source.pdf',
+        ],
+    ]);
+}
+
+/**
+ * @return array{milestones: list<array<string, mixed>>, implementation_obligations: list<array<string, mixed>>, parliamentary_follow_up: list<array<string, mixed>>, records_to_locate: list<array<string, mixed>>}
+ */
+function emptyLegislationScrutinyPreparation(): array
+{
+    return [
+        'milestones' => [],
+        'implementation_obligations' => [],
+        'parliamentary_follow_up' => [],
+        'records_to_locate' => [],
+    ];
+}
+
+/**
+ * @return array{title: string, detail: string, timing: string|null, source_text: string}
+ */
+function syntheticScrutinyItem(string $title, ?string $timing): array
+{
+    return [
+        'title' => $title,
+        'detail' => $title.' detail from the synthetic Act.',
+        'timing' => $timing,
+        'source_text' => $title.' source text.',
+    ];
+}
+
+/**
+ * A full primary extraction record, as returned by LegislationSourceExtractorAgent.
+ *
+ * @param  array<string, list<array<string, mixed>>>  $scrutinyPreparation
+ * @param  list<string>  $keyThemes
+ * @return array<string, mixed>
+ */
+function syntheticLegislationRecord(array $scrutinyPreparation, array $keyThemes = ['Access to records', 'Reporting duties']): array
+{
+    return [
+        'title' => 'Synthetic Records Access Act 2026',
+        'short_title' => 'Records Access Act',
+        'legislation_type' => LegislationType::Act->value,
+        'date_enacted' => '2026-03-01',
+        'summary' => 'Creates a public right of access to records held by public bodies.',
+        'key_themes' => $keyThemes,
+        'notable_excerpts' => ['This Act comes into force on 1 July 2026.'],
+        'important_dates' => ['2026-07-01'],
+        'scrutiny_preparation' => [...emptyLegislationScrutinyPreparation(), ...$scrutinyPreparation],
+        'stakeholder_suggestions' => [],
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+        'warnings' => [],
+    ];
+}
+
 test('uploaded legislation sources are queued and can be saved as new legislation after background processing', function () {
     Storage::fake('s3');
     Queue::fake();
@@ -60,7 +159,7 @@ test('uploaded legislation sources are queued and can be saved as new legislatio
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -198,7 +297,7 @@ test('legislation source rows can be deleted from records', function () {
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -258,7 +357,7 @@ test('deleting a saved source row removes the saved legislation from the current
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -341,7 +440,7 @@ test('saved source rows can be reopened for editing after the initial review', f
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -400,7 +499,7 @@ test('saved source rows can be reopened for editing after the initial review', f
         ->assertSee('Save changes');
 });
 
-test('saved legislation rows show warnings without the needs review heading', function () {
+test('saved legislation records retain warnings without returning to needs review', function () {
     $review = plsReview([
         'title' => 'Review of saved legislation warnings',
     ]);
@@ -426,9 +525,9 @@ test('saved legislation rows show warnings without the needs review heading', fu
 
     Livewire::test(LegislationPage::class, ['review' => $review])
         ->call('startReviewDocument', $document->id)
-        ->assertSee('Warnings')
-        ->assertDontSee('Needs review')
-        ->assertSee('Double-check the enactment date against the gazette.');
+        ->assertSet('analysisStatus', 'saved')
+        ->assertSet('analysisWarnings', ['Double-check the enactment date against the gazette.'])
+        ->assertDontSee('Needs review');
 });
 
 test('uploaded legislation docx sources use the shared extractor and can be saved', function () {
@@ -443,7 +542,7 @@ test('uploaded legislation docx sources use the shared extractor and can be save
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             expect($document)->toBeInstanceOf(Document::class)
                 ->and(data_get($document->metadata, 'disk'))->toBe('s3');
@@ -517,7 +616,7 @@ test('bill-style source text is kept as a primary record and avoids structural s
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -564,7 +663,8 @@ test('bill-style source text is kept as a primary record and avoids structural s
         ->assertSet('analysisType', LegislationType::Act->value)
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
         ->assertSet('analysisSummary', fn (string $summary): bool => str_contains(strtolower($summary), 'deep port facility'))
-        ->assertSee('This looks like a bill or draft text, so an enactment date may not be available yet.')
+        ->assertSet('analysisDateEnacted', '')
+        ->assertSet('analysisWarnings', ['This looks like a bill or draft text, so an enactment date may not be available yet.'])
         ->assertDontSee('Ready');
 });
 
@@ -580,7 +680,7 @@ test('processing legislation extraction requeues in the background until text is
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             if (data_get($document->metadata, 'extraction.textract_job_id') === null) {
                 return AssistantSourceExtractionResult::processing(
@@ -728,7 +828,7 @@ test('large legislation source prompts are trimmed before the ai extraction step
     {
         public function __construct(private readonly string $content) {}
 
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -785,7 +885,7 @@ test('full legislation extraction failures use a lighter record pass', function 
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -807,7 +907,7 @@ test('full legislation extraction failures use a lighter record pass', function 
     $factory->shouldReceive('make')->once()->andReturn($extractor);
     app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
     LegislationSourceExtractorAgent::fake(function () {
-        throw new \RuntimeException('AI extraction failed');
+        throw new RuntimeException('AI extraction failed');
     });
     LegislationSourceFallbackExtractorAgent::fake([[
         'title' => 'Southern Deep Port Development Facility Bill, 2024',
@@ -832,8 +932,8 @@ test('full legislation extraction failures use a lighter record pass', function 
     $component
         ->call('refreshPendingAnalyses')
         ->assertSee('Needs review')
-        ->assertSee('shorter record pass')
         ->call('startReviewDocument', $document->id)
+        ->assertSet('analysisWarnings', ['PLSAssist used a shorter record pass for this source. Review the extracted details before saving.'])
         ->assertSet('analysisTitle', 'Southern Deep Port Development Facility Bill, 2024')
         ->assertSet('analysisType', LegislationType::Act->value)
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
@@ -842,6 +942,152 @@ test('full legislation extraction failures use a lighter record pass', function 
     expect(data_get($document->fresh()->metadata, 'legislation_analysis.status'))->toBe('needs_review')
         ->and(data_get($document->fresh()->metadata, 'legislation_analysis.summary'))->toBe('Provides for the development and operation of a southern deep port facility.')
         ->and(data_get($document->fresh()->metadata, 'legislation_analysis.title'))->toBe('Southern Deep Port Development Facility Bill, 2024');
+});
+
+test('full legislation extraction failures of any kind use a lighter record pass', function (Closure $primaryFailure) {
+    Http::preventStrayRequests();
+    Queue::fake();
+
+    $document = legislationSourceDocumentWithStubbedText(
+        'Southern Deep Port Development Facility Bill, 2024',
+        "BELIZE: SOUTHERN DEEP PORT DEVELOPMENT FACILITY BILL, 2024\n\nA Bill for an Act to provide for the development and operation of a southern deep port facility and related matters.",
+    );
+    LegislationSourceExtractorAgent::fake(function () use ($primaryFailure): never {
+        throw $primaryFailure();
+    });
+    LegislationSourceFallbackExtractorAgent::fake([[
+        'title' => 'Southern Deep Port Development Facility Bill, 2024',
+        'legislation_type' => LegislationType::Act->value,
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+        'date_enacted' => null,
+        'summary' => 'Provides for the development and operation of a southern deep port facility.',
+        'key_themes' => ['Port development'],
+        'important_dates' => [],
+        'warnings' => [],
+    ]]);
+
+    runLegislationSourcePipeline($document->id);
+
+    $analysis = data_get($document->fresh()->metadata, 'legislation_analysis');
+
+    expect($analysis['status'])->toBe('needs_review')
+        ->and($analysis['title'])->toBe('Southern Deep Port Development Facility Bill, 2024')
+        ->and($analysis['legislation_type'])->toBe(LegislationType::Act->value)
+        ->and($analysis['relationship_type'])->toBe(ReviewLegislationRelationshipType::Primary->value)
+        ->and($analysis['summary'])->toBe('Provides for the development and operation of a southern deep port facility.')
+        ->and($analysis['key_themes'])->toBe(['Port development'])
+        ->and($analysis['scrutiny_preparation'])->toBe(emptyLegislationScrutinyPreparation())
+        ->and($analysis['warnings'])->toBe([
+            'PLSAssist used a shorter record pass for this source. Review the extracted details before saving.',
+        ]);
+})->with([
+    'runtime exception' => fn (): Closure => fn (): Throwable => new RuntimeException('AI extraction failed'),
+    'openai http 400 schema rejection' => fn (): Closure => fn (): Throwable => new RequestException(new Response(new Psr7Response(
+        400,
+        ['Content-Type' => 'application/json'],
+        json_encode(['error' => [
+            'message' => "Invalid schema for response_format 'schema_definition': In context=('properties', 'scrutiny_preparation'), 'additionalProperties' is required to be supplied and to be false.",
+            'type' => 'invalid_request_error',
+            'param' => 'text.format.schema',
+            'code' => 'invalid_json_schema',
+        ]], JSON_THROW_ON_ERROR),
+    ))),
+    'connection timeout' => fn (): Closure => fn (): Throwable => new ConnectionException('cURL error 28: Operation timed out after 60001 milliseconds with 0 bytes received'),
+]);
+
+test('full legislation extraction results are saved with normalized scrutiny preparation', function (array $record, array $expectedScrutinyPreparation, array $expectedKeyThemes) {
+    Http::preventStrayRequests();
+    Queue::fake();
+
+    $document = legislationSourceDocumentWithStubbedText(
+        'Synthetic Records Access Act 2026',
+        "Synthetic Records Access Act 2026\n\nThis Act comes into force on 1 July 2026. The Minister must lay a report before Parliament within two years.",
+    );
+    LegislationSourceExtractorAgent::fake([$record]);
+    LegislationSourceFallbackExtractorAgent::fake(function (): never {
+        throw new RuntimeException('The lighter pass must not run when the full pass succeeds.');
+    });
+
+    runLegislationSourcePipeline($document->id);
+
+    $analysis = data_get($document->fresh()->metadata, 'legislation_analysis');
+
+    expect($analysis['status'])->toBe('needs_review')
+        ->and($analysis['title'])->toBe('Synthetic Records Access Act 2026')
+        ->and($analysis['short_title'])->toBe('Records Access Act')
+        ->and($analysis['legislation_type'])->toBe(LegislationType::Act->value)
+        ->and($analysis['relationship_type'])->toBe(ReviewLegislationRelationshipType::Primary->value)
+        ->and($analysis['date_enacted'])->toBe('2026-03-01')
+        ->and($analysis['summary'])->toBe('Creates a public right of access to records held by public bodies.')
+        ->and($analysis['key_themes'])->toBe($expectedKeyThemes)
+        ->and($analysis['important_dates'])->toBe(['2026-07-01'])
+        ->and($analysis['scrutiny_preparation'])->toBe($expectedScrutinyPreparation)
+        ->and($analysis['warnings'])->toBe([])
+        ->and(collect($analysis['warnings'])->contains(fn (string $warning): bool => str_contains($warning, 'shorter record pass')))->toBeFalse();
+})->with([
+    'items with and without timing' => [
+        fn (): array => syntheticLegislationRecord([
+            'milestones' => [
+                syntheticScrutinyItem('Commencement', '1 July 2026'),
+                syntheticScrutinyItem('Review clause', null),
+            ],
+            'parliamentary_follow_up' => [syntheticScrutinyItem('Report to Parliament', 'within two years')],
+        ]),
+        fn (): array => [
+            ...emptyLegislationScrutinyPreparation(),
+            'milestones' => [
+                syntheticScrutinyItem('Commencement', '1 July 2026'),
+                syntheticScrutinyItem('Review clause', null),
+            ],
+            'parliamentary_follow_up' => [syntheticScrutinyItem('Report to Parliament', 'within two years')],
+        ],
+        ['Access to records', 'Reporting duties'],
+    ],
+    'empty categories' => [
+        fn (): array => syntheticLegislationRecord([]),
+        fn (): array => emptyLegislationScrutinyPreparation(),
+        ['Access to records', 'Reporting duties'],
+    ],
+    'more than six items' => [
+        fn (): array => syntheticLegislationRecord(
+            ['records_to_locate' => collect(range(1, 8))->map(fn (int $number): array => syntheticScrutinyItem("Record {$number}", null))->all()],
+            ['Theme 1', 'Theme 2', 'Theme 3', 'Theme 4', 'Theme 5', 'Theme 6', 'Theme 7'],
+        ),
+        fn (): array => [
+            ...emptyLegislationScrutinyPreparation(),
+            'records_to_locate' => collect(range(1, 8))->map(fn (int $number): array => syntheticScrutinyItem("Record {$number}", null))->all(),
+        ],
+        ['Theme 1', 'Theme 2', 'Theme 3', 'Theme 4', 'Theme 5'],
+    ],
+]);
+
+test('legislation sources fall back to a basic draft when both ai passes fail', function () {
+    Http::preventStrayRequests();
+    Queue::fake();
+
+    $document = legislationSourceDocumentWithStubbedText(
+        'Synthetic Records Access Act 2026',
+        "Synthetic Records Access Act 2026\n\nThis Act comes into force on 1 July 2026.",
+    );
+    LegislationSourceExtractorAgent::fake(function (): never {
+        throw new RuntimeException('Full pass failed');
+    });
+    LegislationSourceFallbackExtractorAgent::fake(function (): never {
+        throw new RuntimeException('Lighter pass failed');
+    });
+
+    runLegislationSourcePipeline($document->id);
+
+    $analysis = data_get($document->fresh()->metadata, 'legislation_analysis');
+
+    expect($analysis['status'])->toBe('needs_review')
+        ->and($analysis['title'])->toBe('Synthetic Records Access Act 2026')
+        ->and($analysis['legislation_type'])->toBe(LegislationType::Act->value)
+        ->and($analysis['relationship_type'])->toBe(ReviewLegislationRelationshipType::Primary->value)
+        ->and($analysis['scrutiny_preparation'])->toBe(emptyLegislationScrutinyPreparation())
+        ->and($analysis['warnings'])->toBe([
+            'PLSAssist could not complete the AI record for this source. A basic editable draft has been prepared from the extracted text. Review and complete it before saving.',
+        ]);
 });
 
 test('failed legislation analysis can be retried on the same source row', function () {
@@ -903,7 +1149,7 @@ test('review documents can be uploaded in batches analyzed and saved from the re
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -1025,7 +1271,7 @@ test('failed document analysis can be retried on the same review document row', 
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -1042,7 +1288,7 @@ test('failed document analysis can be retried on the same review document row', 
     $factory->shouldReceive('make')->once()->andReturn($extractor);
     app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
     ReviewDocumentExtractorAgent::fake(function () {
-        throw new \RuntimeException('AI extraction failed');
+        throw new RuntimeException('AI extraction failed');
     });
 
     $component = Livewire::test(DocumentsPage::class, ['review' => $review])
@@ -1104,7 +1350,7 @@ test('processing document extraction requeues in the background until text is re
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             if (data_get($document->metadata, 'extraction.textract_job_id') === null) {
                 return AssistantSourceExtractionResult::processing(
@@ -1306,7 +1552,7 @@ test('uploaded legislation can infer delegated relationship details', function (
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -1366,7 +1612,7 @@ test('best effort legislation parsing still enters the review state with warning
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -1418,7 +1664,7 @@ test('incomplete AI legislation records become editable review drafts', function
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -1467,7 +1713,8 @@ test('incomplete AI legislation records become editable review drafts', function
         ->assertSet('analysisTitle', 'Affirmative Action (Gender Equality) Bill 2024')
         ->assertSet('analysisType', LegislationType::Act->value)
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
-        ->assertSee('could not classify this source');
+        ->assertSet('analysisWarnings', fn (array $warnings): bool => collect($warnings)
+            ->contains(fn (string $warning): bool => str_contains($warning, 'could not classify this source')));
 });
 
 test('stale legislation rows are surfaced for retry instead of refreshing inline', function () {
@@ -1536,7 +1783,7 @@ test('duplicate legislation matches can be updated from the inline review state'
 
     $extractor = new class implements AssistantSourceTextExtractor
     {
-        public function extract(\App\Domain\Documents\AssistantSourceDocument|\App\Domain\Documents\Document $document): AssistantSourceExtractionResult
+        public function extract(AssistantSourceDocument|Document $document): AssistantSourceExtractionResult
         {
             return AssistantSourceExtractionResult::completed(
                 driver: 'stub',
@@ -1731,7 +1978,7 @@ test('findings and recommendations can be edited and deleted from the review wor
 
     $finding = $review->findings()->create([
         'title' => 'Agency reporting remains inconsistent',
-        'finding_type' => \App\Domain\Analysis\Enums\FindingType::ImplementationGap,
+        'finding_type' => FindingType::ImplementationGap,
         'summary' => 'Quarterly implementation reports are incomplete across multiple agencies.',
         'detail' => null,
     ]);
@@ -1740,7 +1987,7 @@ test('findings and recommendations can be edited and deleted from the review wor
         'finding_id' => $finding->id,
         'title' => 'Mandate a standard reporting template',
         'description' => 'Require a common quarterly template and review-group compliance review.',
-        'recommendation_type' => \App\Domain\Analysis\Enums\RecommendationType::ImproveImplementation,
+        'recommendation_type' => RecommendationType::ImproveImplementation,
     ]);
 
     $component = Livewire::test(AnalysisPage::class, ['review' => $review])
@@ -1789,7 +2036,7 @@ test('analysis workspace renders findings in a compact table layout', function (
 
     $finding = $review->findings()->create([
         'title' => 'Delegated regulations were not updated in line with reporting reforms',
-        'finding_type' => \App\Domain\Analysis\Enums\FindingType::ImplementationGap,
+        'finding_type' => FindingType::ImplementationGap,
         'summary' => 'This finding summary is intentionally long so the workspace shows a compact preview instead of rendering a large narrative block for every analytical record in the list, while still letting the reviewer expand it in place to read the complete wording when they need the full context.',
         'detail' => null,
     ]);
@@ -1798,7 +2045,7 @@ test('analysis workspace renders findings in a compact table layout', function (
         'finding_id' => $finding->id,
         'title' => 'Update delegated regulations',
         'description' => 'Align delegated regulations with the reporting reforms, publish a short implementation note for stakeholders, issue updated guidance for agencies, and confirm the revised reporting obligations in the next quarterly compliance cycle.',
-        'recommendation_type' => \App\Domain\Analysis\Enums\RecommendationType::ImproveImplementation,
+        'recommendation_type' => RecommendationType::ImproveImplementation,
     ]);
 
     Livewire::test(AnalysisPage::class, ['review' => $review])
