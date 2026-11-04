@@ -6,14 +6,15 @@ use App\Domain\Documents\Document;
 use App\Domain\Reporting\Enums\ReportStatus;
 use App\Domain\Reporting\Enums\ReportType;
 use App\Domain\Reviews\PlsReview;
+use Database\Factories\Domain\Reporting\ReportFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Model;
 
 class Report extends Model
 {
-    /** @use HasFactory<\Database\Factories\Domain\Reporting\ReportFactory> */
+    /** @use HasFactory<ReportFactory> */
     use HasFactory;
 
     /**
@@ -26,7 +27,22 @@ class Report extends Model
         'status',
         'document_id',
         'published_at',
+        'content',
+        'content_versions',
     ];
+
+    protected static function booted(): void
+    {
+        static::updating(function (Report $report): void {
+            if ($report->isDirty(['content', 'title']) && filled($report->getOriginal('content'))) {
+                $report->content_versions = [...($report->getOriginal('content_versions') ?? []), [
+                    'title' => $report->getOriginal('title'),
+                    'content' => $report->getOriginal('content'),
+                    'saved_at' => $report->getOriginal('updated_at')?->toIso8601String(),
+                ]];
+            }
+        });
+    }
 
     public function review(): BelongsTo
     {
@@ -49,6 +65,7 @@ class Report extends Model
     protected function casts(): array
     {
         return [
+            'content_versions' => 'array',
             'report_type' => ReportType::class,
             'status' => ReportStatus::class,
             'published_at' => 'datetime',

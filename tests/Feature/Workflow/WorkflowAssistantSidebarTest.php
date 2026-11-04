@@ -710,7 +710,8 @@ test('mixed grounding keeps global jurisdiction and review layers distinct', fun
         expect((string) $prompt->agent->instructions())
             ->toContain('Global reference guidance: WFD Manual: Use post-legislative scrutiny to connect evidence, findings, and follow-up.')
             ->toContain('Jurisdiction guidance: Local PLS Guidance: In this jurisdiction, implementation delays should be tied to agency accountability and reporting timelines.')
-            ->toContain('Review record and documents: Implementation Memo: The current review record shows one ministry has delayed implementation by six months.');
+            ->toContain('Review record and documents: Implementation Memo: Source details:')
+            ->toContain('The current review record shows one ministry has delayed implementation by six months.');
 
         return $prompt->contains('Combine the process guidance, local practice, and current review evidence on implementation delays.');
     });

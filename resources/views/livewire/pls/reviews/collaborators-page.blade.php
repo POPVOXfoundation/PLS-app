@@ -110,7 +110,7 @@
                         <flux:table.cell>
                             @if ($canManageCollaborators && $membership->role->value !== 'owner')
                                 <div class="flex justify-end">
-                                    <flux:button variant="ghost" size="sm" icon="trash" wire:click="removeCollaborator({{ $membership->id }})" />
+                                    <flux:button aria-label="Delete record" variant="ghost" size="sm" icon="trash" wire:click="removeCollaborator({{ $membership->id }})" />
                                 </div>
                             @endif
                         </flux:table.cell>
@@ -127,7 +127,7 @@
                         <flux:table.cell>
                             @if ($canManageCollaborators)
                                 <div class="flex justify-end">
-                                    <flux:button variant="ghost" size="sm" icon="trash" wire:click="revokeInvitation({{ $invitation->id }})" />
+                                    <flux:button aria-label="Delete record" variant="ghost" size="sm" icon="trash" wire:click="revokeInvitation({{ $invitation->id }})" />
                                 </div>
                             @endif
                         </flux:table.cell>

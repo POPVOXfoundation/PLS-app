@@ -5,6 +5,7 @@ namespace App\Domain\Reporting\Validation;
 use App\Domain\Documents\Document;
 use App\Domain\Reporting\Enums\ReportStatus;
 use App\Domain\Reporting\Enums\ReportType;
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
@@ -54,13 +55,14 @@ class StoreReportValidator
     }
 
     /**
-     * @return array<string, array<int, \Illuminate\Contracts\Validation\ValidationRule|\Illuminate\Contracts\Validation\Rule|string>>
+     * @return array<string, array<int, ValidationRule|\Illuminate\Contracts\Validation\Rule|string>>
      */
     public function rules(): array
     {
         return [
             'pls_review_id' => ['required', 'integer', Rule::exists('pls_reviews', 'id')],
             'title' => ['required', 'string', 'max:255'],
+            'content' => ['nullable', 'string', 'max:200000'],
             'report_type' => ['required', Rule::enum(ReportType::class)],
             'status' => ['required', Rule::enum(ReportStatus::class)],
             'document_id' => ['nullable', 'integer', Rule::exists('documents', 'id')],

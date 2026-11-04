@@ -651,6 +651,8 @@ class ReviewAssistantContextBuilder
         $documents = $this->documentsForWorkspace($review);
 
         return array_values(array_filter([
+            ...$review->documents->filter(fn (Document $document): bool => $document->isReportingTemplate())->map(fn (Document $document): string => $document->title.': blank template or drafting guidance; do not treat its fields as reported facts or implementation results.')->all(),
+            'Saved findings are reviewer records, not independently verified conclusions. Cite source details links supplied with the text and quote supporting passages; identify contrary evidence and uncertainty.',
             $documents->isEmpty() ? 'Document-grounded answers will be limited because there are no review documents yet.' : null,
             $review->findings->isEmpty() ? 'Any analytical conclusions would be weak because the findings record is still empty.' : null,
             $review->recommendations->isEmpty() ? 'Recommendation support is limited because no recommendations are recorded yet.' : null,

@@ -257,7 +257,7 @@
                 >
                     <x-slot:actionsTrailing>
                         <flux:modal.trigger name="confirm-reset-chat">
-                            <flux:button
+                            <flux:button aria-label="Retry"
                                 type="button"
                                 variant="ghost"
                                 size="sm"
@@ -267,7 +267,7 @@
                                 class="!text-zinc-400 hover:!text-zinc-500"
                             />
                         </flux:modal.trigger>
-                        <flux:button
+                        <flux:button aria-label="Send message"
                             variant="primary"
                             size="sm"
                             icon="paper-airplane"
@@ -351,7 +351,7 @@
                 >
                     <x-slot:actionsTrailing>
                         <flux:modal.trigger name="confirm-reset-chat">
-                            <flux:button
+                            <flux:button aria-label="Retry"
                                 type="button"
                                 variant="ghost"
                                 size="sm"
@@ -361,7 +361,7 @@
                                 class="!text-zinc-400 hover:!text-zinc-500"
                             />
                         </flux:modal.trigger>
-                        <flux:button
+                        <flux:button aria-label="Send message"
                             variant="primary"
                             size="sm"
                             icon="paper-airplane"

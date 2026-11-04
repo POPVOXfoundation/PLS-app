@@ -16,6 +16,8 @@
             :initials="auth()->user()->initials()"
             icon-trailing="chevron-down"
             data-test="sidebar-menu-button"
+            :aria-label="__('Account menu')"
+            class="max-w-48 [&>span]:hidden sm:[&>span]:block"
         />
     @endif
 

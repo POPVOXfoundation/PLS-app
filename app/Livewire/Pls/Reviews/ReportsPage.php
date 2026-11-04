@@ -19,6 +19,7 @@ use App\Jobs\ProcessReviewDocument;
 use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -51,6 +52,8 @@ class ReportsPage extends Workspace
     public array $reportTemplateUploads = [];
 
     public string $reportTitle = '';
+
+    public string $reportContent = '';
 
     public string $reportType = ReportType::DraftReport->value;
 
@@ -261,6 +264,8 @@ class ReportsPage extends Workspace
 
         $this->prepareReportCreate(ReportType::DraftReport->value, ReportStatus::Draft->value);
         $this->reportTitle = $this->reportOutline['title'];
+        $this->reportContent = collect($this->reportOutline['sections'])->map(fn (array $section): string => '## '.$section['title']."\n\n".$section['purpose']."\n\n".$section['material']."\n\nLimitations: ".$section['limitations']
+        )->implode("\n\n");
     }
 
     public function requestFindingsSectionDraft(): void
@@ -316,6 +321,7 @@ class ReportsPage extends Workspace
             $this->review = $action->store([
                 'pls_review_id' => $this->review->id,
                 'title' => $this->reportTitle,
+                'content' => $this->reportContent,
                 'report_type' => $this->reportType,
                 'status' => $status,
                 'document_id' => $this->blankToNull($this->reportDocumentId) === null ? null : (int) $this->reportDocumentId,
@@ -324,6 +330,7 @@ class ReportsPage extends Workspace
         } catch (ValidationException $exception) {
             $this->mapValidationErrors($exception, [
                 'title' => 'reportTitle',
+                'content' => 'reportContent',
                 'report_type' => 'reportType',
                 'status' => 'reportStatus',
                 'document_id' => 'reportDocumentId',
@@ -356,6 +363,7 @@ class ReportsPage extends Workspace
 
         $this->reportEditingId = (string) $report->id;
         $this->reportTitle = $report->title;
+        $this->reportContent = (string) $report->content;
         $this->reportType = $report->report_type->value;
         $this->reportStatus = $report->status->value;
         $this->reportDocumentId = $report->document_id === null ? '' : (string) $report->document_id;
@@ -364,6 +372,7 @@ class ReportsPage extends Workspace
         $this->resetValidation([
             'reportEditingId',
             'reportTitle',
+            'reportContent',
             'reportType',
             'reportStatus',
             'reportDocumentId',
@@ -382,6 +391,7 @@ class ReportsPage extends Workspace
                 'report_id' => $this->reportEditingId,
                 'pls_review_id' => $this->review->id,
                 'title' => $this->reportTitle,
+                'content' => $this->reportContent,
                 'report_type' => $this->reportType,
                 'status' => $this->reportStatus,
                 'document_id' => $this->blankToNull($this->reportDocumentId) === null ? null : (int) $this->reportDocumentId,
@@ -391,6 +401,7 @@ class ReportsPage extends Workspace
             $this->mapValidationErrors($exception, [
                 'report_id' => 'reportEditingId',
                 'title' => 'reportTitle',
+                'content' => 'reportContent',
                 'report_type' => 'reportType',
                 'status' => 'reportStatus',
                 'document_id' => 'reportDocumentId',
@@ -643,7 +654,7 @@ class ReportsPage extends Workspace
                 'implementingAgencies',
                 'consultations.materials',
                 'submissions',
-                'findings',
+                'findings.citations',
                 'recommendations.finding',
                 'reports.document',
                 'reports.governmentResponses.document',
@@ -659,13 +670,14 @@ class ReportsPage extends Workspace
     private function reportPreview(PlsReview $review): array
     {
         $evidenceCount = $review->documents
-            ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
+            ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText || $document->isReportingTemplate())
             ->count();
         $consultationResultCount = $review->consultations->sum(
             fn ($consultation): int => $consultation->materials->count(),
         );
         $workingReport = $review->reports
             ->first(fn (Report $report): bool => $report->status === ReportStatus::Draft);
+        $trackedReport = $workingReport ?? $review->reports->first();
 
         return [
             'detail' => __('This working preview updates as the review record changes. It does not create or publish a report.'),
@@ -696,10 +708,10 @@ class ReportsPage extends Workspace
                 [
                     'action' => __('Open analysis'),
                     'detail' => $review->findings->isNotEmpty()
-                        ? trans_choice('{1} One human-reviewed finding is ready to structure the report.|[2,*] :count human-reviewed findings are ready to structure the report.', $review->findings->count(), ['count' => $review->findings->count()])
+                        ? __(':count accepted findings; :supported have reviewed supporting passages. Check gaps before drafting.', ['count' => $review->findings->count(), 'supported' => $review->findings->filter(fn ($finding) => $finding->hasReviewedSupport())->count()])
                         : __('Confirm human-reviewed findings before treating this section as report-ready.'),
                     'label' => __('Findings and recommendations'),
-                    'ready' => $review->findings->isNotEmpty(),
+                    'ready' => $review->findings->isNotEmpty() && $review->findings->every(fn ($finding) => $finding->hasReviewedSupport()) && $review->recommendations->isNotEmpty(),
                     'route' => route('pls.reviews.analysis', ['review' => $review]),
                     'title' => $review->recommendations->isNotEmpty()
                         ? trans_choice(':count recommendation is linked to the findings.|:count recommendations are linked to the findings.', $review->recommendations->count(), ['count' => $review->recommendations->count()])
@@ -709,11 +721,11 @@ class ReportsPage extends Workspace
                     'action' => __('Manage reports'),
                     'detail' => $workingReport !== null
                         ? __('A draft report record is already being tracked.')
-                        : __('Create a report record when the team is ready to track the working draft.'),
+                        : ($trackedReport !== null ? __('A report record is already being tracked. Open it to check the saved text or linked document.') : __('Create a report record when the team is ready to track the working draft.')),
                     'label' => __('Publication path'),
                     'ready' => $workingReport !== null || $review->reports->isNotEmpty(),
                     'route' => route('pls.reviews.reports', ['review' => $review]),
-                    'title' => $workingReport?->title ?? __('No report record yet'),
+                    'title' => $trackedReport?->title ?? __('No report record yet'),
                 ],
             ],
         ];
@@ -926,7 +938,7 @@ class ReportsPage extends Workspace
             ->filter(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
             ->count();
         $evidenceCount = $review->documents
-            ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
+            ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText || $document->isReportingTemplate())
             ->count();
         $consultationMaterialCount = $review->consultations->sum(
             fn ($consultation): int => $consultation->materials->count(),
@@ -1029,7 +1041,7 @@ class ReportsPage extends Workspace
     }
 
     /**
-     * @param  EloquentCollection<int, \Illuminate\Database\Eloquent\Model>  $records
+     * @param  EloquentCollection<int, Model>  $records
      */
     private function outlineRecordTitles(EloquentCollection $records, string $emptyMessage): string
     {
@@ -1144,6 +1156,7 @@ class ReportsPage extends Workspace
         $this->reset([
             'reportEditingId',
             'reportTitle',
+            'reportContent',
             'reportDocumentId',
             'reportPublishedAt',
         ]);
@@ -1153,6 +1166,7 @@ class ReportsPage extends Workspace
 
         $this->resetValidation([
             'reportTitle',
+            'reportContent',
             'reportType',
             'reportStatus',
             'reportDocumentId',

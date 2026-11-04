@@ -23,6 +23,7 @@ use App\Domain\Reviews\Enums\PlsStepStatus;
 use App\Domain\Stakeholders\ImplementingAgency;
 use App\Domain\Stakeholders\Stakeholder;
 use App\Models\User;
+use Database\Factories\Domain\Reviews\PlsReviewFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -35,7 +36,7 @@ use Illuminate\Support\Str;
 
 class PlsReview extends Model
 {
-    /** @use HasFactory<\Database\Factories\Domain\Reviews\PlsReviewFactory> */
+    /** @use HasFactory<PlsReviewFactory> */
     use HasFactory;
 
     /**
@@ -244,11 +245,9 @@ class PlsReview extends Model
 
     public function progressPercentage(): int
     {
-        $totalSteps = $this->relationLoaded('steps')
-            ? max($this->steps->count(), 1)
-            : max($this->steps()->count(), 1);
+        $steps = $this->relationLoaded('steps') ? $this->steps : $this->steps()->get();
 
-        return (int) round(($this->current_step_number / $totalSteps) * 100);
+        return (int) round(($steps->filter(fn (PlsReviewStep $step): bool => $step->isTerminal())->count() / max($steps->count(), 1)) * 100);
     }
 
     public function statusLabel(): string

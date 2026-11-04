@@ -37,6 +37,12 @@ class DocumentsPage extends Workspace
      */
     public array $documentUploads = [];
 
+    public string $search = '';
+
+    public string $typeFilter = '';
+
+    public string $sortOrder = 'newest';
+
     public bool $showEditDocumentModal = false;
 
     public string $documentEditingId = '';
@@ -482,7 +488,6 @@ class DocumentsPage extends Workspace
         return PlsReview::query()
             ->with([
                 'documents' => fn ($query) => $query
-                    ->where('document_type', '!=', DocumentType::LegislationText->value)
                     ->latest('updated_at')
                     ->latest('id'),
             ])
@@ -514,7 +519,10 @@ class DocumentsPage extends Workspace
     private function recordRows(PlsReview $review): array
     {
         return $review->documents
+            ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
+            ->filter(fn (Document $document): bool => ($this->typeFilter === '' || $document->document_type->value === $this->typeFilter) && ($this->search === '' || Str::contains(Str::lower($document->title.' '.$document->summary), Str::lower(trim($this->search)))))
             ->sortByDesc(fn (Document $document): int => $document->updated_at?->timestamp ?? $document->created_at?->timestamp ?? 0)
+            ->when($this->sortOrder === 'title', fn ($items) => $items->sortBy('title'))
             ->map(function (Document $document): array {
                 $storedAnalysis = $this->storedAnalysisForDocument($document);
                 $status = $this->documentRecordStatus($document);
@@ -524,7 +532,9 @@ class DocumentsPage extends Workspace
                     'id' => $document->id,
                     'title' => (string) ($storedAnalysis['title'] ?? $document->title),
                     'summary' => (string) ($storedAnalysis['summary'] ?? $document->summary ?? ''),
-                    'document_type' => Str::headline((string) ($storedAnalysis['document_type'] ?? $document->document_type->value)),
+                    'document_type' => $document->evidenceRoleLabel(),
+                    'warnings' => $document->reviewWarnings(),
+                    'review_status' => $document->reviewStatusLabel(),
                     'status' => $status,
                     'progress_stage' => $progressStage,
                     'status_label' => $this->statusLabel($status, $progressStage),

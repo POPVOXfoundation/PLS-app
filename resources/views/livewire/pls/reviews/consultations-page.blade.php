@@ -40,7 +40,7 @@
                                             <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $consultation->title }}</p>
                                             <flux:badge size="sm" color="zinc">{{ $this->consultationTypeLabel($consultation->consultation_type) }}</flux:badge>
                                             <flux:badge size="sm" :color="$consultationCompleted ? 'emerald' : 'amber'">
-                                                {{ $consultationCompleted ? __('Completed') : __('Planned') }}
+                                                {{ $consultationCompleted ? ($consultation->materials->isEmpty() ? __('Completed — results missing') : __('Completed — results recorded')) : __('Planned') }}
                                             </flux:badge>
                                         </div>
 
@@ -89,7 +89,7 @@
                                                 <div class="flex flex-col gap-2 rounded-lg bg-zinc-50 px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between dark:bg-zinc-900/60">
                                                     <div class="min-w-0">
                                                         <div class="flex flex-wrap items-center gap-2">
-                                                            <span class="text-sm font-medium text-zinc-800 dark:text-zinc-100">{{ $material->document?->title ?? __('Uploaded result') }}</span>
+                                                            @if ($material->document)<flux:link :href="route('pls.reviews.documents.show', [$review, $material->document])" wire:navigate>{{ $material->document->title }}</flux:link>@else<span>{{ __('Uploaded result unavailable') }}</span>@endif
                                                             <flux:badge size="sm">{{ $this->consultationMaterialTypeLabel($material->material_type) }}</flux:badge>
                                                             @if ($material->stakeholder)
                                                                 <span class="text-xs text-zinc-500 dark:text-zinc-400">{{ $material->stakeholder->name }}</span>
@@ -180,7 +180,7 @@
                                                 <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-400 dark:text-zinc-500">
                                                     <span>{{ $submission->submitted_at?->toFormattedDateString() ?? __('Undated') }}</span>
                                                     @if ($submission->document)
-                                                        <span>{{ $submission->document->title }}</span>
+                                                        <flux:link :href="route('pls.reviews.documents.show', [$review, $submission->document])" wire:navigate>{{ $submission->document->title }}</flux:link>
                                                     @endif
                                                 </div>
                                             </div>

@@ -9,9 +9,7 @@ use App\Domain\Reviews\PlsReview;
 
 class UpdateReport
 {
-    public function __construct(private UpdateReportValidator $validator)
-    {
-    }
+    public function __construct(private UpdateReportValidator $validator) {}
 
     /**
      * @param  array<string, mixed>  $input
@@ -23,6 +21,7 @@ class UpdateReport
 
         $report->update([
             'title' => $validated['title'],
+            'content' => $validated['content'] ?? $report->content,
             'report_type' => $validated['report_type'],
             'status' => $validated['status'],
             'document_id' => $validated['document_id'] ?? null,

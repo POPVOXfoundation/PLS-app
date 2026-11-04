@@ -331,7 +331,7 @@ test('all review section routes render inside the shared workspace shell', funct
         'pls.reviews.documents' => 'Add evidence',
         'pls.reviews.stakeholders' => 'Stakeholders',
         'pls.reviews.consultations' => 'Consultation plan',
-        'pls.reviews.analysis' => 'Confirmed findings & recommendations',
+        'pls.reviews.analysis' => 'Reviewed findings & recommendations',
         'pls.reviews.reports' => 'Government responses',
         'pls.reviews.settings' => 'Workspace settings',
     ];

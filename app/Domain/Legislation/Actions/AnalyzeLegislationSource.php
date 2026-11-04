@@ -10,6 +10,7 @@ use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
 use App\Domain\Legislation\Legislation;
 use App\Support\PlsAssistant\AssistantSourceTextExtractorFactory;
 use App\Support\PlsAssistant\LegislationExcerptExtractor;
+use App\Support\PlsAssistant\SourceIdentity;
 use App\Support\PlsAssistant\StakeholderSuggestionNormalizer;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -97,6 +98,9 @@ class AnalyzeLegislationSource
             $aiExtraction = $this->fallbackAiExtraction($document, $rawText);
             $aiExtraction['warnings'][] = $this->aiFailureWarning($aiError);
         }
+
+        $aiExtraction['source_label'] = $document->title;
+        $aiExtraction = SourceIdentity::guardLegislation($aiExtraction, $rawText);
 
         return [
             'status' => 'completed',

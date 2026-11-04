@@ -9,6 +9,49 @@ use Illuminate\Support\Str;
 
 class StakeholderSuggestionNormalizer
 {
+    public function identityKeys(string $name): array
+    {
+        $keys = [$name, preg_replace('/\([^)]*\)/u', '', $name)];
+        preg_match_all('/\(([^)]+)\)/u', $name, $matches);
+        $keys = [...$keys, ...($matches[1] ?? [])];
+
+        return array_values(array_unique(array_filter(array_map(function (string $key): string {
+            $key = Str::lower(Str::ascii($key));
+            if (str_contains($key, 'coalition')) {
+                $key = preg_replace('/\b(?:bill|law)\b/', '', $key);
+            }
+
+            return Str::squish(preg_replace('/[^a-z0-9]+/', ' ', $key));
+        }, $keys))));
+    }
+
+    public function group(Collection $suggestions): Collection
+    {
+        $groups = [];
+        foreach ($suggestions as $suggestion) {
+            $keys = $this->identityKeys($suggestion['name']);
+            $matching = [];
+            foreach ($groups as $index => $group) {
+                if ($group['kind'] === $suggestion['kind'] && array_intersect($group['identity_keys'], $keys) !== []) {
+                    $matching[] = $index;
+                }
+            }
+            $item = [...$suggestion, 'identity_keys' => $keys, 'suggestion_ids' => [$suggestion['id']], 'sources' => [$suggestion]];
+            foreach ($matching as $index) {
+                $previous = $groups[$index];
+                $item = [...$previous,
+                    'identity_keys' => array_values(array_unique([...$previous['identity_keys'], ...$item['identity_keys']])),
+                    'suggestion_ids' => array_values(array_unique([...$previous['suggestion_ids'], ...$item['suggestion_ids']])),
+                    'sources' => [...$previous['sources'], ...$item['sources']],
+                ];
+                unset($groups[$index]);
+            }
+            $groups[] = $item;
+        }
+
+        return collect($groups)->sortByDesc(fn (array $group): int => count($group['sources']))->values();
+    }
+
     /**
      * @return list<array{
      *     id: string,

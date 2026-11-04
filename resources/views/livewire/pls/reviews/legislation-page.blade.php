@@ -20,7 +20,7 @@
             x-on:livewire-upload-progress="progress = $event.detail.progress"
             class="space-y-5"
         >
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div class="flex flex-col gap-3">
                 <div class="space-y-2">
                     <flux:heading size="lg">{{ __('Upload legislation') }}</flux:heading>
                     <flux:text x-show="uploadOpen" x-cloak class="text-sm text-zinc-500 dark:text-zinc-400">
@@ -124,7 +124,7 @@
                                 <span class="min-w-0 space-y-1">
                                     <span class="flex flex-wrap items-center gap-2">
                                         <flux:badge size="sm">{{ $row['record_label'] }}</flux:badge>
-                                        <flux:heading size="base" class="truncate">{{ $row['title'] }}</flux:heading>
+                                        <flux:heading size="base" class="break-words">{{ $row['title'] }}</flux:heading>
                                         <span x-show="! expanded" x-cloak class="text-xs font-medium text-zinc-400 dark:text-zinc-500">{{ __('Expand') }}</span>
                                     </span>
 
@@ -149,7 +149,7 @@
                                 </div>
 
                                 @if ($row['source_document_id'] !== null)
-                                    <flux:button size="sm" variant="subtle" icon="document-text" wire:click="viewSourceText({{ $row['source_document_id'] }})">
+                                    <flux:button size="sm" variant="subtle" icon="document-text" :href="route('pls.reviews.documents.show', [$review, $row['source_document_id']])" wire:navigate>
                                         {{ __('View text') }}
                                     </flux:button>
 
@@ -443,7 +443,7 @@
                                             size="sm"
                                             variant="ghost"
                                             icon="document-text"
-                                            wire:click="viewSourceText({{ $row['source_document_id'] }})"
+                                            :href="route('pls.reviews.documents.show', [$review, $row['source_document_id']])" wire:navigate
                                         >
                                             {{ __('Text') }}
                                         </flux:button>
@@ -490,7 +490,7 @@
 
                                     @if ($row['kind'] === 'source' && $row['source_document_id'] !== null)
                                         <flux:modal.trigger name="confirm-source-delete">
-                                            <flux:button
+                                            <flux:button aria-label="Delete record"
                                                 variant="subtle"
                                                 size="sm"
                                                 icon="trash"

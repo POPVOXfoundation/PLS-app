@@ -11,7 +11,7 @@
 >
     <flux:card class="space-y-6">
         <div class="border-b border-zinc-200 pb-6 dark:border-zinc-800">
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div class="flex flex-col gap-4">
                 <div class="max-w-2xl space-y-1">
                     <div class="flex flex-wrap items-center gap-2">
                         <flux:heading size="lg">{{ __('Draft findings with PLSAssist') }}</flux:heading>
@@ -118,7 +118,7 @@
 
         @if ($review->findings->isEmpty())
             <div class="flex items-center justify-between gap-4">
-                <flux:heading size="lg">{{ __('Confirmed findings & recommendations') }}</flux:heading>
+                <flux:heading size="lg">{{ __('Reviewed findings & recommendations') }}</flux:heading>
                 <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareFindingCreate">{{ __('Add reviewed finding') }}</flux:button>
             </div>
 
@@ -133,7 +133,7 @@
             </div>
         @else
             <div class="flex items-center justify-between gap-4">
-                <flux:heading size="lg">{{ __('Confirmed findings & recommendations') }}</flux:heading>
+                <flux:heading size="lg">{{ __('Reviewed findings & recommendations') }}</flux:heading>
                 <flux:button variant="primary" size="sm" icon="plus" wire:click="prepareFindingCreate">{{ __('Add reviewed finding') }}</flux:button>
             </div>
 
@@ -145,21 +145,22 @@
                     @endphp
 
                     <div wire:key="finding-{{ $finding->id }}" class="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
-                        <div class="flex items-center justify-between gap-3 bg-zinc-50/70 px-4 py-3 dark:bg-zinc-900/50">
+                        <div class="flex flex-wrap items-center justify-between gap-3 bg-zinc-50/70 px-4 py-3 dark:bg-zinc-900/50">
                             <div class="min-w-0 flex-1">
                                 <span class="block text-sm font-semibold text-zinc-900 dark:text-white">{{ $finding->title }}</span>
                             </div>
 
-                            <div class="flex shrink-0 items-center gap-2">
-                                <flux:badge size="sm" color="emerald">{{ __('Review team record') }}</flux:badge>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <flux:badge size="sm">{{ __('Reviewer accepted') }}</flux:badge>
+                                <flux:badge size="sm" :color="$finding->hasReviewedSupport() ? 'emerald' : 'amber'">{{ $finding->hasReviewedSupport() ? __('Supporting passages reviewed') : __('Source support unverified') }}</flux:badge>
                                 <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($finding->finding_type->value) }}</flux:badge>
                                 <flux:button variant="ghost" size="sm" icon="sparkles" wire:click="refineFindingWithAssistant({{ $finding->id }})">
                                     {{ __('Refine') }}
                                 </flux:button>
-                                <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingFinding({{ $finding->id }})" />
+                                <flux:button aria-label="Edit record" variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingFinding({{ $finding->id }})" />
 
                                 <flux:modal.trigger name="confirm-analysis-delete">
-                                    <flux:button
+                                    <flux:button aria-label="Delete record"
                                         variant="ghost"
                                         size="sm"
                                         icon="trash"
@@ -200,6 +201,21 @@
                                 </div>
                             @endif
 
+                            <div class="space-y-3">
+                                <flux:heading size="sm">{{ __('Linked source passages') }}</flux:heading>
+                                @forelse ($finding->citations as $citation)
+                                    <div class="rounded-lg border p-3 text-sm">
+                                        <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($citation->relationship) }}</flux:badge>
+                                        @if ($citation->finding_fingerprint !== $finding->supportFingerprint())<flux:badge color="amber">{{ __('Finding changed — review again') }}</flux:badge>@endif
+                                        <flux:link :href="route('pls.reviews.documents.show', [$review, $citation->document])" wire:navigate>{{ $citation->document->title }}</flux:link>
+                                        <blockquote class="my-3 border-l-2 pl-3">{{ $citation->passage }}</blockquote>
+                                        <p>{{ $citation->note }}</p>
+                                        <flux:link :href="route('pls.reviews.documents.original', [$review, $citation->document])" target="_blank" rel="noopener">{{ __('Open original') }}</flux:link>
+                                    </div>
+                                @empty
+                                    <flux:text>{{ __('No reviewed passages linked. Open a related document below, check its original, and link the exact passage to this finding.') }}</flux:text>
+                                @endforelse
+                            </div>
                             <div class="border-y border-zinc-100 py-4 dark:border-zinc-800">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
@@ -296,9 +312,9 @@
 
                                                     <div class="flex shrink-0 flex-col items-end gap-2 pl-3">
                                                         <div class="flex items-center gap-1">
-                                                            <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingRecommendation({{ $recommendation->id }})" />
+                                                            <flux:button aria-label="Edit record" variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingRecommendation({{ $recommendation->id }})" />
                                                             <flux:modal.trigger name="confirm-analysis-delete">
-                                                                <flux:button
+                                                                <flux:button aria-label="Delete record"
                                                                     variant="ghost"
                                                                     size="sm"
                                                                     icon="trash"

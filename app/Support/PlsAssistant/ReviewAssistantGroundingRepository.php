@@ -164,13 +164,13 @@ class ReviewAssistantGroundingRepository
                 'label' => $document->title,
                 'source' => 'review',
                 'excerpt' => $document->extractedText() !== ''
-                    ? "Full extracted legislation text:\n".$document->extractedText()
+                    ? 'Source details: '.route('pls.reviews.documents.show', [$review, $document])."\nSource warnings: ".implode(' ', $document->reviewWarnings())."\nFull extracted legislation text:\n".$document->extractedText()
                     : 'Legislation uploaded, but extracted text is not yet available. '.($document->summary ?? ''),
             ])->values()->all();
 
         $evidence = $review->documents
             ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
-            ->map(function (Document $document) use ($tokens): array {
+            ->map(function (Document $document) use ($tokens, $review): array {
                 $scoredChunks = $document->relationLoaded('chunks') && $document->chunks->isNotEmpty()
                     ? $document->chunks
                         ->map(fn ($chunk) => [
@@ -199,7 +199,7 @@ class ReviewAssistantGroundingRepository
                 return [
                     'label' => $document->title,
                     'source' => 'review',
-                    'excerpt' => trim($excerpt),
+                    'excerpt' => 'Source details: '.route('pls.reviews.documents.show', [$review, $document])."\nSource role: ".$document->evidenceRoleLabel()."\nWarnings: ".implode(' ', $document->reviewWarnings())."\nSelected source text (not necessarily the full document):\n".trim($excerpt),
                     'score' => $score,
                 ];
             })

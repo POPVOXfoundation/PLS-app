@@ -80,6 +80,7 @@
     </flux:card>
 
     @if ($hasLegislationSources)
+        <details><summary class="cursor-pointer text-sm text-violet-700">{{ __('Stakeholder suggestions') }}</summary>
         <flux:card class="space-y-4 border-violet-200 bg-violet-50/40 dark:border-violet-500/30 dark:bg-violet-500/5">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div class="space-y-2">
@@ -163,6 +164,8 @@
         </flux:card>
     @endif
 
+    @if ($hasLegislationSources)</details>@endif
+
     @if ($review->documents->contains('document_type', \App\Domain\Documents\Enums\DocumentType::LegislationText))
         <flux:card class="space-y-3">
             <flux:heading>{{ __('Legislation in this evidence base') }}</flux:heading>
@@ -192,9 +195,14 @@
             @endif
         </div>
 
+        <div class="grid gap-3 sm:grid-cols-3">
+            <flux:input wire:model.live.debounce.300ms="search" :label="__('Search evidence')" placeholder="Title or summary" type="search" />
+            <flux:select wire:model.live="typeFilter" :label="__('Document type')"><option value="">{{ __('All types') }}</option>@foreach (\App\Domain\Documents\Enums\DocumentType::reviewWorkspaceCases() as $type)<option value="{{ $type->value }}">{{ \Illuminate\Support\Str::headline($type->value) }}</option>@endforeach</flux:select>
+            <flux:select wire:model.live="sortOrder" :label="__('Sort by')"><option value="newest">{{ __('Recently updated') }}</option><option value="title">{{ __('Title') }}</option></flux:select>
+        </div>
         @if ($recordRows === [])
             <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                {{ __('No evidence linked to this review yet.') }}
+                {{ $search !== '' || $typeFilter !== '' ? __('No evidence matches these filters. Clear them to see all records.') : __('No evidence linked to this review yet.') }}
             </flux:text>
         @else
             <div class="space-y-1">
@@ -217,6 +225,10 @@
                                 {{ $row['title'] }}
                             </a>
 
+                            <p class="text-xs text-zinc-500">{{ $row['review_status'] }}</p>
+                            @if ($row['warnings'] !== [])
+                                <p class="text-sm text-amber-800 dark:text-amber-300">{{ implode(' ', $row['warnings']) }}</p>
+                            @endif
                             @if ($row['summary'] !== '')
                                 <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
                                     {{ \Illuminate\Support\Str::limit($row['summary'], 180) }}
@@ -272,7 +284,7 @@
                                 @endif
 
                                 <flux:modal.trigger name="confirm-document-delete">
-                                    <flux:button
+                                    <flux:button aria-label="Delete record"
                                         variant="subtle"
                                         size="sm"
                                         icon="trash"

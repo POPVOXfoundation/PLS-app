@@ -38,6 +38,8 @@ class StakeholdersPage extends Workspace
 
     public bool $showEditImplementingAgencyModal = false;
 
+    public string $suggestionSearch = '';
+
     public string $stakeholderTypeFilter = 'all';
 
     public string $stakeholderEditingId = '';
@@ -78,8 +80,8 @@ class StakeholdersPage extends Workspace
             'hasGeneratedLegislationAgencySuggestions' => $legislationSources->contains(
                 fn (Document $document): bool => $this->legislationAgencySuggestions($document)->isNotEmpty(),
             ),
-            'suggestedImplementingAgencies' => $this->suggestedImplementingAgencies($review),
-            'suggestedStakeholders' => $this->suggestedStakeholders($review),
+            'suggestedImplementingAgencies' => $this->groupSuggestions($this->suggestedImplementingAgencies($review)),
+            'suggestedStakeholders' => $this->groupSuggestions($this->suggestedStakeholders($review)),
         ], $review);
     }
 
@@ -529,7 +531,7 @@ class StakeholdersPage extends Workspace
     }
 
     /**
-     * @return \Illuminate\Support\Collection<int, array{value: string, label: string}>
+     * @return Collection<int, array{value: string, label: string}>
      */
     private function stakeholderTypeOptions(PlsReview $review): Collection
     {
@@ -640,6 +642,13 @@ class StakeholdersPage extends Workspace
             ->values();
     }
 
+    private function groupSuggestions(Collection $suggestions): Collection
+    {
+        return app(StakeholderSuggestionNormalizer::class)->group($suggestions)
+            ->filter(fn (array $suggestion): bool => $this->suggestionSearch === '' || Str::contains(Str::lower($suggestion['name'].' '.$suggestion['rationale']), Str::lower(trim($this->suggestionSearch))))
+            ->values();
+    }
+
     private function findSuggestion(string $suggestionId): ?array
     {
         return $this->allStoredSuggestions($this->loadReview())
@@ -648,7 +657,11 @@ class StakeholdersPage extends Workspace
 
     private function updateSuggestionStatus(string $suggestionId, string $status): bool
     {
-        foreach ($this->loadReview()->documents as $document) {
+        $review = $this->loadReview();
+        $group = app(StakeholderSuggestionNormalizer::class)->group($this->allStoredSuggestions($review))->first(fn ($group) => in_array($suggestionId, $group['suggestion_ids'], true));
+        $ids = $group['suggestion_ids'] ?? [$suggestionId];
+        $anyUpdated = false;
+        foreach ($review->documents as $document) {
             foreach (['legislation_analysis', 'document_analysis'] as $metadataKey) {
                 $path = "{$metadataKey}.stakeholder_suggestions";
                 $suggestions = $this->normalizeDocumentSuggestions($document, $metadataKey);
@@ -659,8 +672,8 @@ class StakeholdersPage extends Workspace
 
                 $updated = false;
                 $nextSuggestions = $suggestions
-                    ->map(function (array $suggestion) use ($suggestionId, $status, &$updated): array {
-                        if ($suggestion['id'] === $suggestionId) {
+                    ->map(function (array $suggestion) use ($ids, $status, &$updated): array {
+                        if (in_array($suggestion['id'], $ids, true)) {
                             $suggestion['status'] = $status;
                             $updated = true;
                         }
@@ -678,11 +691,11 @@ class StakeholdersPage extends Workspace
                 data_set($metadata, $path, $nextSuggestions);
                 $document->forceFill(['metadata' => $metadata])->save();
 
-                return true;
+                $anyUpdated = true;
             }
         }
 
-        return false;
+        return $anyUpdated;
     }
 
     /**

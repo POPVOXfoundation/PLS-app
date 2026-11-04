@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Document extends Model
 {
@@ -97,6 +98,35 @@ class Document extends Model
     public function extractedText(): string
     {
         return trim($this->chunks->sortBy('chunk_index')->pluck('content')->implode("\n\n"));
+    }
+
+    public function reviewWarnings(): array
+    {
+        return array_values(array_unique(array_merge(
+            (array) data_get($this->metadata, 'document_analysis.warnings', []),
+            (array) data_get($this->metadata, 'legislation_analysis.warnings', []),
+        )));
+    }
+
+    public function isReportingTemplate(): bool
+    {
+        return $this->document_type === DocumentType::ReportingTemplate
+            || data_get($this->metadata, 'purpose') === 'report_template'
+            || (bool) preg_match('/blank.{0,35}template|template.{0,65}(?:without filled|no (?:filled|completed|reported) data)/i', implode(' ', $this->reviewWarnings()));
+    }
+
+    public function evidenceRoleLabel(): string
+    {
+        return $this->isReportingTemplate()
+            ? __('Template — no reported results')
+            : Str::headline($this->document_type->value);
+    }
+
+    public function reviewStatusLabel(): string
+    {
+        return data_get($this->metadata, 'human_review.reviewed_at')
+            ? __('Human reviewed')
+            : __('Human review pending');
     }
 
     public function fileSizeLabel(): string

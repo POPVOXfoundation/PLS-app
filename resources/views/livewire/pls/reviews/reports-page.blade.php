@@ -308,7 +308,7 @@
                             <flux:table.row :key="$report->id">
                                 <flux:table.cell variant="strong">
                                     <div class="flex items-center gap-2">
-                                        <span>{{ $report->title }}</span>
+                                        <span><flux:link :href="route('pls.reviews.reports.show', [$review, $report])" wire:navigate>{{ $report->title }}</flux:link></span>
                                         <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($report->report_type->value) }}</flux:badge>
                                     </div>
                                     @if ($report->document)
@@ -329,13 +329,13 @@
                                 <flux:table.cell>
                                     <div class="flex justify-end gap-1">
                                         @if ($report->report_type === \App\Domain\Reporting\Enums\ReportType::FinalReport && $report->status === \App\Domain\Reporting\Enums\ReportStatus::Published)
-                                            <flux:button variant="ghost" size="sm" icon="chat-bubble-left-right" wire:click="prepareGovernmentResponseCreate({{ $report->id }})" />
+                                            <flux:button aria-label="Add government response" variant="ghost" size="sm" icon="chat-bubble-left-right" wire:click="prepareGovernmentResponseCreate({{ $report->id }})" />
                                         @endif
 
-                                        <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingReport({{ $report->id }})" />
+                                        <flux:button aria-label="Edit record" variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingReport({{ $report->id }})" />
 
                                         <flux:modal.trigger name="confirm-report-delete">
-                                            <flux:button
+                                            <flux:button aria-label="Delete record"
                                                 variant="ghost"
                                                 size="sm"
                                                 icon="trash"
@@ -450,6 +450,8 @@
             </div>
 
             <flux:input wire:model="reportTitle" :invalid="$errors->has('reportTitle')" :label="__('Title')" />
+            <flux:textarea wire:model="reportContent" :label="__('Report content')" rows="12" description="Save the outline or draft here. Markdown headings and source links are supported." />
+            <flux:error name="reportContent" />
 
             <flux:select wire:model="reportType" :invalid="$errors->has('reportType')" :label="__('Type')">
                 @foreach ($reportTypes as $type)
@@ -497,6 +499,8 @@
             </div>
 
             <flux:input wire:model="reportTitle" :invalid="$errors->has('reportTitle')" :label="__('Title')" />
+            <flux:textarea wire:model="reportContent" :label="__('Report content')" rows="12" description="Save the outline or draft here. Markdown headings and source links are supported." />
+            <flux:error name="reportContent" />
 
             <div class="grid gap-4 sm:grid-cols-2">
                 <flux:select wire:model="reportType" :invalid="$errors->has('reportType')" :label="__('Type')">

@@ -562,7 +562,7 @@ test('bill-style source text is kept as a primary record and avoids structural s
         ->call('startReviewDocument', $document->id)
         ->assertSet('analysisTitle', 'Southern Deep Port Development Facility Bill, 2024')
         ->assertSet('analysisShortTitle', 'Southern Deep Port Development Facility Bill')
-        ->assertSet('analysisType', LegislationType::Act->value)
+        ->assertSet('analysisType', LegislationType::Bill->value)
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
         ->assertSet('analysisSummary', fn (string $summary): bool => str_contains(strtolower($summary), 'deep port facility'))
         ->assertSee('This looks like a bill or draft text, so an enactment date may not be available yet.')
@@ -836,7 +836,7 @@ test('full legislation extraction failures use a lighter record pass', function 
         ->assertSee('shorter record pass')
         ->call('startReviewDocument', $document->id)
         ->assertSet('analysisTitle', 'Southern Deep Port Development Facility Bill, 2024')
-        ->assertSet('analysisType', LegislationType::Act->value)
+        ->assertSet('analysisType', LegislationType::Bill->value)
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
         ->assertSee('Review record');
 
@@ -1808,7 +1808,7 @@ test('analysis workspace renders findings in a compact table layout', function (
         ->assertSee('Add recommendation')
         ->assertSee('Show more')
         ->assertSee('Recommendations')
-        ->assertSee('Review team record')
+        ->assertSee('Reviewer accepted')->assertSee('Source support unverified')
         ->assertSee('Update delegated regulations')
         ->assertDontSee('Gov. responses')
         ->assertDontSee('No reviewed findings recorded yet');

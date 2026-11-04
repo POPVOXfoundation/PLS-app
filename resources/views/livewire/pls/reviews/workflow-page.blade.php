@@ -73,19 +73,23 @@
             <p class="mt-4 max-w-3xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">{{ $currentAction['summary'] }}</p>
             <p class="mt-3 max-w-3xl text-sm font-medium leading-6 text-zinc-800 dark:text-zinc-200">{{ $currentAction['action'] }}</p>
 
-            <div class="mt-4">
+            <div class="mt-4 flex flex-wrap gap-3">
                 <flux:button variant="primary" :href="$currentAction['route']" wire:navigate icon="arrow-right">
                     {{ $currentAction['button'] }}
                 </flux:button>
+                @can('update', $review)
+                    @if ($review->firstOpenStep())<flux:button wire:click="completeCurrentStep" wire:loading.attr="disabled">{{ __('Confirm current stage complete') }}</flux:button>@endif
+                @endcan
             </div>
         </div>
 
         <div class="self-center rounded-lg border border-violet-200/80 bg-white/75 p-4 dark:border-violet-500/25 dark:bg-zinc-950/40">
             <div class="flex items-center justify-between gap-3">
-                <p class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Review progress') }}</p>
+                <p class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Confirmed methodology progress') }}</p>
                 <span class="text-xs tabular-nums text-zinc-500 dark:text-zinc-400">{{ $review->progressPercentage() }}%</span>
             </div>
             <flux:progress :value="$review->progressPercentage()" />
+            <p class="mt-2 text-xs text-zinc-500">{{ __('Progress counts stages confirmed by the team. Uploading files or creating a draft does not complete a stage automatically.') }}</p>
             <p class="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
                 {{ __('Step :current of :total in the WFD PLS methodology.', ['current' => $review->current_step_number, 'total' => $review->steps->count()]) }}
             </p>
@@ -201,7 +205,8 @@
             @foreach ($review->steps as $step)
                 <li class="flex gap-3 text-sm">
                     <span class="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-xs font-semibold tabular-nums text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">{{ $step->step_number }}</span>
-                    <span class="leading-6 text-zinc-700 dark:text-zinc-300">{{ $step->title }}</span>
+                    <span class="leading-6 text-zinc-700 dark:text-zinc-300">{{ $step->title }} · {{ \Illuminate\Support\Str::headline($step->status->value) }}
+                    @can('update', $review)@if ($step->isTerminal())<button type="button" class="block text-violet-700 underline" wire:click="reopenStep({{ $step->id }})" wire:confirm="Reopen this stage? Later stages will also need confirmation again.">{{ __('Reopen stage') }}</button>@endif@endcan</span>
                 </li>
             @endforeach
         </ol>
