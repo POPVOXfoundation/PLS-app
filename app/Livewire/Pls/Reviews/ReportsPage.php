@@ -15,6 +15,7 @@ use App\Domain\Reporting\Enums\ReportType;
 use App\Domain\Reporting\GovernmentResponse;
 use App\Domain\Reporting\Report;
 use App\Domain\Reviews\PlsReview;
+use App\Jobs\GenerateReviewReport;
 use App\Jobs\ProcessReviewDocument;
 use App\Support\Toast;
 use Illuminate\Contracts\View\View;
@@ -23,6 +24,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
@@ -55,6 +57,9 @@ class ReportsPage extends Workspace
 
     public string $reportContent = '';
 
+    #[Locked]
+    public int $reportEditingRevision = 0;
+
     public string $reportType = ReportType::DraftReport->value;
 
     public string $reportStatus = ReportStatus::Draft->value;
@@ -83,6 +88,29 @@ class ReportsPage extends Workspace
      * @var array{title: string, sections: list<array{id: string, title: string, purpose: string, material: string, limitations: string}>}|null
      */
     public ?array $reportOutline = null;
+
+    public string $generationTemplate = '';
+
+    public function generateReport(): void
+    {
+        $this->authorizeReviewMutation();
+        $templateId = $this->generationTemplate === '' ? null : (int) $this->generationTemplate;
+        if ($templateId) {
+            $template = $this->review->documents()->findOrFail($templateId);
+            if (! $template->isReportingTemplate() || $template->extractedText() === '' || $template->excludedFromAnalysis()) {
+                $this->addError('generationTemplate', __('Choose a template with extracted text ready for use.'));
+
+                return;
+            }
+        }
+        $report = $this->review->reports()->create([
+            'title' => $this->review->title.' — working report',
+            'report_type' => ReportType::DraftReport, 'status' => ReportStatus::Draft,
+            'generation_status' => 'queued', 'generation_started_at' => now(), 'generation_template_id' => $templateId,
+        ]);
+        GenerateReviewReport::dispatch($report->id, 0, $templateId);
+        $this->redirectRoute('pls.reviews.reports.show', [$this->review, $report], navigate: true);
+    }
 
     public function mount(PlsReview $review): void
     {
@@ -364,6 +392,7 @@ class ReportsPage extends Workspace
         $this->reportEditingId = (string) $report->id;
         $this->reportTitle = $report->title;
         $this->reportContent = (string) $report->content;
+        $this->reportEditingRevision = $report->revision;
         $this->reportType = $report->report_type->value;
         $this->reportStatus = $report->status->value;
         $this->reportDocumentId = $report->document_id === null ? '' : (string) $report->document_id;
@@ -389,6 +418,7 @@ class ReportsPage extends Workspace
         try {
             $this->review = $action->update([
                 'report_id' => $this->reportEditingId,
+                'expected_revision' => $this->reportEditingRevision,
                 'pls_review_id' => $this->review->id,
                 'title' => $this->reportTitle,
                 'content' => $this->reportContent,

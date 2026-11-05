@@ -29,6 +29,10 @@ class ReviewAssistantRefusalGuard
         array $structuredContext,
     ): ?string {
         $normalizedPrompt = Str::lower($prompt);
+        // Navigation and explanations of the process are allowed in every workspace.
+        if (preg_match('/^(where|how (?:do|can|should)|what (?:is|does|are|means)|why|can you explain)\b/i', trim($prompt))) {
+            return null;
+        }
 
         return match ($workspaceKey) {
             'workflow' => $this->workflowRefusal($normalizedPrompt),
@@ -62,8 +66,8 @@ class ReviewAssistantRefusalGuard
      */
     private function documentsRefusal(string $prompt, array $structuredContext): ?string
     {
-        if ($this->containsAny($prompt, ['impact', 'impact analysis', 'policy impact'])) {
-            return 'I can summarize and compare evidence in this tab, but I cannot provide impact analysis from the Evidence tab.';
+        if (preg_match('/\b(?:generate|write|produce|conduct)\b.{0,30}\bimpact analysis\b/i', $prompt)) {
+            return 'I can summarize and compare evidence in this tab, but I cannot provide impact analysis from the Documents & Sources tab.';
         }
 
         $hasGroundedDocuments = collect($structuredContext['grounding']['review'])

@@ -101,6 +101,7 @@ class AssistantSidebar extends Component
                 $this->dispatch('report-outline-failed')->to(ReportsPage::class);
             }
             $this->dispatch('assistant-message-added');
+
             return;
         }
 
@@ -219,7 +220,7 @@ class AssistantSidebar extends Component
     {
         return match ($workspaceKey) {
             'legislation' => __('Ask about this legislation...'),
-            'documents' => __('Ask about this evidence...'),
+            'documents' => __('Ask about these documents...'),
             'stakeholders' => __('Ask about stakeholder coverage...'),
             'consultations' => __('Ask about this consultation process...'),
             'analysis' => __('Ask about findings or recommendations...'),
@@ -347,9 +348,7 @@ class AssistantSidebar extends Component
                 : __('Suggest provisional findings');
         }
 
-        return $role === 'assistant'
-            ? $this->normalizeAssistantMessage($content)
-            : $content;
+        return $content;
     }
 
     private function sendReportOutlineToWorkspace(bool $sendReportOutlineToWorkspace, string $content): void
@@ -383,8 +382,23 @@ class AssistantSidebar extends Component
     }
 
     /**
-     * @return list<array{type: 'heading'|'list'|'text', content?: string, items?: list<string>}>
+     * @return array{answer: string, detail: string}
      */
+    public function responseParts(string $content): array
+    {
+        $paragraphs = preg_split('/\n\s*\n/', trim($content));
+        $answer = [];
+        // Keep the direct answer visible; expand longer explanations on demand.
+        while ($paragraphs !== [] && (count($answer) < 2 || mb_strlen(implode("\n\n", $answer)) < 100)) {
+            if ($answer !== [] && preg_match('/^#{1,6}\s/', $paragraphs[0])) {
+                break;
+            }
+            $answer[] = array_shift($paragraphs);
+        }
+
+        return ['answer' => implode("\n\n", $answer), 'detail' => implode("\n\n", $paragraphs)];
+    }
+
     public function assistantMessageBlocks(string $content): array
     {
         $blocks = [];

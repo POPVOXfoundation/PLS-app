@@ -77,6 +77,7 @@ class UpdateReportValidator
     public function rules(): array
     {
         return [
+            'expected_revision' => ['sometimes', 'integer', 'min:0'],
             'report_id' => ['required', 'integer', Rule::exists('reports', 'id')],
             'pls_review_id' => ['required', 'integer', Rule::exists('pls_reviews', 'id')],
             'title' => ['required', 'string', 'max:255'],

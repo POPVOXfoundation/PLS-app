@@ -57,8 +57,6 @@
                     </div>
 
                     <div class="flex items-center gap-2">
-                        <flux:progress :value="$review->progressPercentage()" class="flex-1" />
-                        <span class="text-xs tabular-nums text-zinc-400 dark:text-zinc-500">{{ $review->progressPercentage() }}%</span>
                     </div>
 
                     <div class="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
@@ -77,7 +75,7 @@
                     <flux:table.column>{{ __('Review') }}</flux:table.column>
                     <flux:table.column>{{ __('Status') }}</flux:table.column>
                     <flux:table.column>{{ __('Current step') }}</flux:table.column>
-                    <flux:table.column>{{ __('Progress') }}</flux:table.column>
+                    <flux:table.column>{{ __('Methodology') }}</flux:table.column>
                     <flux:table.column></flux:table.column>
                 </flux:table.columns>
 
@@ -107,10 +105,7 @@
                             </flux:table.cell>
                             <flux:table.cell>
                                 <div class="flex items-center gap-2">
-                                    <div class="h-1.5 w-16 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
-                                        <div class="h-full rounded-full bg-zinc-900 dark:bg-zinc-300" style="width: {{ $review->progressPercentage() }}%;"></div>
-                                    </div>
-                                    <span class="text-xs tabular-nums text-zinc-400 dark:text-zinc-500">{{ $review->progressPercentage() }}%</span>
+                                    <span class="text-xs text-zinc-500">{{ __('Team-confirmed methodology stages') }}</span>
                                 </div>
                             </flux:table.cell>
                             <flux:table.cell>

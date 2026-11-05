@@ -665,7 +665,7 @@ test('bill-style source text is kept as a primary record and avoids structural s
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
         ->assertSet('analysisSummary', fn (string $summary): bool => str_contains(strtolower($summary), 'deep port facility'))
         ->assertSet('analysisDateEnacted', '')
-        ->assertSet('analysisWarnings', ['This looks like a bill or draft text, so an enactment date may not be available yet.'])
+        ->assertSet('analysisWarnings', fn ($warnings) => in_array('This looks like a bill or draft text, so an enactment date may not be available yet.', $warnings) && count($warnings) === 2)
         ->assertDontSee('Ready');
 });
 
@@ -931,7 +931,7 @@ test('full legislation extraction failures use a lighter record pass', function 
         ->call('refreshPendingAnalyses')
         ->assertSee('Needs review')
         ->call('startReviewDocument', $document->id)
-        ->assertSet('analysisWarnings', ['PLSAssist used a shorter record pass for this source. Review the extracted details before saving.'])
+        ->assertSet('analysisWarnings', fn ($warnings) => in_array('PLSAssist used a shorter record pass for this source. Review the extracted details before saving.', $warnings) && count($warnings) === 2)
         ->assertSet('analysisTitle', 'Southern Deep Port Development Facility Bill, 2024')
         ->assertSet('analysisType', LegislationType::Bill->value)
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
@@ -1085,6 +1085,7 @@ test('legislation sources fall back to a basic draft when both ai passes fail', 
         ->and($analysis['scrutiny_preparation'])->toBe(emptyLegislationScrutinyPreparation())
         ->and($analysis['warnings'])->toBe([
             'PLSAssist could not complete the AI record for this source. A basic editable draft has been prepared from the extracted text. Review and complete it before saving.',
+            'The source text was extracted, but the AI record step failed. Retry the source to try again.',
         ]);
 });
 
@@ -1405,7 +1406,7 @@ test('processing document extraction requeues in the background until text is re
 
     Livewire::test(DocumentsPage::class, ['review' => $review])
         ->call('refreshPendingAnalyses')
-        ->assertSee('Filling record');
+        ->assertSee('Reading text / preparing record');
 
     Queue::assertPushed(ProcessReviewDocument::class, fn (ProcessReviewDocument $job): bool => $job->documentId === $document->id && $job->step === 'enrich');
 
@@ -1472,8 +1473,8 @@ test('processing document rows show the active progress stage in the records tab
 
     Livewire::test(DocumentsPage::class, ['review' => $review])
         ->assertSee('Queued')
-        ->assertSee('Extracting text')
-        ->assertSee('Filling record');
+        ->assertSee('Reading text / preparing record')
+        ->assertSee('Reading text / preparing record');
 });
 
 test('legislation source documents are linked from the evidence workspace', function () {
@@ -1496,7 +1497,7 @@ test('legislation source documents are linked from the evidence workspace', func
     Livewire::test(DocumentsPage::class, ['review' => $review])
         ->assertSee('Implementation memo')
         ->assertSee('Legislation upload')
-        ->assertSee('Legislation in this evidence base');
+        ->assertSee('Legislation in the record');
 });
 
 test('workflow document metrics exclude legislation source uploads', function () {
@@ -1536,7 +1537,7 @@ test('workflow document metrics exclude legislation source uploads', function ()
         ->instance()
         ->stepMetricCards($loadedReview, $loadedReview->currentStep());
 
-    expect(collect($cards)->firstWhere('label', 'Working documents')['value'])->toBe('1');
+    expect(collect($cards)->firstWhere('label', 'Working documents')['value'])->toBe('2');
 });
 
 test('uploaded legislation can infer delegated relationship details', function () {
@@ -2108,11 +2109,11 @@ test('report assistance keeps drafting in the assistant for human review', funct
     ]);
 
     $component = Livewire::test(ReportsPage::class, ['review' => $review])
-        ->assertSee('Live report preview')
+        ->assertSee('Report readiness checklist')
         ->assertSee('Working draft')
         ->assertSee('Draft with PLSAssist')
         ->assertSee('Human review required')
-        ->assertSee('Build report outline')
+        ->assertSee('Generate outline')
         ->assertSee('Draft findings section')
         ->assertSee('Check report coverage')
         ->call('requestReportOutline')

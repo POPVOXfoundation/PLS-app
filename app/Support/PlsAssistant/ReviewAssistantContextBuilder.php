@@ -72,6 +72,16 @@ class ReviewAssistantContextBuilder
         $workspaceKey = $this->resolveWorkspaceKey($workspaceKey);
         $review = $this->hydrateReview($review);
         $playbook = $this->playbooks->tab($workspaceKey);
+        // Keep built-in copy aligned with the register name without rewriting
+        // administrator-authored playbooks or their version history.
+        if ($workspaceKey === 'documents') {
+            if ($playbook['role'] === 'Evidence Intelligence Assistant') {
+                $playbook['role'] = 'Documents and Sources Assistant';
+            }
+            if (str_starts_with($playbook['intro'], "You're in Evidence.")) {
+                $playbook['intro'] = "You're in Documents & Sources. I can help you review what you've uploaded, identify missing materials, and distinguish contextual documents from evidence supporting a finding.";
+            }
+        }
         $structuredContext = $this->structuredContext($review, $workspaceKey, $prompt);
 
         return [
@@ -88,7 +98,7 @@ class ReviewAssistantContextBuilder
 
     public function hydrateReview(PlsReview $review): PlsReview
     {
-        return $review->load([
+        $review->load([
             'owner',
             'country',
             'reviewGroup.legislature.jurisdiction.country',
@@ -111,6 +121,11 @@ class ReviewAssistantContextBuilder
             'reports.governmentResponses',
             'governmentResponses.report',
         ]);
+        $review->setRelation('documents', $review->documents->reject(fn (Document $document) => $document->excludedFromAnalysis())->values());
+        $review->setRelation('legislation', $review->legislation->reject(fn ($law) => $law->sourceDocument?->excludedFromAnalysis())->values());
+
+        return $review;
+
     }
 
     /**
@@ -138,7 +153,11 @@ class ReviewAssistantContextBuilder
 
     public function workspaceLabel(string $workspaceKey): string
     {
-        return $this->playbooks->workspaceLabel($workspaceKey);
+        return match ($workspaceKey) {
+            'documents' => __('Documents & Sources'),
+            'settings' => __('Team'),
+            default => $this->playbooks->workspaceLabel($workspaceKey),
+        };
     }
 
     public function resolveWorkspaceKey(string $workspaceKey): string

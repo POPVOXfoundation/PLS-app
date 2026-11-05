@@ -4,6 +4,7 @@ use App\Domain\Reviews\PlsReview;
 use App\Http\Controllers\AcceptReviewInvitationController;
 use App\Http\Controllers\Pls\ReviewDocumentOriginalController;
 use App\Http\Controllers\Pls\ReviewLegislationSourceOriginalController;
+use App\Http\Controllers\Pls\ReviewRegisterExportController;
 use App\Http\Controllers\Pls\ReviewReportExportController;
 use App\Livewire\Dashboard;
 use App\Livewire\Pls\Assistant\TabPlaybooks;
@@ -46,6 +47,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->can('view', 'review')
             ->name('pls.reviews.legislation.sources.original');
         Route::get('/documents', DocumentsPage::class)->can('view', 'review')->name('pls.reviews.documents');
+        Route::get('/record/export', ReviewRegisterExportController::class)->can('view', 'review')->name('pls.reviews.documents.register');
         Route::get('/documents/{document}', DocumentPage::class)->can('view', 'review')->name('pls.reviews.documents.show');
         Route::get('/documents/{document}/original', ReviewDocumentOriginalController::class)->can('view', 'review')->name('pls.reviews.documents.original');
         Route::get('/stakeholders', StakeholdersPage::class)->can('view', 'review')->name('pls.reviews.stakeholders');

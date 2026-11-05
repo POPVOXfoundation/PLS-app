@@ -11,6 +11,7 @@ use App\Domain\Legislation\Actions\PersistLegislationSourceState;
 use App\Domain\Reviews\PlsReview;
 use App\Jobs\ProcessReviewDocument;
 use App\Jobs\ProcessReviewLegislationSource;
+use App\Models\User;
 use App\Support\PlsAssistant\StakeholderSuggestionNormalizer;
 use App\Support\Toast;
 use Illuminate\Contracts\View\View;
@@ -20,6 +21,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Locked;
+use Livewire\Attributes\Url;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 
@@ -38,6 +41,14 @@ class DocumentsPage extends Workspace
     public array $documentUploads = [];
 
     public string $search = '';
+
+    #[Url]
+    public string $statusFilter = '';
+
+    public string $reviewFilter = '';
+
+    #[Locked]
+    public array $processingStates = [];
 
     public string $typeFilter = '';
 
@@ -93,7 +104,7 @@ class DocumentsPage extends Workspace
 
         return $this->renderWorkspaceView('livewire.pls.reviews.documents-page', [
             'review' => $review,
-            'documentTypes' => DocumentType::reviewWorkspaceCases(),
+            'documentTypes' => DocumentType::cases(),
             'hasProcessingRecords' => $this->hasProcessingRecords($review),
             'recordRows' => $this->recordRows($review),
             'hasLegislationSources' => $legislationSources->isNotEmpty(),
@@ -244,8 +255,18 @@ class DocumentsPage extends Workspace
             return;
         }
 
-        app(PersistReviewDocumentState::class)->resetForRetry($document);
-        ProcessReviewDocument::dispatch($document->id);
+        if (! $document->storage_path) {
+            $this->addError('documentUploads', __('This is a source link. Add the original file through Add to record before processing.'));
+
+            return;
+        }
+        if ($document->document_type === DocumentType::LegislationText) {
+            app(PersistLegislationSourceState::class)->resetForRetry($document);
+            ProcessReviewLegislationSource::dispatch($document->id);
+        } else {
+            app(PersistReviewDocumentState::class)->resetForRetry($document);
+            ProcessReviewDocument::dispatch($document->id);
+        }
         $this->review = $this->loadReview();
 
         if ($this->documentEditingId === (string) $documentId) {
@@ -292,6 +313,17 @@ class DocumentsPage extends Workspace
     public function refreshPendingAnalyses(): void
     {
         $this->review = $this->loadReview();
+        $changed = [];
+        foreach ($this->review->documents as $document) {
+            $status = $document->processingStatus();
+            if (in_array($this->processingStates[$document->id] ?? null, ['queued', 'processing']) && in_array($status, ['ready', 'needs_attention'])) {
+                $changed[] = $document->title.': '.$document->processingLabel();
+            }
+            $this->processingStates[$document->id] = $status;
+        }
+        if ($changed) {
+            $this->dispatchAppToast(Toast::warning(__('Document status updated'), implode(' · ', $changed)));
+        }
     }
 
     public function confirmDeletion(int $documentId): void
@@ -344,8 +376,7 @@ class DocumentsPage extends Workspace
 
     private function documentsQuery()
     {
-        return $this->review->documents()
-            ->where('document_type', '!=', DocumentType::LegislationText->value);
+        return $this->review->documents();
     }
 
     /**
@@ -427,7 +458,7 @@ class DocumentsPage extends Workspace
         $this->documentEditingId = (string) $document->id;
         $this->documentTitle = $document->title;
         $this->documentType = $document->document_type->value;
-        $this->documentStoragePath = $document->storage_path;
+        $this->documentStoragePath = $document->storage_path ?? '';
         $this->documentMimeType = $document->mime_type ?? '';
         $this->documentFileSize = $document->file_size === null ? '' : (string) $document->file_size;
         $this->documentSummary = $document->summary ?? '';
@@ -452,6 +483,9 @@ class DocumentsPage extends Workspace
 
     private function documentRecordStatus(Document $document): string
     {
+        if ($document->processingStatus() === 'needs_attention') {
+            return 'needs_attention';
+        }
         $storedStatus = data_get($document->metadata, 'document_analysis.status');
 
         if (in_array($storedStatus, ['processing', 'saved', 'needs_attention'], true)) {
@@ -487,7 +521,7 @@ class DocumentsPage extends Workspace
     {
         return PlsReview::query()
             ->with([
-                'documents' => fn ($query) => $query
+                'documents' => fn ($query) => $query->with(['submissions.stakeholder', 'consultationMaterials.consultation'])->withCount('chunks')
                     ->latest('updated_at')
                     ->latest('id'),
             ])
@@ -518,12 +552,15 @@ class DocumentsPage extends Workspace
      */
     private function recordRows(PlsReview $review): array
     {
+        $authors = User::whereIn('id', $review->documents->pluck('metadata.added_by')->filter())->pluck('name', 'id');
+
         return $review->documents
-            ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
+            ->filter(fn (Document $document): bool => $this->statusFilter === '' || $document->processingStatus() === $this->statusFilter)
+            ->filter(fn (Document $document): bool => $this->reviewFilter === '' || ($this->reviewFilter === 'excluded' ? $document->excludedFromAnalysis() : ($this->reviewFilter === 'checked' ? filled(data_get($document->metadata, 'human_review.reviewed_at')) && ! $document->excludedFromAnalysis() : ! data_get($document->metadata, 'human_review.reviewed_at') && ! $document->excludedFromAnalysis())))
             ->filter(fn (Document $document): bool => ($this->typeFilter === '' || $document->document_type->value === $this->typeFilter) && ($this->search === '' || Str::contains(Str::lower($document->title.' '.$document->summary), Str::lower(trim($this->search)))))
             ->sortByDesc(fn (Document $document): int => $document->updated_at?->timestamp ?? $document->created_at?->timestamp ?? 0)
             ->when($this->sortOrder === 'title', fn ($items) => $items->sortBy('title'))
-            ->map(function (Document $document): array {
+            ->map(function (Document $document) use ($authors): array {
                 $storedAnalysis = $this->storedAnalysisForDocument($document);
                 $status = $this->documentRecordStatus($document);
                 $progressStage = $this->documentRecordProgressStage($document, $status);
@@ -537,7 +574,12 @@ class DocumentsPage extends Workspace
                     'review_status' => $document->reviewStatusLabel(),
                     'status' => $status,
                     'progress_stage' => $progressStage,
-                    'status_label' => $this->statusLabel($status, $progressStage),
+                    'status_label' => $document->processingLabel(),
+                    'original_url' => $document->originalUrl(),
+                    'organisation' => data_get($document->metadata, 'organisation', ''),
+                    'source_date' => data_get($document->metadata, 'source_date', ''),
+                    'added_by' => $authors[data_get($document->metadata, 'added_by')] ?? __('Not recorded'),
+                    'linked' => $document->submissions->pluck('stakeholder.name')->merge($document->consultationMaterials->pluck('consultation.title'))->push(data_get($document->metadata, 'stakeholder'))->filter()->unique()->implode('; '),
                     'status_color' => $this->statusColor($status, $progressStage),
                     'status_badge_class' => $this->statusBadgeClass($status, $progressStage),
                     'updated_at' => $document->updated_at?->toFormattedDateString() ?? $document->created_at?->toFormattedDateString() ?? '—',

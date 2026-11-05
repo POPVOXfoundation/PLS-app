@@ -27,6 +27,11 @@ class Workspace extends Component
         $this->review = $review;
     }
 
+    public function hydrate(): void
+    {
+        $this->authorize('view', $this->review);
+    }
+
     #[On('review-workspace-updated')]
     public function refreshReviewWorkspace(?array $toast = null): void
     {
@@ -100,9 +105,7 @@ class Workspace extends Component
             'legislation' => $review->documents()
                 ->where('document_type', DocumentType::LegislationText->value)
                 ->count(),
-            'documents' => $review->documents()
-                ->where('document_type', '!=', DocumentType::LegislationText->value)
-                ->count(),
+            'documents' => $review->documents()->count(),
             'stakeholders' => $review->stakeholders()->count() + $review->implementingAgencies()->count(),
             'consultations' => $review->consultations()->count() + $review->submissions()->count(),
             'analysis' => $review->findings()->count() + $review->recommendations()->count(),
@@ -126,7 +129,7 @@ class Workspace extends Component
             ],
             [
                 'key' => 'documents',
-                'label' => __('Evidence'),
+                'label' => __('Documents & Sources'),
                 'icon' => 'document-text',
                 'route' => 'pls.reviews.documents',
                 'count' => $counts['documents'],
@@ -161,7 +164,7 @@ class Workspace extends Component
             ],
             [
                 'key' => 'settings',
-                'label' => __('Settings'),
+                'label' => __('Team'),
                 'icon' => 'cog-6-tooth',
                 'route' => 'pls.reviews.settings',
                 'count' => null,

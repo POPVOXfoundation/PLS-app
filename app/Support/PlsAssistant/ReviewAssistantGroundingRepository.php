@@ -158,7 +158,7 @@ class ReviewAssistantGroundingRepository
 
         // Legislation is the basis of every workspace, including Evidence. Include
         // every extracted section in source order, outside the ranked evidence limit.
-        $legislation = $review->documents
+        $legislation = $review->documents->reject(fn (Document $document) => $document->excludedFromAnalysis())
             ->where('document_type', DocumentType::LegislationText)
             ->map(fn (Document $document): array => [
                 'label' => $document->title,
@@ -168,7 +168,7 @@ class ReviewAssistantGroundingRepository
                     : 'Legislation uploaded, but extracted text is not yet available. '.($document->summary ?? ''),
             ])->values()->all();
 
-        $evidence = $review->documents
+        $evidence = $review->documents->reject(fn (Document $document) => $document->excludedFromAnalysis())
             ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
             ->map(function (Document $document) use ($tokens, $review): array {
                 $scoredChunks = $document->relationLoaded('chunks') && $document->chunks->isNotEmpty()

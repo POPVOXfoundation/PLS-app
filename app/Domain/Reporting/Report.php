@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Report extends Model
 {
@@ -29,11 +30,16 @@ class Report extends Model
         'published_at',
         'content',
         'content_versions',
+        'generation_status', 'generation_token', 'generation_template_id', 'generation_error', 'generation_started_at', 'revision',
     ];
 
     protected static function booted(): void
     {
+        static::creating(fn (Report $report) => $report->generation_token = (string) Str::uuid());
         static::updating(function (Report $report): void {
+            if ($report->isDirty(['content', 'title'])) {
+                $report->revision = ((int) $report->getOriginal('revision')) + 1;
+            }
             if ($report->isDirty(['content', 'title']) && filled($report->getOriginal('content'))) {
                 $report->content_versions = [...($report->getOriginal('content_versions') ?? []), [
                     'title' => $report->getOriginal('title'),
@@ -65,6 +71,8 @@ class Report extends Model
     protected function casts(): array
     {
         return [
+            'revision' => 'integer',
+            'generation_started_at' => 'datetime',
             'content_versions' => 'array',
             'report_type' => ReportType::class,
             'status' => ReportStatus::class,

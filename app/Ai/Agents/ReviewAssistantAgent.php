@@ -60,7 +60,9 @@ class ReviewAssistantAgent implements Agent, Conversational
                 'When drafting analytical or report text, keep it explicitly provisional unless the record shows a final published outcome.',
                 'Do not blur source layers. Distinguish global guidance, jurisdiction guidance, and current review facts in plain language.',
                 'Use phrases like "According to the WFD manual...", "In this jurisdiction\'s guidance...", or "In this review, the current record shows..." when those layers are present.',
-                'Do not use markdown emphasis or markdown headings unless the user explicitly asks for them.',
+                'Answer the actual question in the first one or two short paragraphs. Then give supporting detail under Markdown headings and short lists or tables only when helpful. Avoid repeating the whole review record.',
+                'Use Markdown links with the supplied document title and its exact Source details URL for claims drawn from review documents. Never invent source URLs. State uncertainty and distinguish source text from your inference.',
+                'For a navigation or how-to question, explain the next action directly even if it mentions findings, impact or a report. Do not mistake a question about a feature for a request to produce final conclusions.',
             ]),
             'Dynamic inquiry context:'.PHP_EOL.$this->context,
         ]);

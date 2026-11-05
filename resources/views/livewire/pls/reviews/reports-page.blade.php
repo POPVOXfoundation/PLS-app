@@ -10,6 +10,21 @@
     }"
 >
     <div class="space-y-8">
+        <flux:card class="space-y-4">
+            <flux:heading size="xl">{{ __('Generate and download your report') }}</flux:heading>
+            <flux:text>{{ __('Generate a saved working draft, edit its sections, then download Word or PDF. You can leave the page while generation runs. The team must check the draft before publication.') }}</flux:text>
+            @can('update', $review)
+            <flux:select wire:model="generationTemplate" :label="__('Report structure')"><option value="">{{ __('Standard PLS report') }}</option>@foreach($review->documents->filter(fn ($document) => $document->isReportingTemplate()) as $template)<option value="{{ $template->id }}">{{ $template->title }}</option>@endforeach</flux:select>
+            <flux:error name="generationTemplate" />
+            <div class="flex flex-wrap gap-2"><flux:button variant="primary" icon="sparkles" wire:click="generateReport" wire:loading.attr="disabled">{{ __('Generate report') }}</flux:button><flux:button wire:click="prepareReportCreate">{{ __('Start a blank draft') }}</flux:button></div>
+            @endcan
+            @foreach($review->reports->sortByDesc('id')->take(5) as $savedReport)
+                <div class="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+                    <flux:link :href="route('pls.reviews.reports.show', [$review, $savedReport])" wire:navigate>{{ $savedReport->title }}</flux:link>
+                    <div class="flex flex-wrap gap-2"><flux:badge>{{ $savedReport->generation_status ?? __('Saved draft') }}</flux:badge><flux:button size="sm" :href="route('pls.reviews.reports.show', [$review, $savedReport])" wire:navigate>{{ __('Open / edit / download') }}</flux:button></div>
+                </div>
+            @endforeach
+        </flux:card>
         @if ($reportWorkflowFocus)
             <flux:card class="space-y-2">
                 <flux:heading size="sm">{{ $reportWorkflowFocus['label'] }}</flux:heading>
@@ -24,7 +39,7 @@
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div class="space-y-1">
                     <div class="flex flex-wrap items-center gap-2">
-                        <flux:heading size="lg">{{ __('Live report preview') }}</flux:heading>
+                        <flux:heading size="lg">{{ __('Report readiness checklist') }}</flux:heading>
                         <flux:badge size="sm" color="violet">{{ __('Working draft') }}</flux:badge>
                     </div>
                     <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">{{ $reportPreview['detail'] }}</flux:text>
@@ -128,7 +143,8 @@
                         @foreach ($reportTemplateDocuments as $templateDocument)
                             <div class="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div class="min-w-0">
-                                    <p class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $templateDocument->title }}</p>
+                                    <flux:link :href="route('pls.reviews.documents.show', [$review, $templateDocument])" wire:navigate>{{ $templateDocument->title }}</flux:link>
+                                    @if($templateDocument->originalUrl())<flux:link class="text-xs" :href="$templateDocument->originalUrl()" target="_blank" rel="noopener">{{ __('Original') }}</flux:link>@endif
                                     <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
                                         {{ __('Uploaded :date', ['date' => $templateDocument->created_at?->toFormattedDateString() ?? __('recently')]) }}
                                     </flux:text>
@@ -161,7 +177,7 @@
 
                 <div class="flex shrink-0 flex-wrap gap-2">
                     <flux:button variant="primary" size="sm" icon="sparkles" wire:click="requestReportOutline">
-                        {{ __('Build report outline') }}
+                        {{ __('Generate outline') }}
                     </flux:button>
                     <flux:button variant="filled" size="sm" icon="pencil-square" wire:click="prepareReportDraft">
                         {{ __('Draft a section') }}
@@ -312,7 +328,7 @@
                                         <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($report->report_type->value) }}</flux:badge>
                                     </div>
                                     @if ($report->document)
-                                        <flux:text class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{{ $report->document->title }}</flux:text>
+                                        <flux:link :href="route('pls.reviews.documents.show', [$review, $report->document])" wire:navigate>{{ $report->document->title }}</flux:link>
                                     @endif
                                 </flux:table.cell>
                                 <flux:table.cell>

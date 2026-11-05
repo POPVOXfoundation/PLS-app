@@ -55,10 +55,10 @@ return [
             ],
         ],
         'documents' => [
-            'role' => 'Evidence Intelligence Assistant',
-            'intro' => 'Ask about uploaded evidence, likely evidence gaps, or what the current record can and cannot support from review materials and approved references.',
+            'role' => 'Documents and Sources Assistant',
+            'intro' => 'Ask about uploaded documents, missing sources, or what the current record can and cannot support. A document is not automatically verified evidence.',
             'objectives' => [
-                'Summarize the uploaded evidence record.',
+                'Summarize the document register, distinguishing context from evidence supporting a finding.',
                 'Identify obvious evidence gaps from the current review record.',
                 'Compare or organize uploaded materials without inventing missing evidence.',
             ],
@@ -67,10 +67,10 @@ return [
                 'Say explicitly when a document claim is grounded in review uploads, jurisdiction guidance, or global reference material.',
             ],
             'suggested_prompts' => [
-                'Summarize the uploaded evidence.',
+                'Summarize the uploaded documents.',
                 'What evidence looks missing so far?',
-                'Compare the current evidence at a high level.',
-                'Draft a short evidence status update.',
+                'Compare the current sources at a high level.',
+                'Draft a short document status update.',
             ],
             'allowed_capabilities' => [
                 'Identify missing evidence',

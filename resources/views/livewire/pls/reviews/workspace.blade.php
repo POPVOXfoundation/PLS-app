@@ -35,14 +35,9 @@
                     </div>
 
                     <div class="mt-5 hidden border-t border-zinc-200 px-2.5 pt-4 xl:block dark:border-zinc-800">
-                        <div class="flex items-center justify-between gap-3 text-xs">
-                            <span class="font-medium text-zinc-700 dark:text-zinc-200">{{ __('Review progress') }}</span>
-                            <span class="tabular-nums text-zinc-500 dark:text-zinc-400">{{ $workflowSummary['progress_percentage'] }}%</span>
-                        </div>
-                        <flux:progress class="mt-2" :value="$workflowSummary['progress_percentage']" />
-                        <p class="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                            {{ __('Step :current of :total', ['current' => $workflowSummary['current_step_number'], 'total' => $workflowSummary['total_steps']]) }}
-                        </p>
+                        <p class="text-xs text-zinc-500">{{ __('Current methodology stage') }}</p>
+                        <p class="mt-2 text-sm font-medium">{{ $workflowSummary['current_step'] }}</p>
+                        <flux:link class="mt-2 text-xs" :href="route('pls.reviews.workflow', $review).'#methodology-checklist'" wire:navigate>{{ __('View stage checklist') }}</flux:link>
                     </div>
                 </nav>
             </aside>
@@ -62,12 +57,12 @@
 
                             <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
                                 <span>{{ __('Current step: :step', ['step' => $workflowSummary['current_step']]) }}</span>
-                                <span aria-hidden="true">•</span>
-                                <span>{{ __(':progress% complete', ['progress' => $workflowSummary['progress_percentage']]) }}</span>
+
                             </div>
                         </div>
 
                         <div class="flex flex-wrap items-center gap-2">
+                            @can('update', $review)<flux:button :href="route('pls.reviews.documents', $review).'#add-to-record'" wire:navigate icon="plus">{{ __('Add to record') }}</flux:button>@endcan
                             <flux:button variant="ghost" icon="arrow-left" :href="route('pls.reviews.index')" wire:navigate>
                                 {{ __('All reviews') }}
                             </flux:button>

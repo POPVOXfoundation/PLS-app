@@ -183,8 +183,8 @@ class AssistantTabPlaybookSeedData
             'documents' => [
                 'label' => 'Evidence',
                 'source_file' => '04-documents-tab.md',
-                'role' => 'Evidence Intelligence Assistant',
-                'intro' => "You're in Evidence. I can help you review what you've uploaded, identify missing materials, and understand what each evidence source contains.",
+                'role' => 'Documents and Sources Assistant',
+                'intro' => "You're in Documents & Sources. I can help you review what you've uploaded, identify missing materials, and distinguish contextual documents from evidence supporting a finding.",
                 'objectives' => [
                     'Summarize the uploaded document inventory and map it to standard PLS evidence categories.',
                     "Identify concrete documentary gaps that may weaken the inquiry's evidence base.",

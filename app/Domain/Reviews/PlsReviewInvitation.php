@@ -6,6 +6,7 @@ use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class PlsReviewInvitation extends Model
@@ -21,6 +22,7 @@ class PlsReviewInvitation extends Model
         'invited_by',
         'accepted_at',
         'expires_at',
+        'mail_status', 'mail_sent_at', 'mail_queued_at',
     ];
 
     protected static function booted(): void
@@ -44,7 +46,7 @@ class PlsReviewInvitation extends Model
 
     public function isPending(): bool
     {
-        return $this->accepted_at === null;
+        return $this->accepted_at === null && (! $this->expires_at || $this->expires_at->isFuture());
     }
 
     public function isAccepted(): bool
@@ -54,13 +56,25 @@ class PlsReviewInvitation extends Model
 
     public function acceptFor(User $user): PlsReviewMembership
     {
-        $this->update(['accepted_at' => now()]);
+        return DB::transaction(function () use ($user) {
+            $invitation = static::whereKey($this->id)->lockForUpdate()->firstOrFail();
+            abort_unless(mb_strtolower($invitation->email) === mb_strtolower($user->email), 403);
+            if ($invitation->accepted_at) {
+                $existing = $invitation->review->memberships()->where('user_id', $user->id)->first();
+                abort_unless($existing, 410, 'This invitation has already been used. Request a new invitation.');
 
-        return $this->review->memberships()->create([
-            'user_id' => $user->id,
-            'role' => $this->role,
-            'invited_by' => $this->invited_by,
-        ]);
+                return $existing;
+            }
+            abort_if($invitation->expires_at?->isPast(), 410, 'This invitation has expired. Ask the review owner to resend it.');
+            $membership = $invitation->review->memberships()->firstOrCreate(['user_id' => $user->id], [
+                'role' => $invitation->role, 'invited_by' => $invitation->invited_by,
+            ]);
+            if (! $invitation->accepted_at) {
+                $invitation->update(['accepted_at' => now()]);
+            }
+
+            return $membership;
+        });
     }
 
     /**
@@ -72,6 +86,7 @@ class PlsReviewInvitation extends Model
             'role' => PlsReviewMembershipRole::class,
             'accepted_at' => 'datetime',
             'expires_at' => 'datetime',
+            'mail_sent_at' => 'datetime', 'mail_queued_at' => 'datetime',
         ];
     }
 }

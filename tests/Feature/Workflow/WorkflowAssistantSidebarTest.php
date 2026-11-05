@@ -43,7 +43,7 @@ it('shows the configured role and prompts for the current tab', function (string
     ],
     'documents' => [
         'documents',
-        'Evidence Intelligence Assistant',
+        'Documents and Sources Assistant',
         [
             'What documents do I have so far?',
             "What's missing for this type of inquiry?",
@@ -74,7 +74,7 @@ test('assistant intro changes by tab', function () {
     Livewire::test(AssistantSidebar::class, [
         'review' => $review,
         'workspaceKey' => 'documents',
-    ])->assertSee("You're in Evidence. I can help you review what you've uploaded");
+    ])->assertSee("You're in Documents & Sources. I can help you review what you've uploaded");
 });
 
 test('assistant composer submits on enter while preserving shift enter for new lines', function () {
@@ -217,8 +217,8 @@ test('documents prompts are grounded in the current review record', function () 
 
     ReviewAssistantAgent::assertPrompted(function (AgentPrompt $prompt) {
         expect((string) $prompt->agent->instructions())
-            ->toContain('Active tab: Evidence')
-            ->toContain('Tab role: Evidence Intelligence Assistant')
+            ->toContain('Active tab: Documents & Sources')
+            ->toContain('Tab role: Documents and Sources Assistant')
             ->toContain('Implementation Progress Report')
             ->toContain('Tracks implementation delays across ministries.');
 
@@ -592,12 +592,12 @@ test('assistant responses are normalized before display', function () {
         ],
         [
             'role' => 'assistant',
-            'content' => "Status: Pending\n\nWhat this means in practice:\n- Link the governing law.\n- Upload the briefing pack.",
+            'content' => "**Status:** Pending\n\n**What this means in practice:**\n- Link the governing law.\n- Upload the briefing pack.",
         ],
     ]);
 
     $component
-        ->assertSee('Status: Pending')
+        ->assertSee('<strong>Status:</strong> Pending', false)
         ->assertSee('What this means in practice:')
         ->assertSee('Link the governing law.')
         ->assertSee('Upload the briefing pack.')
@@ -626,7 +626,7 @@ test('assistant shows an inline error state when the sdk call fails', function (
         ->assertSet('assistantInput', 'Summarize the current step.')
         ->assertSee('The assistant could not complete this response. Your question is preserved below; please try again.');
 
-    $conversationId = $component->get('assistantConversationId');
+    $conversationId = DB::table('agent_conversations')->value('id');
     ReviewAssistantAgent::fake(['Recovered reply']);
     $component->call('submitAssistantPrompt')->assertHasNoErrors()
         ->assertSet('assistantConversationId', $conversationId)->assertSet('assistantError', null)

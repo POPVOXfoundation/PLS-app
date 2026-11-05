@@ -2,9 +2,13 @@
 
 namespace App\Livewire\Pls\Reviews;
 
+use App\Domain\Documents\Actions\PersistReviewDocumentState;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
+use App\Domain\Legislation\Actions\PersistLegislationSourceState;
 use App\Domain\Reviews\PlsReview;
+use App\Jobs\ProcessReviewDocument;
+use App\Jobs\ProcessReviewLegislationSource;
 use App\Support\PlsAssistant\SourceIdentity;
 use App\Support\Toast;
 use Illuminate\Contracts\View\View;
@@ -31,9 +35,42 @@ class DocumentPage extends Workspace
 
     public string $citationNote = '';
 
+    public $sourceFile = null;
+
+    public function attachOriginal(): void
+    {
+        $this->authorize('update', $this->review);
+        $this->validate(['sourceFile' => ['required', 'file', 'mimes:pdf,docx,txt,md', 'max:51200']]);
+        $document = $this->review->documents()->findOrFail($this->document->id);
+        abort_if(filled($document->storage_path), 409, 'This record already has an original file.');
+        $disk = (string) config('filesystems.default');
+        $path = $this->sourceFile->store('pls/reviews/'.$this->review->id.'/documents', ['disk' => $disk]);
+        $document->update(['storage_path' => $path, 'mime_type' => $this->sourceFile->getMimeType(), 'file_size' => $this->sourceFile->getSize(), 'metadata' => array_merge($document->metadata ?? [], ['disk' => $disk, 'original_name' => $this->sourceFile->getClientOriginalName()])]);
+        if ($document->document_type === DocumentType::LegislationText) {
+            app(PersistLegislationSourceState::class)->markQueued($document);
+            ProcessReviewLegislationSource::dispatch($document->id);
+        } else {
+            app(PersistReviewDocumentState::class)->markQueued($document);
+            ProcessReviewDocument::dispatch($document->id);
+        }
+        $this->sourceFile = null;
+        $this->dispatchWorkspaceToast(Toast::success(__('File attached'), __('The original is linked to this record and queued for text processing.')));
+    }
+
     public function updatedSearch(): void
     {
         $this->resetPage();
+    }
+
+    public function setExcluded(bool $excluded): void
+    {
+        $this->authorize('update', $this->review);
+        $document = $this->review->documents()->findOrFail($this->document->id);
+        $metadata = $document->metadata ?? [];
+        data_set($metadata, 'human_review.excluded', $excluded);
+        data_set($metadata, 'human_review.changed_by', auth()->id());
+        data_set($metadata, 'human_review.changed_at', now()->toIso8601String());
+        $document->update(['metadata' => $metadata]);
     }
 
     public function markReviewed(): void
@@ -41,7 +78,7 @@ class DocumentPage extends Workspace
         $this->authorize('update', $this->review);
         $document = $this->review->documents()->findOrFail($this->document->id);
         $metadata = $document->metadata ?? [];
-        $metadata['human_review'] = ['reviewed_at' => now()->toIso8601String(), 'reviewed_by' => auth()->id()];
+        $metadata['human_review'] = array_merge($metadata['human_review'] ?? [], ['reviewed_at' => now()->toIso8601String(), 'reviewed_by' => auth()->id()]);
         if ($document->isReportingTemplate()) {
             data_set($metadata, 'document_analysis.document_type', DocumentType::ReportingTemplate->value);
             $document->document_type = DocumentType::ReportingTemplate;

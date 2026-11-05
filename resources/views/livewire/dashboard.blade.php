@@ -114,7 +114,7 @@
 
         @if ($attentionReviews === [])
             <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                {{ __('All reviews are progressing normally.') }}
+                {{ __('No flagged records in this view.') }}
             </flux:text>
         @else
             <div class="divide-y divide-zinc-100 dark:divide-zinc-800/60">
@@ -133,7 +133,7 @@
                                 {{ $item['assignment_name'] }} · {{ $item['phase'] }} · {{ $item['current_step'] }}
                             </flux:text>
                         </div>
-                        <span class="shrink-0 text-sm tabular-nums text-zinc-400 dark:text-zinc-500">{{ $item['progress'] }}%</span>
+
                     </div>
                 @endforeach
             </div>
@@ -173,10 +173,7 @@
                             </div>
 
                             <div class="hidden shrink-0 items-center gap-2 sm:flex">
-                                <div class="h-1.5 w-16 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
-                                    <div class="h-full rounded-full bg-zinc-900 dark:bg-zinc-300" style="width: {{ $review->progressPercentage() }}%;"></div>
-                                </div>
-                                <span class="w-8 text-right text-xs tabular-nums text-zinc-400 dark:text-zinc-500">{{ $review->progressPercentage() }}%</span>
+                                <span class="text-xs text-zinc-500">{{ __('Team-confirmed methodology stages') }}</span>
                             </div>
                         </div>
                     @endforeach
@@ -207,10 +204,7 @@
                             </div>
 
                             <div class="flex items-center gap-2">
-                                <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
-                                    <div class="h-full rounded-full bg-zinc-900 dark:bg-zinc-300" style="width: {{ $summary['average_progress'] }}%;"></div>
-                                </div>
-                                <span class="w-8 text-right text-xs tabular-nums text-zinc-400 dark:text-zinc-500">{{ $summary['average_progress'] }}%</span>
+                                <span class="text-xs text-zinc-500">{{ __('Team-confirmed methodology stages') }}</span>
                             </div>
 
                             <div class="flex gap-3 text-xs text-zinc-500 dark:text-zinc-400">

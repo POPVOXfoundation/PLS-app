@@ -2,7 +2,7 @@
     <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="min-w-0 space-y-2">
             <flux:link :href="route($isLegislation ? 'pls.reviews.legislation' : 'pls.reviews.documents', $review)" wire:navigate>
-                {{ $isLegislation ? __('Back to legislation') : __('Back to evidence') }}
+                {{ $isLegislation ? __('Back to legislation') : __('Back to Documents & Sources') }}
             </flux:link>
             <flux:heading size="xl" class="break-words">{{ $document->title }}</flux:heading>
             <flux:text>{{ __('Document details') }}</flux:text>
@@ -11,16 +11,26 @@
             <flux:button :href="route('pls.reviews.documents.original', [$review, $document])" target="_blank" rel="noopener" icon="arrow-top-right-on-square">
                 {{ __('Open original document') }}
             </flux:button>
+        @elseif ($document->originalUrl() && ! $document->storage_path)
+            <flux:button :href="$document->originalUrl()" target="_blank" rel="noopener noreferrer">{{ __('Open original source link') }}</flux:button>
         @else
             <flux:text>{{ __('The original file is unavailable. Contact the review owner to restore it.') }}</flux:text>
         @endif
     </div>
 
+    @if(! $document->storage_path)
+        @can('update', $review)
+        <flux:card class="space-y-3"><flux:heading>{{ __('Add full text to this source') }}</flux:heading><flux:text>{{ __('A source link alone is not reviewed in full. Attach its original file to this same record.') }}</flux:text><flux:input type="file" wire:model="sourceFile" :label="__('Original file')" accept=".pdf,.docx,.txt,.md" /><flux:error name="sourceFile" /><flux:button wire:click="attachOriginal" wire:loading.attr="disabled">{{ __('Attach and process') }}</flux:button></flux:card>
+        @endcan
+    @endif
     <flux:card class="space-y-5">
         <div class="flex flex-wrap items-center gap-3">
             <flux:badge>{{ $document->evidenceRoleLabel() }}</flux:badge>
             <flux:badge>{{ $document->reviewStatusLabel() }}</flux:badge>
-            @can('update', $review)<flux:button size="sm" wire:click="markReviewed">{{ __('Mark document reviewed') }}</flux:button>@endcan
+            <flux:badge>{{ $document->processingLabel() }}</flux:badge>
+            @can('update', $review)
+                <flux:button wire:click="setExcluded({{ $document->excludedFromAnalysis() ? 'false' : 'true' }})">{{ $document->excludedFromAnalysis() ? __('Include in analysis') : __('Exclude from analysis') }}</flux:button>
+<flux:button size="sm" wire:click="markReviewed">{{ __('Mark checked by team') }}</flux:button>@endcan
         </div>
         @if ($sourceKind && ! data_get($document->metadata, 'source_identity_confirmed_at'))
             <div class="rounded-lg bg-amber-50 p-4 text-sm text-amber-950">
@@ -29,7 +39,7 @@
             </div>
         @endif
         <dl class="grid gap-4 text-sm sm:grid-cols-2">
-            @foreach ([__('File name') => data_get($document->metadata, 'original_name', __('Not recorded')), __('Type') => \Illuminate\Support\Str::headline($document->document_type->value), __('File size') => $document->fileSizeLabel(), __('Format') => $document->mime_type ?: __('Not recorded'), __('Uploaded') => $document->created_at->format('j M Y, H:i'), __('Updated') => $document->updated_at->format('j M Y, H:i'), __('Analysis status') => \Illuminate\Support\Str::headline($analysis['status'] ?? 'not recorded'), __('Text extraction') => \Illuminate\Support\Str::headline(data_get($document->metadata, 'extraction.status', $textChunks->total() > 0 ? 'available' : 'not available'))] as $label => $value)
+            @foreach ([__('File name') => data_get($document->metadata, 'original_name', __('Not recorded')), __('Type') => \Illuminate\Support\Str::headline($document->document_type->value), __('File size') => $document->fileSizeLabel(), __('Format') => $document->mime_type ?: __('Not recorded'), __('Uploaded') => $document->created_at->format('j M Y, H:i'), __('Updated') => $document->updated_at->format('j M Y, H:i'), __('Processing') => $document->processingLabel(), __('Organisation') => data_get($document->metadata, 'organisation') ?: __('Not recorded'), __('Source date') => data_get($document->metadata, 'source_date') ?: __('Not recorded'), __('Added by') => \App\Models\User::find(data_get($document->metadata, 'added_by'))?->name ?? __('Not recorded'), __('Checked by') => \App\Models\User::find(data_get($document->metadata, 'human_review.reviewed_by'))?->name ?? __('Not checked'), __('Checked at') => data_get($document->metadata, 'human_review.reviewed_at') ?: __('Not checked'), __('Notes') => data_get($document->metadata, 'notes') ?: __('None recorded')] as $label => $value)
                 <div class="min-w-0">
                     <dt class="text-zinc-500 dark:text-zinc-400">{{ $label }}</dt>
                     <dd class="mt-1 break-words text-zinc-900 dark:text-white">{{ $value }}</dd>

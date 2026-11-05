@@ -25,6 +25,7 @@
         </div>
     </section>
 
+    <flux:callout class="mb-5" icon="information-circle">{{ __('Stakeholders are people or organisations. Their submissions are contributions linked to documents in Documents & Sources. The same document appears in the register and here; it is not a second copy. Link a document to a finding in Analysis when it supports or contradicts a claim.') }} <flux:link :href="route('pls.reviews.documents', $review)" wire:navigate>{{ __('Open complete document register') }}</flux:link></flux:callout>
     <flux:card x-show="activeTab === 'suggestions'" x-cloak class="space-y-6">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="space-y-2">

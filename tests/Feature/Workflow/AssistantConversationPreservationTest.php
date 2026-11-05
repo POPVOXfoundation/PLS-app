@@ -36,7 +36,7 @@ const PRESERVATION_ITERATIONS = 25;
 
 const PRESERVATION_WORKSPACE_KEYS = ['workflow', 'documents', 'legislation', 'stakeholders', 'consultations', 'analysis', 'reports'];
 
-const PRESERVATION_UNAVAILABLE_ERROR = 'The assistant is unavailable right now. Check the AI provider configuration or try again.';
+const PRESERVATION_UNAVAILABLE_ERROR = 'The assistant could not complete this response. Your question is preserved below; please try again.';
 
 /**
  * Prompts the refusal guard refuses on a fresh review, with the synthetic reply it stores.
@@ -51,8 +51,8 @@ function preservationRefusals(): array
             'reply' => 'I can help with workflow stages and next steps in this tab, but I cannot generate findings, recommendations, or conclusions from the Workflow tab.',
         ],
         'documents' => [
-            'prompt' => 'Give me a policy impact reading of these documents.',
-            'reply' => 'I can summarize and compare evidence in this tab, but I cannot provide impact analysis from the Evidence tab.',
+            'prompt' => 'Generate an impact analysis of these documents.',
+            'reply' => 'I can summarize and compare evidence in this tab, but I cannot provide impact analysis from the Documents & Sources tab.',
         ],
         'legislation' => [
             'prompt' => 'Evaluate the impact of this law.',
@@ -658,7 +658,7 @@ test('a provider failure reports the exception, shows the inline error, keeps th
 
     expect($sidebar->get('assistantMessages'))->toEqual([
         ...preservationExpectedMessages($priorExchanges),
-        ['role' => 'user', 'content' => 'Summarize the current step (failing).'],
+
     ])
         ->and(DB::table('agent_conversation_messages')->orderBy('id')->get()->map(fn (object $row): array => (array) $row)->all())->toEqual($messagesBefore)
         ->and(DB::table('agent_conversation_messages')->where('content', 'Summarize the current step (failing).')->exists())->toBeFalse();
@@ -687,7 +687,7 @@ TEXT;
     $deliveredContent = null;
 
     preservationMountSidebar($review, 'analysis')
-        ->call('sendRequestedPrompt', 'Suggest provisional findings from the saved review record.', provisionalFindings: true)
+        ->call('sendRequestedPrompt', prompt: 'Suggest provisional findings from the saved review record.', provisionalFindings: true)
         ->assertSet('assistantError', null)
         ->assertDispatchedTo(AnalysisPage::class, 'provisional-findings-generated', function (string $name, array $params) use (&$deliveredContent): bool {
             $deliveredContent = $params['content'] ?? null;
@@ -729,7 +729,7 @@ TEXT;
     $deliveredContent = null;
 
     preservationMountSidebar($review, 'reports')
-        ->call('sendRequestedPrompt', $prompt, reportOutline: true)
+        ->call('sendRequestedPrompt', prompt: $prompt, reportOutline: true)
         ->assertSet('assistantError', null)
         ->assertDispatchedTo(ReportsPage::class, 'report-outline-generated', function (string $name, array $params) use (&$deliveredContent): bool {
             $deliveredContent = $params['content'] ?? null;

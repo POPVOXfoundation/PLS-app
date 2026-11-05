@@ -22,7 +22,6 @@ use App\Livewire\Pls\Reviews\WorkflowPage;
 use App\Models\User;
 use App\Support\PlsAssistant\SourceIdentity;
 use App\Support\PlsAssistant\StakeholderSuggestionNormalizer;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Illuminate\Support\Facades\Queue;
@@ -180,7 +179,7 @@ it('recognizes legislation uploaded through Evidence and schedules full legislat
         ->and(data_get($document->fresh()->metadata, 'legislation_analysis.status'))->toBe('processing');
     Queue::assertPushed(ProcessReviewLegislationSource::class, fn ($job) => $job->documentId === $document->id && $job->step === 'enrich');
     $this->actingAs($review->owner)->get(route('pls.reviews.documents', $review))->assertOk()
-        ->assertSee('Legislation in this evidence base')->assertSee('Demonstration Bill')
+        ->assertSee('Legislation in the record')->assertSee('Demonstration Bill')
         ->assertSee(route('pls.reviews.documents.show', [$review, $document]));
 });
 
@@ -208,7 +207,7 @@ it('links only real passages within the review and invalidates support when a fi
     $finding->update(['summary' => 'Changed conclusion that needs another source review.']);
     expect($finding->fresh()->hasReviewedSupport())->toBeFalse();
     $foreign = Finding::factory()->create();
-    expect(fn () => $component->set('citationFindingId', (string) $foreign->id)->set('citationPassage', $passage)->call('saveCitation'))->toThrow(ModelNotFoundException::class);
+    $component->set('citationFindingId', (string) $foreign->id)->set('citationPassage', $passage)->call('saveCitation')->assertNotFound();
     $this->get(route('pls.reviews.analysis', $review))->assertOk()->assertSee($passage)->assertSee(route('pls.reviews.documents.show', [$review, $document]));
 });
 
@@ -306,6 +305,6 @@ it('surfaces blank reporting templates and supports document text and evidence s
     $document = Document::factory()->create(['pls_review_id' => $review->id, 'title' => 'Annual Reporting Template', 'metadata' => ['document_analysis' => ['warnings' => ['Document is a blank reporting template without filled data.']]]]);
     app(ChunkDocumentText::class)->chunk($document, 'Annual template includes fields for gender-equity reporting.');
     expect($document->isReportingTemplate())->toBeTrue();
-    Livewire::test(DocumentsPage::class, compact('review'))->set('search', 'Annual Reporting')->assertSee('Template — no reported results')->set('search', 'unrelated-title')->assertDontSee('Annual Reporting Template');
+    Livewire::test(DocumentsPage::class, compact('review'))->set('search', 'Annual Reporting')->assertSee('Template — no reported results')->set('search', 'unrelated-title')->assertViewHas('recordRows', []);
     Livewire::test(DocumentPage::class, compact('review', 'document'))->set('search', 'gender-equity')->assertSee('Annual template includes fields');
 });

@@ -12,7 +12,6 @@ class AcceptReviewInvitationController extends Controller
     public function __invoke(Request $request, string $token): RedirectResponse
     {
         $invitation = PlsReviewInvitation::where('token', $token)
-            ->whereNull('accepted_at')
             ->firstOrFail();
 
         $user = $request->user();
@@ -27,14 +26,6 @@ class AcceptReviewInvitationController extends Controller
             abort(403, __('This invitation was sent to :email. Please log in with that account.', [
                 'email' => $invitation->email,
             ]));
-        }
-
-        if ($invitation->review->memberships()->where('user_id', $user->id)->exists()) {
-            return redirect()->route('pls.reviews.workflow', $invitation->review)
-                ->with('toast', Toast::warning(
-                    __('Access already granted'),
-                    __('You already have access to this review.'),
-                ));
         }
 
         $invitation->acceptFor($user);
