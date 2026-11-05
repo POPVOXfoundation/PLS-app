@@ -1,7 +1,7 @@
 <?php
 
-test('home displays the public landing page', function () {
-    $response = $this->get(route('home'));
-
-    $response->assertOk()->assertSee('PLS');
+test('guests can open the public PLSAssist landing page', function () {
+    $this->get(route('home'))
+        ->assertOk()
+        ->assertSee('PLSAssist helps parliaments review whether legislation works after adoption');
 });

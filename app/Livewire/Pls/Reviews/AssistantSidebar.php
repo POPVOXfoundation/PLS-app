@@ -6,6 +6,7 @@ use App\Ai\Agents\ReviewAssistantAgent;
 use App\Domain\Reviews\PlsReview;
 use App\Support\PlsAssistant\ReviewAssistantContextBuilder;
 use App\Support\PlsAssistant\ReviewAssistantRefusalGuard;
+use App\Support\PlsAssistant\ReviewConversationResolver;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\DB;
@@ -57,23 +58,6 @@ class AssistantSidebar extends Component
         $this->bootConversationState();
     }
 
-    public function hydrate(): void
-    {
-        $this->authorize('view', $this->review);
-        $this->authorizeConversation();
-    }
-
-    private function authorizeConversation(): void
-    {
-        if ($this->assistantConversationId !== null) {
-            abort_unless(DB::table('agent_conversations')
-                ->where('id', $this->assistantConversationId)
-                ->where('user_id', auth()->id())
-                ->where('pls_review_id', $this->review->id)
-                ->exists(), 403);
-        }
-    }
-
     #[On('review-workspace-updated')]
     public function refreshAssistant(): void
     {
@@ -84,7 +68,6 @@ class AssistantSidebar extends Component
     public function submitAssistantPrompt(): void
     {
         $this->authorize('view', $this->review);
-        $this->authorizeConversation();
         $this->validate(['assistantInput' => ['string', 'max:10000']]);
 
         $prompt = Str::of($this->assistantInput)->trim()->toString();
@@ -97,8 +80,6 @@ class AssistantSidebar extends Component
             return;
         }
 
-        // Another open workspace may have started the shared conversation since mount.
-        $this->bootConversationState();
         $this->assistantInput = '';
         $this->assistantError = null;
 
@@ -108,13 +89,11 @@ class AssistantSidebar extends Component
         $context = $this->contextBuilder()->build($this->review, $this->workspaceKey, $prompt);
         $agent = $this->assistantAgent($context);
 
-        $requestCharacters = mb_strlen((string) $agent->instructions())
-            + mb_strlen(implode("\n", array_column($this->assistantMessages, 'content')));
+        $requestCharacters = mb_strlen((string) $agent->instructions()) + mb_strlen(implode("\n", array_column($this->assistantMessages, 'content')));
         if ($requestCharacters > config('pls_assistant.max_context_characters')) {
             $this->assistantError = __('This review is too large for a complete assistant response in one request. No legislation text has been omitted and no partial review has been generated. Please ask the support team to arrange a full-document review.');
             $this->assistantInput = $prompt;
             array_pop($this->assistantMessages);
-
             if ($sendProvisionalFindingsToInbox) {
                 $this->dispatch('provisional-findings-failed')->to(AnalysisPage::class);
             }
@@ -122,6 +101,18 @@ class AssistantSidebar extends Component
                 $this->dispatch('report-outline-failed')->to(ReportsPage::class);
             }
             $this->dispatch('assistant-message-added');
+            return;
+        }
+
+        try {
+            $conversationId = $this->conversationResolver()->resolve(
+                $this->review,
+                auth()->id(),
+                Str::limit($prompt, 100),
+                $context['playbook_version'],
+            );
+        } catch (Throwable $exception) {
+            $this->failExchangeStorage($exception, $sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace);
 
             return;
         }
@@ -133,18 +124,34 @@ class AssistantSidebar extends Component
             $context['structured_context'],
         );
 
-        try {
-            $this->prepareConversation($prompt, $context['playbook_version']);
-            $agent->continue($this->assistantConversationId, auth()->user());
+        if ($refusal !== null) {
+            try {
+                $exchangeStored = $this->persistSyntheticAssistantExchange($agent, $conversationId, $prompt, $refusal, $context['playbook_version']);
+            } catch (Throwable $exception) {
+                $this->failExchangeStorage($exception, $sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace);
 
-            if ($refusal !== null) {
-                $this->persistSyntheticAssistantExchange($agent, $prompt, $refusal);
-                $generatedContent = $refusal;
-            } else {
-                $response = $agent->prompt($prompt);
-                $this->storePromptExchangeIfMissing($agent, $prompt, $response);
-                $generatedContent = (string) $response;
+                return;
             }
+
+            if (! $exchangeStored) {
+                $this->discardExchangeAfterReset($sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace);
+
+                return;
+            }
+
+            $this->assistantConversationId = $conversationId;
+            $this->assistantMessages = $this->conversationMessagesForDisplay();
+            $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox, $this->messageContentForDisplay('assistant', $refusal));
+            $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace, $this->messageContentForDisplay('assistant', $refusal));
+            $this->dispatch('assistant-message-added', focus: 'response');
+
+            return;
+        }
+
+        $agent->withConversationHistory($conversationId);
+
+        try {
+            $response = $agent->prompt($prompt);
         } catch (Throwable $exception) {
             report($exception);
 
@@ -165,9 +172,24 @@ class AssistantSidebar extends Component
             return;
         }
 
+        try {
+            $exchangeStored = $this->storeExchangeIfConversationStillExists($conversationId, $agent, $prompt, $response, $context['playbook_version']);
+        } catch (Throwable $exception) {
+            $this->failExchangeStorage($exception, $sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace);
+
+            return;
+        }
+
+        if (! $exchangeStored) {
+            $this->discardExchangeAfterReset($sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace);
+
+            return;
+        }
+
+        $this->assistantConversationId = $conversationId;
         $this->assistantMessages = $this->conversationMessagesForDisplay();
-        $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox, $generatedContent);
-        $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace, $generatedContent);
+        $this->sendProvisionalFindingsToInbox($sendProvisionalFindingsToInbox, (string) $response);
+        $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace, $this->messageContentForDisplay('assistant', (string) $response));
 
         $this->dispatch('assistant-message-added', focus: 'response');
     }
@@ -209,12 +231,13 @@ class AssistantSidebar extends Component
 
     public function resetAssistantConversation(): void
     {
-        $conversationIds = DB::table('agent_conversations')
-            ->where('pls_review_id', $this->review->getKey())
-            ->where('user_id', auth()->id())
-            ->pluck('id');
+        DB::transaction(function (): void {
+            $conversationIds = DB::table('agent_conversations')
+                ->where('pls_review_id', $this->review->getKey())
+                ->where('user_id', auth()->id())
+                ->lockForUpdate()
+                ->pluck('id');
 
-        DB::transaction(function () use ($conversationIds): void {
             if ($conversationIds->isNotEmpty()) {
                 DB::table('agent_conversation_messages')
                     ->whereIn('conversation_id', $conversationIds)
@@ -253,25 +276,16 @@ class AssistantSidebar extends Component
         $this->assistantMessages = $this->conversationMessagesForDisplay();
     }
 
-    private function prepareConversation(string $prompt, string $playbookVersion): void
+    private function persistConversation(string $conversationId, string $playbookVersion): void
     {
-        // Reserve the unique review/user pair atomically before the SDK stores messages.
-        // Concurrent first prompts must keep the existing ID, title and history.
-        DB::table('agent_conversations')->upsert([
-            'id' => (string) Str::uuid7(),
-            'pls_review_id' => $this->review->getKey(),
-            'user_id' => auth()->id(),
-            'title' => Str::limit($prompt, 100, preserveWords: true),
-            'playbook_version' => $playbookVersion,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ], ['pls_review_id', 'user_id'], ['playbook_version', 'updated_at']);
-
-        $this->assistantConversationId = DB::table('agent_conversations')
-            ->useWritePdo()
+        DB::table('agent_conversations')
+            ->where('id', $conversationId)
             ->where('pls_review_id', $this->review->getKey())
             ->where('user_id', auth()->id())
-            ->soleValue('id');
+            ->update([
+                'playbook_version' => $playbookVersion,
+                'updated_at' => now(),
+            ]);
     }
 
     /**
@@ -283,7 +297,7 @@ class AssistantSidebar extends Component
             return $this->assistantMessages;
         }
 
-        $this->authorizeConversation();
+        abort_unless(DB::table('agent_conversations')->where('id', $this->assistantConversationId)->where('user_id', auth()->id())->where('pls_review_id', $this->review->id)->exists(), 403);
 
         $messages = resolve(ConversationStore::class)
             ->getLatestConversationMessages($this->assistantConversationId, 20)
@@ -309,19 +323,13 @@ class AssistantSidebar extends Component
         ];
     }
 
-    private function sendProvisionalFindingsToInbox(bool $sendProvisionalFindingsToInbox, ?string $generatedContent = null): void
+    private function sendProvisionalFindingsToInbox(bool $sendProvisionalFindingsToInbox, string $content): void
     {
         if (! $sendProvisionalFindingsToInbox) {
             return;
         }
 
-        $content = $generatedContent ?? (
-            collect($this->assistantMessages)
-                ->reverse()
-                ->first(fn (array $message): bool => $message['role'] === 'assistant')['content'] ?? null
-        );
-
-        if (! is_string($content) || trim($content) === '') {
+        if (trim($content) === '') {
             $this->dispatch('provisional-findings-failed')->to(AnalysisPage::class);
 
             return;
@@ -344,17 +352,13 @@ class AssistantSidebar extends Component
             : $content;
     }
 
-    private function sendReportOutlineToWorkspace(bool $sendReportOutlineToWorkspace, ?string $generatedContent = null): void
+    private function sendReportOutlineToWorkspace(bool $sendReportOutlineToWorkspace, string $content): void
     {
         if (! $sendReportOutlineToWorkspace) {
             return;
         }
 
-        $content = $generatedContent ?? (collect($this->assistantMessages)
-            ->reverse()
-            ->first(fn (array $message): bool => $message['role'] === 'assistant')['content'] ?? null);
-
-        if (! is_string($content) || trim($content) === '') {
+        if (trim($content) === '') {
             $this->dispatch('report-outline-failed')->to(ReportsPage::class);
 
             return;
@@ -468,65 +472,114 @@ class AssistantSidebar extends Component
         return preg_match('/^[A-Z][A-Za-z0-9()\/,\-\s]{0,60}:\s.+$/', $line) === 1;
     }
 
-    private function storePromptExchangeIfMissing(ReviewAssistantAgent $agent, string $prompt, AgentResponse $response): void
-    {
-        $existingConversationId = $this->assistantConversationId;
-        $store = resolve(ConversationStore::class);
+    /**
+     * Store the user and assistant messages on the resolved conversation while holding its row lock.
+     *
+     * Reset takes the same row lock before deleting. When the conversation no longer exists for
+     * this review and user, nothing is written and false is returned.
+     */
+    private function storeExchangeIfConversationStillExists(
+        string $conversationId,
+        ReviewAssistantAgent $agent,
+        string $prompt,
+        AgentResponse $response,
+        string $playbookVersion,
+    ): bool {
+        return DB::transaction(function () use ($conversationId, $agent, $prompt, $response, $playbookVersion): bool {
+            $lockedConversationId = DB::table('agent_conversations')
+                ->where('id', $conversationId)
+                ->where('pls_review_id', $this->review->getKey())
+                ->where('user_id', auth()->id())
+                ->lockForUpdate()
+                ->value('id');
 
-        if (
-            $existingConversationId !== null
-            && $store->getLatestConversationMessages($existingConversationId, 1)->isNotEmpty()
-        ) {
-            return;
-        }
+            if ($lockedConversationId === null) {
+                return false;
+            }
 
-        $provider = Ai::textProviderFor($agent, config('ai.default'));
-        $agentPrompt = new AgentPrompt(
-            $agent,
-            $prompt,
-            [],
-            $provider,
-            $provider->defaultTextModel(),
-        );
+            $store = resolve(ConversationStore::class);
+            $provider = Ai::textProviderFor($agent, config('ai.default'));
+            $agentPrompt = new AgentPrompt(
+                $agent,
+                $prompt,
+                [],
+                $provider,
+                $provider->defaultTextModel(),
+            );
 
-        $conversationId = $existingConversationId;
+            $store->storeUserMessage($conversationId, auth()->id(), $agentPrompt);
+            $store->storeAssistantMessage($conversationId, auth()->id(), $agentPrompt, $response);
 
-        $store->storeUserMessage($conversationId, auth()->id(), $agentPrompt);
-        $store->storeAssistantMessage($conversationId, auth()->id(), $agentPrompt, $response);
+            $this->persistConversation($conversationId, $playbookVersion);
 
-        $this->assistantConversationId = $conversationId;
+            return true;
+        });
     }
 
     private function persistSyntheticAssistantExchange(
         ReviewAssistantAgent $agent,
+        string $conversationId,
         string $prompt,
         string $assistantReply,
-    ): void {
-        $store = resolve(ConversationStore::class);
+        string $playbookVersion,
+    ): bool {
         $provider = Ai::textProviderFor($agent, config('ai.default'));
-        $agentPrompt = new AgentPrompt(
+
+        return $this->storeExchangeIfConversationStillExists(
+            $conversationId,
             $agent,
             $prompt,
-            [],
-            $provider,
-            $provider->defaultTextModel(),
-        );
-
-        $conversationId = $this->assistantConversationId;
-
-        $store->storeUserMessage($conversationId, auth()->id(), $agentPrompt);
-        $store->storeAssistantMessage(
-            $conversationId,
-            auth()->id(),
-            $agentPrompt,
             new AgentResponse(
                 (string) Str::uuid(),
                 $assistantReply,
                 new Usage,
                 new Meta($provider->name(), $provider->defaultTextModel()),
             ),
+            $playbookVersion,
         );
+    }
 
+    /**
+     * Discard a send whose conversation was reset in another window and reload state from the database.
+     */
+    private function discardExchangeAfterReset(bool $sendProvisionalFindingsToInbox, bool $sendReportOutlineToWorkspace): void
+    {
+        $this->assistantMessages = [];
+        $this->bootConversationState();
+        $this->assistantError = __('This chat was reset in another window. Your message was not saved.');
+
+        if ($sendProvisionalFindingsToInbox) {
+            $this->dispatch('provisional-findings-failed')->to(AnalysisPage::class);
+        }
+
+        if ($sendReportOutlineToWorkspace) {
+            $this->dispatch('report-outline-failed')->to(ReportsPage::class);
+        }
+
+        $this->dispatch('assistant-message-added');
+    }
+
+    /**
+     * Report a database failure while resolving or storing an exchange and show it inline.
+     *
+     * The local user message stays in the chat so it can be resent. The conversation id is
+     * not assigned and nothing is reloaded from the database, which has just failed.
+     */
+    private function failExchangeStorage(Throwable $exception, bool $sendProvisionalFindingsToInbox, bool $sendReportOutlineToWorkspace): void
+    {
+        report($exception);
+
+        $this->assistantError = __('The assistant could not save this message. Try again.');
+
+        if ($sendProvisionalFindingsToInbox) {
+            $this->dispatch('provisional-findings-failed')->to(AnalysisPage::class);
+        }
+
+        if ($sendReportOutlineToWorkspace) {
+            $this->dispatch('report-outline-failed')->to(ReportsPage::class);
+        }
+
+        $this->dispatch('assistant-message-added');
     }
 
     /**
@@ -567,5 +620,10 @@ class AssistantSidebar extends Component
     private function refusalGuard(): ReviewAssistantRefusalGuard
     {
         return app(ReviewAssistantRefusalGuard::class);
+    }
+
+    private function conversationResolver(): ReviewConversationResolver
+    {
+        return app(ReviewConversationResolver::class);
     }
 }
