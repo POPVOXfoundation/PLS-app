@@ -41,6 +41,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/legislation/sources/{document}/original', ReviewLegislationSourceOriginalController::class)
             ->can('view', 'review')
             ->name('pls.reviews.legislation.sources.original');
+        Route::get('/documents/{document}/original', ReviewLegislationSourceOriginalController::class)
+            ->can('view', 'review')
+            ->name('pls.reviews.documents.original');
         Route::get('/documents', DocumentsPage::class)->can('view', 'review')->name('pls.reviews.documents');
         Route::get('/stakeholders', StakeholdersPage::class)->can('view', 'review')->name('pls.reviews.stakeholders');
         Route::get('/consultations', ConsultationsPage::class)->can('view', 'review')->name('pls.reviews.consultations');

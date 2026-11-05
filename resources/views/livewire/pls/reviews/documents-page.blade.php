@@ -237,6 +237,7 @@
                                 {{ $row['status_label'] }}
                             </flux:badge>
 
+                            <flux:button size="sm" variant="ghost" :href="route('pls.reviews.documents.original', [$review, $row['id']])" target="_blank">{{ __('Open original') }}</flux:button>
                             @can('update', $review)
                                 @if ($row['action'] === 'review')
                                     <flux:button

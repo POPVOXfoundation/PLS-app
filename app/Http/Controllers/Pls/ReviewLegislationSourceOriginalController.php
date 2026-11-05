@@ -20,7 +20,7 @@ class ReviewLegislationSourceOriginalController extends Controller
 
         abort_unless(
             (int) $document->pls_review_id === (int) $review->getKey()
-            && $document->document_type === DocumentType::LegislationText,
+            && (request()->routeIs('pls.reviews.documents.original') || $document->document_type === DocumentType::LegislationText),
             404,
         );
 
@@ -37,8 +37,9 @@ class ReviewLegislationSourceOriginalController extends Controller
         $fallbackFilename = trim((string) preg_replace('/[^A-Za-z0-9._ -]/', '_', Str::ascii($filename))) ?: 'legislation-source';
 
         $headers = [
-            'Content-Type' => $document->mime_type ?: ($disk->mimeType($storagePath) ?: 'application/octet-stream'),
-            'Content-Disposition' => HeaderUtils::makeDisposition(HeaderUtils::DISPOSITION_INLINE, $filename, $fallbackFilename),
+            'Content-Type' => $disk->mimeType($storagePath) ?: 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+            'Content-Disposition' => HeaderUtils::makeDisposition(HeaderUtils::DISPOSITION_ATTACHMENT, $filename, $fallbackFilename),
         ];
 
         if ($document->file_size !== null) {
