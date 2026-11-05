@@ -21,7 +21,7 @@
             @foreach($review->reports->sortByDesc('id')->take(5) as $savedReport)
                 <div class="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
                     <flux:link :href="route('pls.reviews.reports.show', [$review, $savedReport])" wire:navigate>{{ $savedReport->title }}</flux:link>
-                    <div class="flex flex-wrap gap-2"><flux:badge>{{ $savedReport->generation_status ?? __('Saved draft') }}</flux:badge><flux:button size="sm" :href="route('pls.reviews.reports.show', [$review, $savedReport])" wire:navigate>{{ __('Open / edit / download') }}</flux:button></div>
+                    <div class="flex flex-wrap gap-2"><flux:badge>{{ \Illuminate\Support\Str::headline($savedReport->generation_status ?? $savedReport->status->value) }}</flux:badge><flux:button size="sm" :href="route('pls.reviews.reports.show', [$review, $savedReport])" wire:navigate>{{ __('Open / edit / download') }}</flux:button></div>
                 </div>
             @endforeach
         </flux:card>

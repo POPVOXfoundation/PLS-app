@@ -700,7 +700,8 @@ class ReportsPage extends Workspace
     private function reportPreview(PlsReview $review): array
     {
         $evidenceCount = $review->documents
-            ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText || $document->isReportingTemplate())
+            ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText || $document->isReportingTemplate() || $document->excludedFromAnalysis())
+            ->filter(fn (Document $document): bool => $document->processingStatus() === 'ready')
             ->count();
         $consultationResultCount = $review->consultations->sum(
             fn ($consultation): int => $consultation->materials->count(),
@@ -722,11 +723,11 @@ class ReportsPage extends Workspace
                     'title' => __('Review overview'),
                 ],
                 [
-                    'action' => __('Open evidence'),
+                    'action' => __('Open documents'),
                     'detail' => $evidenceCount > 0
-                        ? trans_choice('{1} One evidence record is available for report drafting.|[2,*] :count evidence records are available for report drafting.', $evidenceCount, ['count' => $evidenceCount])
-                        : __('Add evidence before writing about implementation or impact.'),
-                    'label' => __('Evidence and consultation'),
+                        ? trans_choice('{1} One supporting document has readable text. Check its relevance and reliability.|[2,*] :count supporting documents have readable text. Check their relevance and reliability.', $evidenceCount, ['count' => $evidenceCount])
+                        : __('Add and process supporting documents before writing about implementation or impact.'),
+                    'label' => __('Sources and consultation'),
                     'ready' => $evidenceCount > 0,
                     'route' => route('pls.reviews.documents', ['review' => $review]),
                     'title' => $consultationResultCount > 0
@@ -738,7 +739,7 @@ class ReportsPage extends Workspace
                 [
                     'action' => __('Open analysis'),
                     'detail' => $review->findings->isNotEmpty()
-                        ? __(':count accepted findings; :supported have reviewed supporting passages. Check gaps before drafting.', ['count' => $review->findings->count(), 'supported' => $review->findings->filter(fn ($finding) => $finding->hasReviewedSupport())->count()])
+                        ? __(':count saved findings; :supported have reviewed supporting passages. Check gaps before drafting.', ['count' => $review->findings->count(), 'supported' => $review->findings->filter(fn ($finding) => $finding->hasReviewedSupport())->count()])
                         : __('Confirm human-reviewed findings before treating this section as report-ready.'),
                     'label' => __('Findings and recommendations'),
                     'ready' => $review->findings->isNotEmpty() && $review->findings->every(fn ($finding) => $finding->hasReviewedSupport()) && $review->recommendations->isNotEmpty(),
@@ -1012,7 +1013,7 @@ class ReportsPage extends Workspace
                 'title' => __('Methodology and evidence base'),
                 'purpose' => __('Describe how the review assembled evidence, including documents, written submissions, consultations, and the limits of that evidence base.'),
                 'material' => __(':evidence :submissions :consultations', [
-                    'evidence' => trans_choice('{0} No evidence records are saved.|{1} One evidence record is saved.|[2,*] :count evidence records are saved.', $evidenceCount, ['count' => $evidenceCount]),
+                    'evidence' => trans_choice('{0} No supporting documents are saved.|{1} One supporting document is saved.|[2,*] :count supporting documents are saved.', $evidenceCount, ['count' => $evidenceCount]),
                     'submissions' => trans_choice('{0} No written submissions are saved.|{1} One written submission is saved.|[2,*] :count written submissions are saved.', $review->submissions->count(), ['count' => $review->submissions->count()]),
                     'consultations' => trans_choice('{0} No consultation materials are saved.|{1} One consultation material is saved.|[2,*] :count consultation materials are saved.', $consultationMaterialCount, ['count' => $consultationMaterialCount]),
                 ]),
