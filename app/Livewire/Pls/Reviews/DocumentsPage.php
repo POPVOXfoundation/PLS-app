@@ -186,6 +186,7 @@ class DocumentsPage extends Workspace
     public function saveDocumentEdits(UpdateReviewDocument $action): void
     {
         $this->authorizeReviewMutation();
+        $document = $this->documentsQuery()->findOrFail($this->documentEditingId);
 
         try {
             $this->review = $action->update([
@@ -193,10 +194,10 @@ class DocumentsPage extends Workspace
                 'pls_review_id' => $this->review->id,
                 'title' => $this->documentTitle,
                 'document_type' => $this->documentType,
-                'storage_path' => $this->blankToNull($this->documentStoragePath),
+                'storage_path' => $document->storage_path,
                 'file' => null,
-                'mime_type' => $this->blankToNull($this->documentMimeType),
-                'file_size' => $this->blankToNull($this->documentFileSize) === null ? null : (int) $this->documentFileSize,
+                'mime_type' => $document->mime_type,
+                'file_size' => $document->file_size,
                 'summary' => $this->blankToNull($this->documentSummary),
                 'metadata' => null,
             ])->fresh();

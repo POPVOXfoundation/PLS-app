@@ -15,12 +15,12 @@ class AcceptReviewInvitationController extends Controller
             ->whereNull('accepted_at')
             ->firstOrFail();
 
+        abort_unless($invitation->isPending(), 410, __('This invitation has expired. Ask the review owner for a new invitation.'));
+
         $user = $request->user();
 
         if ($user === null) {
-            session(['pending_invitation_token' => $token]);
-
-            return redirect()->route('login');
+            return redirect()->guest(route('login'));
         }
 
         if (mb_strtolower($user->email) !== mb_strtolower($invitation->email)) {
@@ -30,6 +30,8 @@ class AcceptReviewInvitationController extends Controller
         }
 
         if ($invitation->review->memberships()->where('user_id', $user->id)->exists()) {
+            $invitation->acceptFor($user);
+
             return redirect()->route('pls.reviews.workflow', $invitation->review)
                 ->with('toast', Toast::warning(
                     __('Access already granted'),

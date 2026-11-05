@@ -84,6 +84,21 @@ class AssistantSidebar extends Component
         $this->dispatch('assistant-message-added');
 
         $context = $this->contextBuilder()->build($this->review, $this->workspaceKey, $prompt);
+        if (mb_strlen($context['context']) > (int) config('pls_assistant.max_context_characters', 300000)) {
+            $this->assistantInput = $prompt;
+            $this->assistantError = __('The full source text is too large for one assistant request. No AI request was sent; legislation was not silently shortened. Ask the review owner to split the material into smaller reviews.');
+
+            if ($sendProvisionalFindingsToInbox) {
+                $this->dispatch('provisional-findings-failed')->to(AnalysisPage::class);
+            }
+
+            if ($sendReportOutlineToWorkspace) {
+                $this->dispatch('report-outline-failed')->to(ReportsPage::class);
+            }
+
+            return;
+        }
+
         $agent = $this->assistantAgent($context);
 
         try {

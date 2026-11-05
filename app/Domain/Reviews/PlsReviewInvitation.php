@@ -6,6 +6,7 @@ use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class PlsReviewInvitation extends Model
@@ -44,7 +45,7 @@ class PlsReviewInvitation extends Model
 
     public function isPending(): bool
     {
-        return $this->accepted_at === null;
+        return $this->accepted_at === null && ($this->expires_at === null || $this->expires_at->isFuture());
     }
 
     public function isAccepted(): bool
@@ -54,13 +55,19 @@ class PlsReviewInvitation extends Model
 
     public function acceptFor(User $user): PlsReviewMembership
     {
-        $this->update(['accepted_at' => now()]);
+        return DB::transaction(function () use ($user): PlsReviewMembership {
+            $invitation = static::query()->lockForUpdate()->findOrFail($this->id);
+            abort_unless($invitation->isPending(), 410);
+            abort_unless(mb_strtolower($user->email) === mb_strtolower($invitation->email), 403);
+            $review = $invitation->review()->lockForUpdate()->firstOrFail();
+            $membership = $review->memberships()->firstOrCreate(['user_id' => $user->id], [
+                'role' => $invitation->role,
+                'invited_by' => $invitation->invited_by,
+            ]);
+            $invitation->update(['accepted_at' => now()]);
 
-        return $this->review->memberships()->create([
-            'user_id' => $user->id,
-            'role' => $this->role,
-            'invited_by' => $this->invited_by,
-        ]);
+            return $membership;
+        });
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Reviews\PlsReviewMembership;
 use App\Models\User;
+use App\Notifications\ReviewAccessGrantedNotification;
 use App\Notifications\ReviewInvitationNotification;
 use App\Support\Toast;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -82,6 +83,8 @@ class CollaboratorsPage extends Workspace
     {
         $this->authorize('manageCollaborators', $this->review);
 
+        $this->inviteCollaboratorEmail = mb_strtolower(trim($this->inviteCollaboratorEmail));
+
         validator(
             [
                 'inviteCollaboratorEmail' => $this->inviteCollaboratorEmail,
@@ -101,7 +104,7 @@ class CollaboratorsPage extends Workspace
             ],
         )->validate();
 
-        $existingUser = User::where('email', $this->inviteCollaboratorEmail)->first();
+        $existingUser = User::whereRaw('LOWER(email) = ?', [$this->inviteCollaboratorEmail])->first();
 
         if ($existingUser) {
             $alreadyMember = $this->review->memberships()->where('user_id', $existingUser->id)->exists();
@@ -118,13 +121,15 @@ class CollaboratorsPage extends Workspace
                 'invited_by' => auth()->id(),
             ]);
 
+            $existingUser->notify(new ReviewAccessGrantedNotification($this->review));
+
             $toast = Toast::success(
                 __('Access granted'),
                 __('Access granted.'),
             );
         } else {
             $alreadyInvited = $this->review->pendingInvitations()
-                ->where('email', $this->inviteCollaboratorEmail)
+                ->whereRaw('LOWER(email) = ?', [$this->inviteCollaboratorEmail])
                 ->exists();
 
             if ($alreadyInvited) {

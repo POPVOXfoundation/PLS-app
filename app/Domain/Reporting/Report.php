@@ -6,14 +6,15 @@ use App\Domain\Documents\Document;
 use App\Domain\Reporting\Enums\ReportStatus;
 use App\Domain\Reporting\Enums\ReportType;
 use App\Domain\Reviews\PlsReview;
+use Database\Factories\Domain\Reporting\ReportFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Model;
 
 class Report extends Model
 {
-    /** @use HasFactory<\Database\Factories\Domain\Reporting\ReportFactory> */
+    /** @use HasFactory<ReportFactory> */
     use HasFactory;
 
     /**
@@ -22,6 +23,8 @@ class Report extends Model
     protected $fillable = [
         'pls_review_id',
         'title',
+        'content',
+        'revision',
         'report_type',
         'status',
         'document_id',
@@ -49,6 +52,7 @@ class Report extends Model
     protected function casts(): array
     {
         return [
+            'revision' => 'integer',
             'report_type' => ReportType::class,
             'status' => ReportStatus::class,
             'published_at' => 'datetime',

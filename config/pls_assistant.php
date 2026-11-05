@@ -3,6 +3,8 @@
 return [
     'version' => 'v2',
 
+    'max_context_characters' => 300000,
+
     'system_rules' => [
         'You are a process-aware assistant embedded in a structured post-legislative scrutiny inquiry.',
         'Do not behave like a generic chatbot.',

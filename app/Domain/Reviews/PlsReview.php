@@ -23,6 +23,7 @@ use App\Domain\Reviews\Enums\PlsStepStatus;
 use App\Domain\Stakeholders\ImplementingAgency;
 use App\Domain\Stakeholders\Stakeholder;
 use App\Models\User;
+use Database\Factories\Domain\Reviews\PlsReviewFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -35,7 +36,7 @@ use Illuminate\Support\Str;
 
 class PlsReview extends Model
 {
-    /** @use HasFactory<\Database\Factories\Domain\Reviews\PlsReviewFactory> */
+    /** @use HasFactory<PlsReviewFactory> */
     use HasFactory;
 
     /**
@@ -106,7 +107,8 @@ class PlsReview extends Model
 
     public function pendingInvitations(): HasMany
     {
-        return $this->hasMany(PlsReviewInvitation::class)->whereNull('accepted_at');
+        return $this->hasMany(PlsReviewInvitation::class)->whereNull('accepted_at')
+            ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()));
     }
 
     public function members(): BelongsToMany
