@@ -82,10 +82,10 @@
 
         <div class="self-center rounded-lg border border-violet-200/80 bg-white/75 p-4 dark:border-violet-500/25 dark:bg-zinc-950/40">
             <div class="flex items-center justify-between gap-3">
-                <p class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Review progress') }}</p>
-                <span class="text-xs tabular-nums text-zinc-500 dark:text-zinc-400">{{ $review->progressPercentage() }}%</span>
+                <p class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Methodology stage') }}</p>
+
             </div>
-            <flux:progress :value="$review->progressPercentage()" />
+            <flux:text>{{ __('Stage completion records the team’s decision, not the percentage of substantive work finished.') }}</flux:text>
             <p class="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
                 {{ __('Step :current of :total in the WFD PLS methodology.', ['current' => $review->current_step_number, 'total' => $review->steps->count()]) }}
             </p>
@@ -191,17 +191,26 @@
 
     <details class="group rounded-lg border border-zinc-200 bg-white px-5 py-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50 sm:px-6">
         <summary class="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-zinc-800 marker:hidden dark:text-zinc-200">
-            <span>{{ __('PLS methodology reference') }}</span>
+            <span>{{ __('PLS methodology reference') }} · {{ __('Stage checklist') }}</span>
             <flux:icon icon="chevron-down" class="size-4 transition group-open:rotate-180" />
         </summary>
         <p class="mt-3 max-w-3xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
             {{ __('These steps summarize WFD methodology. They are a reference for planning and checking the inquiry, while the navigation menu opens the relevant working areas.') }}
         </p>
+        <flux:error name="step" />
         <ol class="mt-4 grid gap-x-6 gap-y-3 md:grid-cols-2">
             @foreach ($review->steps as $step)
-                <li class="flex gap-3 text-sm">
+                <li wire:key="workflow-stage-{{ $step->id }}" class="flex flex-wrap gap-3 text-sm">
                     <span class="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-xs font-semibold tabular-nums text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">{{ $step->step_number }}</span>
                     <span class="leading-6 text-zinc-700 dark:text-zinc-300">{{ $step->title }}</span>
+                    <flux:badge size="sm">{{ $step->statusLabel() }}</flux:badge>
+                    @can('update', $review)
+                        @if ($review->firstOpenStep()?->id === $step->id)
+                            <flux:button size="sm" wire:click="completeStep({{ $step->id }})">{{ __('Complete this stage') }}</flux:button>
+                        @elseif ($step->isTerminal())
+                            <flux:button size="sm" wire:click="reopenStep({{ $step->id }})" wire:confirm="{{ __('Reopen this stage and reset later stage confirmations? Your saved review records will remain available.') }}">{{ __('Reopen stage') }}</flux:button>
+                        @endif
+                    @endcan
                 </li>
             @endforeach
         </ol>

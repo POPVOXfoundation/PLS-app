@@ -686,6 +686,10 @@ class LegislationPage extends Workspace
             $legislationType = $savedLegislation instanceof Legislation
                 ? $this->legislationTypeLabel($savedLegislation->legislation_type)
                 : $this->legislationTypeLabel((string) ($storedAnalysis['legislation_type'] ?? ''));
+            $classification = data_get($document->metadata, 'source_review.classification');
+            if (is_string($classification)) {
+                $legislationType = $this->legislationTypeLabel($classification);
+            }
 
             $rows[] = [
                 'id' => 'source-'.$document->id,
@@ -697,8 +701,8 @@ class LegislationPage extends Workspace
                 'subtitle' => $savedLegislation instanceof Legislation ? $document->title : null,
                 'relationship' => $relationship,
                 'legislation_type' => $legislationType,
-                'date_enacted' => $savedLegislation?->date_enacted?->toFormattedDateString()
-                    ?? ($this->blankToNull((string) ($storedAnalysis['date_enacted'] ?? '')) ?? '—'),
+                'date_enacted' => in_array($classification, ['bill', 'parliamentary_debate'], true) ? '—' : ($savedLegislation?->date_enacted?->toFormattedDateString()
+                    ?? ($this->blankToNull((string) ($storedAnalysis['date_enacted'] ?? '')) ?? '—')),
                 'summary' => $savedLegislation?->summary
                     ?? $this->blankToNull((string) ($storedAnalysis['summary'] ?? '')),
                 'key_themes' => $this->analysisStringList($storedAnalysis, 'key_themes'),

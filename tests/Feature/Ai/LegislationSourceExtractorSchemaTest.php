@@ -19,8 +19,9 @@ test('legislation extractor request schema is openai strict mode compliant', fun
     expect($violations)->toBe([], "Strict mode violations:\n".implode("\n", $violations));
 });
 
-test('legislation extractor request schema keeps its original shape apart from nested additionalProperties', function () {
+test('legislation extractor request schema preserves strict schema structure while adding distinct source identities', function () {
     $baseline = json_decode(primaryExtractorTextFormatBaseline(), true, flags: JSON_THROW_ON_ERROR);
+    $baseline['schema']['properties']['legislation_type']['enum'] = ['bill', 'parliamentary_debate', 'amendment', 'unclassified', 'act', 'law', 'statute', 'regulation', 'ordinance'];
     $format = capturedResponsesTextFormat(LegislationSourceExtractorAgent::class);
 
     expect(array_keys($format))->toBe(array_keys($baseline))
@@ -29,8 +30,9 @@ test('legislation extractor request schema keeps its original shape apart from n
         ->and(array_diff_key($format, ['schema' => true]))->toBe(array_diff_key($baseline, ['schema' => true]));
 });
 
-test('legislation fallback extractor request schema is unchanged', function () {
+test('legislation fallback extractor preserves schema structure while adding distinct source identities', function () {
     $baseline = json_decode(fallbackExtractorTextFormatBaseline(), true, flags: JSON_THROW_ON_ERROR);
+    $baseline['schema']['properties']['legislation_type']['enum'] = ['bill', 'parliamentary_debate', 'amendment', 'unclassified', 'act', 'law', 'statute', 'regulation', 'ordinance'];
     $format = capturedResponsesTextFormat(LegislationSourceFallbackExtractorAgent::class);
 
     expect($format)->toBe($baseline)

@@ -3,21 +3,29 @@
 namespace App\Jobs;
 
 use App\Domain\Documents\Actions\ChunkDocumentText;
+use App\Domain\Documents\Actions\RecordDocumentExtraction;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Legislation\Actions\AnalyzeLegislationSource;
 use App\Domain\Legislation\Actions\PersistLegislationSourceState;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
 
 class ProcessReviewLegislationSource implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 20;
+    public int $tries = 3;
+
+    public bool $failOnTimeout = true;
+
+    public ?string $runId = null;
 
     public function __construct(public int $documentId, public string $step = 'extract')
     {
+        $this->runId = data_get(Document::query()->find($documentId)?->metadata, 'extraction.run_id');
         $this->onConnection('redis');
         $this->onQueue((string) config('pls_assistant.review_source_enrichment.queue', 'review-source-enrichment'));
     }
@@ -32,7 +40,7 @@ class ProcessReviewLegislationSource implements ShouldQueue
             ->where('document_type', DocumentType::LegislationText->value)
             ->find($this->documentId);
 
-        if (! $document instanceof Document || $document->review === null) {
+        if (! $document instanceof Document || $document->review === null || ! $this->isCurrentRun($document)) {
             return;
         }
 
@@ -51,40 +59,30 @@ class ProcessReviewLegislationSource implements ShouldQueue
         PersistLegislationSourceState $state,
         ChunkDocumentText $chunkDocumentText,
     ): void {
-        $wasAlreadyProcessing = (string) data_get($document->metadata, 'extraction.status') === 'processing';
-        $document = $state->markExtractingText($document);
+        $document = app(RecordDocumentExtraction::class)->forRun($this->documentId, $this->runId, function (Document $current) use ($state): Document {
+            $wasAlreadyProcessing = data_get($current->metadata, 'extraction.status') === 'processing';
+            $current = $state->markExtractingText($current);
 
-        if ($wasAlreadyProcessing) {
-            $document = $state->incrementPollAttempts($document);
-        }
-
-        $result = $analyze->extract($document);
-
-        if (($result['status'] ?? null) !== 'completed') {
-            if (($result['status'] ?? null) === 'processing') {
-                $result['progress_stage'] = 'extracting_text';
-            }
-
-            $state->persistResult($document, $result);
-
-            if (($result['status'] ?? null) === 'processing') {
-                self::dispatch($document->id, 'extract')
-                    ->delay(now()->addSeconds((int) (($result['poll_after_seconds'] ?? null) ?: 15)));
-            }
-
+            return $wasAlreadyProcessing ? $state->incrementPollAttempts($current) : $current;
+        });
+        if (! $document instanceof Document) {
             return;
         }
+        $result = $analyze->extract($document);
+        app(RecordDocumentExtraction::class)->forRun($this->documentId, $this->runId, function (Document $current) use ($result, $state, $chunkDocumentText): void {
+            if (($result['status'] ?? null) !== 'completed') {
+                $this->persistPendingExtraction($current, $result, $state);
 
-        $rawText = trim((string) ($result['raw_text'] ?? ''));
-
-        if ($rawText !== '') {
-            $chunkDocumentText->chunk($document->fresh(), $rawText);
-        }
-
-        $state->markFillingRecord($document->fresh());
-
-        self::dispatch($document->id, 'enrich')
-            ->delay(now()->addSeconds((int) config('pls_assistant.review_source_enrichment.ai_stage_delay_seconds', 3)));
+                return;
+            }
+            $rawText = trim((string) ($result['raw_text'] ?? ''));
+            if ($rawText !== '') {
+                $chunkDocumentText->chunk($current, $rawText);
+            }
+            app(RecordDocumentExtraction::class)->record($current, $result);
+            $state->markFillingRecord($current->fresh());
+            $this->queueNext($current, 'enrich', (int) config('pls_assistant.review_source_enrichment.ai_stage_delay_seconds', 3));
+        });
     }
 
     private function handleEnrichment(
@@ -95,12 +93,9 @@ class ProcessReviewLegislationSource implements ShouldQueue
         $extraction = $analyze->extract($document);
 
         if (($extraction['status'] ?? null) !== 'completed') {
-            $state->persistResult($document, $extraction);
-
-            if (($extraction['status'] ?? null) === 'processing') {
-                self::dispatch($document->id, 'extract')
-                    ->delay(now()->addSeconds((int) (($extraction['poll_after_seconds'] ?? null) ?: 15)));
-            }
+            app(RecordDocumentExtraction::class)->forRun($this->documentId, $this->runId, function (Document $current) use ($extraction, $state): void {
+                $this->persistPendingExtraction($current, $extraction, $state);
+            });
 
             return;
         }
@@ -112,7 +107,39 @@ class ProcessReviewLegislationSource implements ShouldQueue
             'poll_after_seconds' => $extraction['poll_after_seconds'] ?? null,
         ]);
 
+        app(RecordDocumentExtraction::class)->forRun($this->documentId, $this->runId, function (Document $current) use ($state, $result): void {
+            $state->persistResult($current, $result);
+        });
+    }
+
+    /** @param array<string, mixed> $result */
+    private function persistPendingExtraction(Document $document, array $result, PersistLegislationSourceState $state): void
+    {
+        if (($result['status'] ?? null) === 'processing') {
+            $result['progress_stage'] = 'extracting_text';
+        }
         $state->persistResult($document, $result);
+        if (($result['status'] ?? null) === 'processing') {
+            $this->queueNext($document, 'extract', (int) (($result['poll_after_seconds'] ?? null) ?: 15));
+        }
+    }
+
+    private function queueNext(Document $document, string $step, int $delay): void
+    {
+        $job = new self($document->id, $step);
+        $job->runId = $this->runId;
+        $job->delay(now()->addSeconds($delay));
+        DB::afterCommit(fn () => Bus::dispatch($job));
+    }
+
+    private function isCurrentRun(Document $document): bool
+    {
+        return data_get($document->metadata, 'extraction.run_id') === $this->runId;
+    }
+
+    public function failed(?\Throwable $exception): void
+    {
+        app(RecordDocumentExtraction::class)->fail($this->documentId, $this->runId, 'legislation_analysis');
     }
 
     public function backoff(): array

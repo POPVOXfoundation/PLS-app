@@ -26,6 +26,7 @@ class UpdateReport
                 throw ValidationException::withMessages(['content' => __('This report changed since you opened it. Copy your edits, then reopen the report before saving.')]);
             }
 
+            $report->checkpoint();
             $report->update([
                 'title' => $validated['title'],
                 'content' => array_key_exists('content', $validated) ? $validated['content'] : $report->content,
@@ -37,7 +38,7 @@ class UpdateReport
                     ? ($validated['published_at'] ?? $report->published_at ?? now())
                     : null,
             ]);
-
+            $report->checkpoint();
         });
 
         return PlsReview::query()->findOrFail($validated['pls_review_id'])->fresh([

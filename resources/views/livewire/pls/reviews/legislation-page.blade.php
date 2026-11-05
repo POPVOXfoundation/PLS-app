@@ -124,7 +124,11 @@
                                 <span class="min-w-0 space-y-1">
                                     <span class="flex flex-wrap items-center gap-2">
                                         <flux:badge size="sm">{{ $row['record_label'] }}</flux:badge>
-                                        <flux:heading size="base" class="truncate">{{ $row['title'] }}</flux:heading>
+                                        @if ($row['source_document_id'] !== null)
+                                            <flux:link :href="route('pls.reviews.documents.show', [$review, $row['source_document_id']])" wire:navigate>{{ $row['title'] }}</flux:link>
+                                        @else
+                                            <flux:heading size="base" class="truncate">{{ $row['title'] }}</flux:heading>
+                                        @endif
                                         <span x-show="! expanded" x-cloak class="text-xs font-medium text-zinc-400 dark:text-zinc-500">{{ __('Expand') }}</span>
                                     </span>
 

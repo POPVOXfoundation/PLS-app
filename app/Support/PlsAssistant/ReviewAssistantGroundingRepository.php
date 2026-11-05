@@ -26,7 +26,7 @@ class ReviewAssistantGroundingRepository
             'review' => $this->reviewReferences(
                 review: $review,
                 prompt: $prompt,
-                excludeLegislationSources: $workspaceKey === 'documents',
+                excludeLegislationSources: false,
             ),
         ];
     }
@@ -157,10 +157,10 @@ class ReviewAssistantGroundingRepository
     {
         $tokens = $this->promptTokens($prompt);
 
-        $legislation = $excludeLegislationSources ? collect() : $review->documents
+        $legislation = $excludeLegislationSources ? collect() : $review->documents->reject(fn (Document $document): bool => (bool) data_get($document->metadata, 'source_review.excluded', false))
             ->filter(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
             ->map(fn (Document $document): array => [
-                'label' => $document->title,
+                'label' => $document->title.' ['.data_get($document->metadata, 'source_review.classification', data_get($document->metadata, 'legislation_analysis.legislation_type', 'legal source; status unverified')).']',
                 'source' => 'review',
                 'excerpt' => $document->chunks->isNotEmpty()
                     ? $document->chunks->sortBy('chunk_index')->pluck('content')->implode("\n\n")
@@ -168,6 +168,7 @@ class ReviewAssistantGroundingRepository
             ]);
 
         return $review->documents
+            ->reject(fn (Document $document): bool => (bool) data_get($document->metadata, 'source_review.excluded', false))
             ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
             ->map(function (Document $document) use ($tokens): array {
                 $scoredChunks = $document->relationLoaded('chunks') && $document->chunks->isNotEmpty()
@@ -196,7 +197,7 @@ class ReviewAssistantGroundingRepository
                 $score = $this->scoreText($document->title.' '.$excerpt, $tokens);
 
                 return [
-                    'label' => $document->title,
+                    'label' => $document->title.($document->isReportTemplate() ? ' [reporting template; structure only]' : ''),
                     'source' => 'review',
                     'excerpt' => trim($excerpt),
                     'score' => $score,

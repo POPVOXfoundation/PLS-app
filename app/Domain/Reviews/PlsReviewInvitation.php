@@ -20,6 +20,7 @@ class PlsReviewInvitation extends Model
         'role',
         'token',
         'invited_by',
+        'mail_status', 'mail_token', 'mail_requested_at', 'mail_accepted_at',
         'accepted_at',
         'expires_at',
     ];
@@ -57,7 +58,7 @@ class PlsReviewInvitation extends Model
     {
         return DB::transaction(function () use ($user): PlsReviewMembership {
             $invitation = static::query()->lockForUpdate()->findOrFail($this->id);
-            abort_unless($invitation->isPending(), 410);
+            abort_unless(hash_equals((string) $invitation->token, (string) $this->token) && $invitation->isPending(), 410);
             abort_unless(mb_strtolower($user->email) === mb_strtolower($invitation->email), 403);
             $review = $invitation->review()->lockForUpdate()->firstOrFail();
             $membership = $review->memberships()->firstOrCreate(['user_id' => $user->id], [
@@ -77,6 +78,8 @@ class PlsReviewInvitation extends Model
     {
         return [
             'role' => PlsReviewMembershipRole::class,
+            'mail_requested_at' => 'datetime',
+            'mail_accepted_at' => 'datetime',
             'accepted_at' => 'datetime',
             'expires_at' => 'datetime',
         ];

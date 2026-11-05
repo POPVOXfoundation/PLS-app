@@ -6,6 +6,7 @@ use App\Domain\Documents\Actions\PersistReviewDocumentState;
 use App\Domain\Documents\Actions\StoreReviewDocumentMetadata;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
+use App\Domain\Reporting\Actions\QueueReportDraft;
 use App\Domain\Reporting\Actions\StoreGovernmentResponse;
 use App\Domain\Reporting\Actions\StoreReport;
 use App\Domain\Reporting\Actions\UpdateReport;
@@ -53,6 +54,8 @@ class ReportsPage extends Workspace
     public array $reportTemplateUploads = [];
 
     public string $reportTitle = '';
+
+    public string $generationTemplateId = '';
 
     public string $reportContent = '';
 
@@ -281,6 +284,14 @@ class ReportsPage extends Workspace
         $this->reportContent = $this->reportOutlineContent !== '' ? $this->reportOutlineContent : $this->reportOutline['title']."\n\n".collect($this->reportOutline['sections'])->map(
             fn (array $section): string => $section['title']."\n".$section['purpose']."\n\nDraw on: ".$section['material']."\nLimitations: ".$section['limitations'],
         )->implode("\n\n");
+    }
+
+    public function generateFullReport(QueueReportDraft $action): void
+    {
+        $this->authorizeReviewMutation();
+        $this->validate(['generationTemplateId' => ['nullable', 'integer']]);
+        $report = $action->queue($this->review, templateId: $this->generationTemplateId === '' ? null : (int) $this->generationTemplateId);
+        $this->redirectRoute('pls.reviews.reports.edit', ['review' => $this->review, 'report' => $report], navigate: true);
     }
 
     public function requestFindingsSectionDraft(): void

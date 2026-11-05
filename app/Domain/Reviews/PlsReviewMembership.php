@@ -4,6 +4,7 @@ namespace App\Domain\Reviews;
 
 use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Models\User;
+use Database\Factories\Domain\Reviews\PlsReviewMembershipFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,7 +12,7 @@ use Illuminate\Validation\ValidationException;
 
 class PlsReviewMembership extends Model
 {
-    /** @use HasFactory<\Database\Factories\Domain\Reviews\PlsReviewMembershipFactory> */
+    /** @use HasFactory<PlsReviewMembershipFactory> */
     use HasFactory;
 
     /**
@@ -22,6 +23,7 @@ class PlsReviewMembership extends Model
         'user_id',
         'role',
         'invited_by',
+        'mail_status', 'mail_token', 'mail_requested_at', 'mail_accepted_at',
     ];
 
     protected static function booted(): void
@@ -67,6 +69,8 @@ class PlsReviewMembership extends Model
     {
         return [
             'role' => PlsReviewMembershipRole::class,
+            'mail_requested_at' => 'datetime',
+            'mail_accepted_at' => 'datetime',
         ];
     }
 
