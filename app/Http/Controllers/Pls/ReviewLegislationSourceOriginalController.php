@@ -24,7 +24,7 @@ class ReviewLegislationSourceOriginalController extends Controller
             404,
         );
 
-        $storagePath = trim($document->storage_path);
+        $storagePath = trim((string) $document->storage_path);
         $disk = Storage::disk((string) data_get($document->metadata, 'disk', config('filesystems.default')));
 
         abort_if($storagePath === '' || ! $disk->exists($storagePath), 404);

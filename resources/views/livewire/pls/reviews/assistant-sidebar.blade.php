@@ -8,6 +8,8 @@
     data-assistant-sidebar
     x-data="{
         pendingMessage: '',
+        followLatest: true,
+        hasNewAnswer: false,
         assistantOpen: false,
         assistantExpanded: false,
         queuePrompt(prompt) {
@@ -51,7 +53,7 @@
             });
         },
     }"
-    x-on:assistant-message-added.window="pendingMessage = ''; assistantOpen = true; ($event.detail || {}).focus === 'response' ? scrollToLatestResponse() : scrollToBottom()"
+    x-on:assistant-message-added.window="pendingMessage = ''; if (followLatest) { ($event.detail || {}).focus === 'response' ? scrollToLatestResponse() : scrollToBottom(); } else { hasNewAnswer = true; }"
     x-on:assistant-open-requested.window="queuePrompt($event.detail.prompt || '')"
     x-bind:class="assistantExpanded
         ? 'fixed inset-x-3 bottom-3 z-50 sm:left-auto sm:w-[min(46rem,calc(100vw-1.5rem))] xl:right-6 print:hidden'
@@ -101,8 +103,13 @@
             </div>
         </div>
 
+        <button type="button" x-show="hasNewAnswer" x-cloak x-on:click="followLatest = true; hasNewAnswer = false; scrollToLatestResponse()" class="px-3 py-2 text-sm font-medium">
+            {{ __('Jump to latest answer') }}
+        </button>
+
         <div
             x-ref="messages"
+            x-on:scroll.passive="followLatest = ($el.scrollHeight - $el.scrollTop - $el.clientHeight) < 100"
             x-init="requestAnimationFrame(() => { $el.scrollTop = $el.scrollHeight })"
             class="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(250,250,252,0.9)_0%,rgba(255,255,255,1)_18%)] px-4 py-3.5 dark:[background:var(--color-zinc-900)]"
         >
@@ -157,23 +164,14 @@
                             'ml-auto inline-flex w-auto max-w-[70%] rounded-[1rem] rounded-br-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-zinc-800 dark:border-zinc-600 dark:bg-zinc-700/50 dark:text-zinc-100' => $message['role'] === 'user',
                         ])>
                             @if ($message['role'] === 'assistant')
-                                <div class="text-[13px] leading-5 [&>*+*]:mt-1.5 [&>p+p]:mt-1.5 [&>p.heading]:mt-3 [&>p.heading:first-child]:mt-0 [&>p.heading+*]:mt-0.5 [&>ul+p:not(.heading)]:mt-1.5">
-                                    @foreach ($this->assistantMessageBlocks($message['content']) as $block)
-                                        @if ($block['type'] === 'heading')
-                                            <p class="heading m-0 font-semibold text-violet-800 dark:text-violet-300">
-                                                {{ $block['content'] }}
-                                            </p>
-                                        @elseif ($block['type'] === 'list')
-                                            <ul class="m-0 list-disc space-y-0.5 pl-5 marker:text-violet-400">
-                                                @foreach ($block['items'] as $item)
-                                                    <li>{{ $item }}</li>
-                                                @endforeach
-                                            </ul>
-                                        @else
-                                            <p class="m-0">{{ $block['content'] }}</p>
-                                        @endif
-                                    @endforeach
-                                </div>
+                                @php($formatted = $this->formattedAnswer($message['content']))
+                                <div class="assistant-response text-[13px] leading-5">{!! $formatted['answer'] !!}</div>
+                                @if ($formatted['detail'] !== '')
+                                    <details class="mt-3">
+                                        <summary class="cursor-pointer text-xs font-medium">{{ __('Details, sources and limitations') }}</summary>
+                                        <div class="assistant-response mt-2 text-[13px] leading-5">{!! $formatted['detail'] !!}</div>
+                                    </details>
+                                @endif
                             @else
                                 <div class="text-[13px] leading-5">
                                     {{ $message['content'] }}

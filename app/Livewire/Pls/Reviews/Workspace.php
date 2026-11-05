@@ -126,9 +126,9 @@ class Workspace extends Component
             ],
             [
                 'key' => 'documents',
-                'label' => __('Evidence'),
+                'label' => __('Documents & Sources'),
                 'icon' => 'document-text',
-                'route' => 'pls.reviews.documents',
+                'route' => 'pls.reviews.sources',
                 'count' => $counts['documents'],
             ],
             [

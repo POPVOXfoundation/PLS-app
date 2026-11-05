@@ -34,6 +34,43 @@ class StakeholderSuggestionNormalizer
     }
 
     /**
+     * @param  Collection<int, array<string, mixed>>  $suggestions
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function group(Collection $suggestions): Collection
+    {
+        $key = fn (string $name): string => Str::of($name)->ascii()->lower()->replaceMatches('/[^a-z0-9]+/', ' ')->squish()->toString();
+        $aliases = [];
+        $names = [];
+        foreach ($suggestions as $suggestion) {
+            $name = $suggestion['name'];
+            $canonical = $key($name);
+            if (preg_match('/^(.+?)\s*\(([A-Z][A-Z0-9& .-]{1,20})\)\s*$/u', $name, $match)) {
+                $canonical = $key($match[1]);
+                $aliases[$suggestion['kind'].'|'.$key($match[2])][] = $canonical;
+            }
+            $names[$suggestion['id']] = $canonical;
+        }
+        $groups = $suggestions->groupBy(function (array $suggestion) use ($key, $names, $aliases): string {
+            $canonical = $names[$suggestion['id']];
+            $candidates = array_unique($aliases[$suggestion['kind'].'|'.$key($suggestion['name'])] ?? []);
+            if (count($candidates) === 1) {
+                $canonical = reset($candidates);
+            }
+
+            return $suggestion['kind'].'|'.$canonical;
+        });
+
+        return $groups->map(function (Collection $members): array {
+            $first = $members->first();
+            $first['member_ids'] = $members->pluck('id')->unique()->values()->all();
+            $first['sources'] = $members->map(fn (array $member): array => collect($member)->only(['source_document_id', 'source_title', 'source', 'rationale'])->all())->values()->all();
+
+            return $first;
+        })->values();
+    }
+
+    /**
      * @return array{
      *     id: string,
      *     kind: string,

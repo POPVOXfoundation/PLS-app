@@ -89,7 +89,14 @@
                 @foreach ($review->memberships->sortBy(fn ($membership) => sprintf('%d-%s', $membership->role->value === 'owner' ? 0 : 1, $membership->user->name)) as $membership)
                     <flux:table.row :key="'m-' . $membership->id">
                         <flux:table.cell variant="strong">{{ $membership->user->name }}</flux:table.cell>
-                        <flux:table.cell>{{ $membership->user->email }}</flux:table.cell>
+                        <flux:table.cell>
+                            {{ $membership->user->email }}
+                            <flux:text>{{ __('Access recorded: :date', ['date' => $membership->created_at?->toDayDateTimeString() ?? __('Unknown')]) }}</flux:text>
+                            <flux:text>{{ __('Mail: :state', ['state' => \Illuminate\Support\Str::headline($membership->mail_status ?? 'unknown')]) }}</flux:text>
+                            @if ($canManageCollaborators && $membership->role->value !== 'owner')
+                                <flux:button size="sm" wire:click="resendAccessNotice({{ $membership->id }})">{{ __('Resend access notice') }}</flux:button>
+                            @endif
+                        </flux:table.cell>
                         <flux:table.cell>
                             @if ($canManageCollaborators && $membership->role->value !== 'owner')
                                 <div class="flex items-center gap-2" wire:key="membership-role-{{ $membership->id }}">
@@ -117,10 +124,18 @@
                     </flux:table.row>
                 @endforeach
 
-                @foreach ($review->pendingInvitations as $invitation)
+                @foreach ($invitations as $invitation)
                     <flux:table.row :key="'i-' . $invitation->id">
                         <flux:table.cell class="text-zinc-400 dark:text-zinc-500">{{ __('Invitation pending') }}</flux:table.cell>
-                        <flux:table.cell>{{ $invitation->email }}</flux:table.cell>
+                        <flux:table.cell>
+                            {{ $invitation->email }}
+                            <flux:text>{{ __('Mail: :state', ['state' => \Illuminate\Support\Str::headline($invitation->mail_status ?? 'unknown')]) }}</flux:text>
+                            <flux:text>{{ $invitation->isPending() ? __('Awaiting acceptance') : __('Expired — resend to renew') }}</flux:text>
+                            @if ($canManageCollaborators)
+                                <flux:button size="sm" wire:click="resendInvitation({{ $invitation->id }})">{{ __('Resend and replace old link') }}</flux:button>
+                                <flux:input readonly :value="route('pls.invitations.accept', $invitation->token)" :label="__('Invitation link to copy')" />
+                            @endif
+                        </flux:table.cell>
                         <flux:table.cell>
                             <flux:badge size="sm">{{ $invitation->role->label() }}</flux:badge>
                         </flux:table.cell>
@@ -135,5 +150,21 @@
                 @endforeach
             </flux:table.rows>
         </flux:table>
+    </flux:card>
+    <flux:error name="invitationMail" />
+    <flux:text>{{ __('Mail-service acceptance does not confirm inbox delivery. Unknown means historical delivery was not recorded.') }}</flux:text>
+    <flux:card class="space-y-4">
+        <flux:heading size="lg">{{ __('Recent shared-record activity') }}</flux:heading>
+        <flux:text>{{ __('Shows up to 100 recent changes recorded since this feature was added. Private assistant conversations are not included.') }}</flux:text>
+        @foreach ($activities as $activity)
+            <div wire:key="review-activity-{{ $activity->id }}" class="space-y-1">
+                <flux:text>{{ $activity->user?->name ?? __('System or actor not recorded') }} · {{ $activity->action }} · {{ $activity->subject_type }} · {{ $activity->created_at->toDayDateTimeString() }}</flux:text>
+                @if ($activity->subjectUrl())
+                    <flux:link :href="$activity->subjectUrl()" wire:navigate>{{ $activity->title }}</flux:link>
+                @else
+                    <flux:text>{{ $activity->title }}</flux:text>
+                @endif
+            </div>
+        @endforeach
     </flux:card>
 </div>

@@ -245,7 +245,7 @@ test('a reply stored by another tab during the send is not handed off instead of
         ->and($deliveredContent)->not->toContain(HANDOFF_OTHER_TAB_REPLY);
 })->with(handoffCaseDataset());
 
-test('the reports workspace receives the display-normalized markdown reply', function () {
+test('the reports workspace receives its complete markdown reply without stripping source formatting', function () {
     $case = [
         ...handoffCases()['reports AI path'],
         'reply' => "## Outline\n\n**Introduction**\n1. Scope\n* Method\n\n\n\nEnd",
@@ -256,7 +256,7 @@ test('the reports workspace receives the display-normalized markdown reply', fun
 
     handoffSend($sidebar, $case)->assertSet('assistantError', null);
 
-    expect(handoffDeliveredContent($sidebar, $case))->toBe("Outline\n\nIntroduction\n- Scope\n- Method\n\nEnd");
+    expect(handoffDeliveredContent($sidebar, $case))->toBe($case['reply']);
 });
 
 test('the analysis workspace receives the raw potential finding reply', function () {

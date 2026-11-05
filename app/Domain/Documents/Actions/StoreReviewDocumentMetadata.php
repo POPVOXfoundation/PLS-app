@@ -5,6 +5,8 @@ namespace App\Domain\Documents\Actions;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Validation\StoreDocumentMetadataValidator;
 use App\Domain\Reviews\PlsReview;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Throwable;
 
@@ -40,6 +42,9 @@ class StoreReviewDocumentMetadata
                 sprintf('pls/reviews/%d/documents', $validated['pls_review_id']),
                 ['disk' => $storageDisk],
             );
+            if (! is_string($storedPath) || $storedPath === '') {
+                throw new \RuntimeException('The uploaded source could not be stored.');
+            }
 
             $metadata = array_filter([
                 ...($metadata ?? []),
@@ -50,16 +55,23 @@ class StoreReviewDocumentMetadata
             $storedPath = $validated['storage_path'];
         }
 
-        return Document::query()->create([
-            'pls_review_id' => $validated['pls_review_id'],
-            'title' => $validated['title'],
-            'document_type' => $validated['document_type'],
-            'storage_path' => $storedPath,
-            'mime_type' => $uploadedFile instanceof TemporaryUploadedFile ? $uploadedMimeType : ($validated['mime_type'] ?? null),
-            'file_size' => $uploadedFile instanceof TemporaryUploadedFile ? $uploadedFileSize : ($validated['file_size'] ?? null),
-            'summary' => $validated['summary'] ?? null,
-            'metadata' => $metadata,
-        ]);
+        try {
+            return DB::transaction(fn (): Document => Document::query()->create([
+                'pls_review_id' => $validated['pls_review_id'],
+                'title' => $validated['title'],
+                'document_type' => $validated['document_type'],
+                'storage_path' => $storedPath,
+                'mime_type' => $uploadedFile instanceof TemporaryUploadedFile ? $uploadedMimeType : ($validated['mime_type'] ?? null),
+                'file_size' => $uploadedFile instanceof TemporaryUploadedFile ? $uploadedFileSize : ($validated['file_size'] ?? null),
+                'summary' => $validated['summary'] ?? null,
+                'metadata' => $metadata,
+            ]));
+        } catch (Throwable $exception) {
+            if ($uploadedFile instanceof TemporaryUploadedFile && is_string($storedPath) && $storedPath !== '') {
+                Storage::disk($storageDisk)->delete($storedPath);
+            }
+            throw $exception;
+        }
 
     }
 

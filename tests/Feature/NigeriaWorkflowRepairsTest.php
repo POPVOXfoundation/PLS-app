@@ -21,6 +21,7 @@ use Livewire\Livewire;
 
 beforeEach(function () {
     Notification::fake();
+    config()->set('mail.default', 'smtp');
     $this->actingAs(User::factory()->reviewer()->create());
 });
 
@@ -105,7 +106,7 @@ test('all legislation text is grounded in source order even beyond the evidence 
         $number = $index + 1;
         expect($reference['excerpt'])->toBe("Early clause $number\n\nLate clause $number");
     }
-    expect(app(ReviewAssistantGroundingRepository::class)->forPrompt($review, 'Explain duties', 'documents')['review'])->toBe([]);
+    expect(app(ReviewAssistantGroundingRepository::class)->forPrompt($review, 'Explain duties', 'documents')['review'])->toHaveCount(4);
     ReviewAssistantAgent::fake(['Grounded response']);
     Livewire::test(AssistantSidebar::class, ['review' => $review, 'workspaceKey' => 'reports'])
         ->call('sendPrompt', 'Summarize the legislation for the report')->assertSet('assistantError', null);

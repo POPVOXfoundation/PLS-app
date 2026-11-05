@@ -28,6 +28,7 @@ You extract a small, reliable legislation record from source text for a post-leg
 Return only the structured result, using visible source text. Keep it concise.
 
 Rules:
+- Preserve source identity: use bill for a draft bill, parliamentary_debate for Hansard or debate records, amendment for an amendment instrument, and unclassified when unclear. A bill or debate is not evidence of enactment. Return null for date_enacted for bills and debate records.
 - Every field is required. If unsure, use the closest allowed classification and add a concise technical warning.
 - Return the official instrument or bill name, without page numbers, jurisdiction headers, or running headers.
 - Bills and draft bills are primary legislation. Regulations, rules, orders, and ordinances are delegated legislation when they are the source instrument.
