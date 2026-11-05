@@ -7,8 +7,10 @@ use App\Domain\Documents\Actions\ChunkDocumentText;
 use App\Domain\Documents\Actions\PersistReviewDocumentState;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
+use App\Domain\Legislation\Actions\PersistLegislationSourceState;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Carbon;
 
 class ProcessReviewDocument implements ShouldQueue
 {
@@ -33,6 +35,16 @@ class ProcessReviewDocument implements ShouldQueue
             ->find($this->documentId);
 
         if (! $document instanceof Document || $document->review === null) {
+            return;
+        }
+
+        $queuedAt = data_get($document->metadata, 'extraction.queued_at');
+        if ((int) data_get($document->metadata, 'extraction.poll_attempts', 0) >= 60 || ($queuedAt && Carbon::parse($queuedAt)->lt(now()->subMinutes(30)))) {
+            $this->failed(new \RuntimeException('Document processing timed out.'));
+
+            return;
+        }
+        if (data_get($document->metadata, 'extraction.status') === 'failed') {
             return;
         }
 
@@ -77,6 +89,12 @@ class ProcessReviewDocument implements ShouldQueue
 
         $rawText = trim((string) ($result['raw_text'] ?? ''));
 
+        if ($rawText === '') {
+            $this->failed(new \RuntimeException('No readable text was extracted.'));
+
+            return;
+        }
+
         if ($rawText !== '') {
             $chunkDocumentText->chunk($document->fresh(), $rawText);
         }
@@ -113,6 +131,23 @@ class ProcessReviewDocument implements ShouldQueue
         ]);
 
         $state->persistResult($document, $result);
+
+        if (($result['status'] ?? null) === 'completed'
+            && ($result['document_type'] ?? null) === DocumentType::LegislationText->value) {
+            app(PersistLegislationSourceState::class)->markQueued($document->fresh());
+            ProcessReviewLegislationSource::dispatch($document->id, 'enrich');
+        }
+    }
+
+    public function failed(?\Throwable $exception): void
+    {
+        $document = Document::find($this->documentId);
+        if ($document) {
+            app(PersistReviewDocumentState::class)->persistResult($document, [
+                'status' => 'failed',
+                'warnings' => ['Processing did not finish. Check the original file and retry; ask the administrator to check the extraction service and queue if it happens again.'],
+            ]);
+        }
     }
 
     public function backoff(): array

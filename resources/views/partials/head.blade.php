@@ -37,7 +37,16 @@
         --volet-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3);
         --volet-shadow-large: 0 20px 25px -5px rgb(0 0 0 / 0.4);
     }
+    #volet .volet-container,
     #volet .volet-panel {
+        left: var(--volet-spacing);
+        right: auto;
+        z-index: 60;
+    }
+    #volet .volet-panel {
+        max-width: calc(100vw - 2rem);
+        max-height: calc(100dvh - 6rem);
+        overflow-y: auto;
         border: 1px solid rgb(228 228 231);
         border-radius: 1rem;
     }

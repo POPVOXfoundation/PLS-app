@@ -2,16 +2,21 @@
 
 use App\Domain\Reviews\PlsReview;
 use App\Http\Controllers\AcceptReviewInvitationController;
+use App\Http\Controllers\Pls\ReviewDocumentOriginalController;
 use App\Http\Controllers\Pls\ReviewLegislationSourceOriginalController;
+use App\Http\Controllers\Pls\ReviewRegisterExportController;
+use App\Http\Controllers\Pls\ReviewReportExportController;
 use App\Livewire\Dashboard;
 use App\Livewire\Pls\Assistant\TabPlaybooks;
 use App\Livewire\Pls\Reviews\AnalysisPage;
 use App\Livewire\Pls\Reviews\CollaboratorsPage;
 use App\Livewire\Pls\Reviews\ConsultationsPage;
 use App\Livewire\Pls\Reviews\Create;
+use App\Livewire\Pls\Reviews\DocumentPage;
 use App\Livewire\Pls\Reviews\DocumentsPage;
 use App\Livewire\Pls\Reviews\Index;
 use App\Livewire\Pls\Reviews\LegislationPage;
+use App\Livewire\Pls\Reviews\ReportPage;
 use App\Livewire\Pls\Reviews\ReportsPage;
 use App\Livewire\Pls\Reviews\StakeholdersPage;
 use App\Livewire\Pls\Reviews\WorkflowPage;
@@ -42,9 +47,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->can('view', 'review')
             ->name('pls.reviews.legislation.sources.original');
         Route::get('/documents', DocumentsPage::class)->can('view', 'review')->name('pls.reviews.documents');
+        Route::get('/record/export', ReviewRegisterExportController::class)->can('view', 'review')->name('pls.reviews.documents.register');
+        Route::get('/documents/{document}', DocumentPage::class)->can('view', 'review')->name('pls.reviews.documents.show');
+        Route::get('/documents/{document}/original', ReviewDocumentOriginalController::class)->can('view', 'review')->name('pls.reviews.documents.original');
         Route::get('/stakeholders', StakeholdersPage::class)->can('view', 'review')->name('pls.reviews.stakeholders');
         Route::get('/consultations', ConsultationsPage::class)->can('view', 'review')->name('pls.reviews.consultations');
         Route::get('/analysis', AnalysisPage::class)->can('view', 'review')->name('pls.reviews.analysis');
+        Route::get('/reports/{report}', ReportPage::class)->can('view', 'review')->name('pls.reviews.reports.show');
+        Route::get('/reports/{report}/export', ReviewReportExportController::class)->can('view', 'review')->name('pls.reviews.reports.export');
         Route::get('/reports', ReportsPage::class)->can('view', 'review')->name('pls.reviews.reports');
     });
 });

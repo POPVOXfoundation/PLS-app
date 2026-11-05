@@ -5,11 +5,13 @@ namespace App\Livewire\Pls\Reviews;
 use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Reviews\PlsReviewMembership;
+use App\Domain\Reviews\ReviewActivity;
+use App\Jobs\SendReviewInvitation;
 use App\Models\User;
-use App\Notifications\ReviewInvitationNotification;
 use App\Support\Toast;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
-use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -41,6 +43,7 @@ class CollaboratorsPage extends Workspace
 
         return $this->renderWorkspaceView('livewire.pls.reviews.collaborators-page', [
             'review' => $review,
+            'activities' => ReviewActivity::where('pls_review_id', $review->id)->with('user')->latest('id')->limit(100)->get(),
             'collaboratorRoleOptions' => [PlsReviewMembershipRole::Contributor, PlsReviewMembershipRole::Viewer],
             'canManageCollaborators' => auth()->user()?->can('manageCollaborators', $review) ?? false,
         ], $review);
@@ -48,34 +51,8 @@ class CollaboratorsPage extends Workspace
 
     public function updatedInviteCollaboratorEmail(): void
     {
-        $query = trim($this->inviteCollaboratorEmail);
-
-        if (mb_strlen($query) < 2) {
-            $this->emailMatches = [];
-
-            return;
-        }
-
-        $existingIds = $this->review->memberships->pluck('user_id')->all();
-
-        $this->emailMatches = User::query()
-            ->where(fn ($q) => $q->where('email', 'like', "%{$query}%")->orWhere('name', 'like', "%{$query}%"))
-            ->whereNotIn('id', $existingIds)
-            ->limit(5)
-            ->get(['id', 'name', 'email'])
-            ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email])
-            ->values()
-            ->all();
-    }
-
-    public function selectMatch(int $userId): void
-    {
-        $user = User::find($userId);
-
-        if ($user) {
-            $this->inviteCollaboratorEmail = $user->email;
-            $this->emailMatches = [];
-        }
+        // Invitations use an exact address; do not expose the site's user directory.
+        $this->emailMatches = [];
     }
 
     public function shareReview(): void
@@ -101,52 +78,32 @@ class CollaboratorsPage extends Workspace
             ],
         )->validate();
 
-        $existingUser = User::where('email', $this->inviteCollaboratorEmail)->first();
+        $email = mb_strtolower(trim($this->inviteCollaboratorEmail));
+        if ($this->review->memberships()->whereHas('user', fn ($q) => $q->whereRaw('LOWER(email) = ?', [$email]))->exists()) {
+            $this->addError('inviteCollaboratorEmail', __('This person already has access. See the team below.'));
 
-        if ($existingUser) {
-            $alreadyMember = $this->review->memberships()->where('user_id', $existingUser->id)->exists();
-
-            if ($alreadyMember) {
-                $this->addError('inviteCollaboratorEmail', __('That user is already a collaborator on this review.'));
-
-                return;
-            }
-
-            $this->review->memberships()->create([
-                'user_id' => $existingUser->id,
-                'role' => $this->inviteCollaboratorRole,
-                'invited_by' => auth()->id(),
-            ]);
-
-            $toast = Toast::success(
-                __('Access granted'),
-                __('Access granted.'),
-            );
-        } else {
-            $alreadyInvited = $this->review->pendingInvitations()
-                ->where('email', $this->inviteCollaboratorEmail)
-                ->exists();
-
-            if ($alreadyInvited) {
-                $this->addError('inviteCollaboratorEmail', __('An invitation is already pending for that email.'));
-
-                return;
-            }
-
-            $invitation = $this->review->invitations()->create([
-                'email' => $this->inviteCollaboratorEmail,
-                'role' => $this->inviteCollaboratorRole,
-                'invited_by' => auth()->id(),
-            ]);
-
-            Notification::route('mail', $invitation->email)
-                ->notify(new ReviewInvitationNotification($invitation));
-
-            $toast = Toast::success(
-                __('Invitation sent'),
-                __('Invitation sent.'),
-            );
+            return;
         }
+        // Serialize duplicate invitation attempts within this review.
+        $invitation = DB::transaction(function () use ($email) {
+            $this->review->newQuery()->whereKey($this->review->id)->lockForUpdate()->firstOrFail();
+            if ($this->review->pendingInvitations()->whereRaw('LOWER(email) = ?', [$email])->exists()) {
+                return null;
+            }
+
+            return $this->review->invitations()->create([
+                'email' => $email, 'role' => $this->inviteCollaboratorRole,
+                'invited_by' => auth()->id(), 'mail_status' => 'queued',
+                'mail_queued_at' => now(), 'expires_at' => now()->addDays(14),
+            ]);
+        });
+        if (! $invitation) {
+            $this->addError('inviteCollaboratorEmail', __('An invitation is already pending. Use Resend or copy its link below.'));
+
+            return;
+        }
+        SendReviewInvitation::dispatch($invitation->id, $invitation->token);
+        $toast = Toast::success(__('Invitation queued'), __('Watch the email status below. Membership begins when the invitation is accepted.'));
 
         $this->review = $this->loadReview();
         $this->syncCollaboratorRoles($this->review, true);
@@ -210,6 +167,20 @@ class CollaboratorsPage extends Workspace
         ));
     }
 
+    public function resendInvitation(int $invitationId): void
+    {
+        $this->authorize('manageCollaborators', $this->review);
+        $invitation = $this->review->pendingInvitations()->findOrFail($invitationId);
+        if ($invitation->mail_queued_at?->gt(now()->subMinute())) {
+            $this->addError('inviteCollaboratorEmail', __('Please wait one minute before resending.'));
+
+            return;
+        }
+        $invitation->update(['token' => Str::random(64), 'mail_status' => 'queued', 'mail_sent_at' => null, 'mail_queued_at' => now(), 'expires_at' => now()->addDays(14)]);
+        SendReviewInvitation::dispatch($invitation->id, $invitation->token);
+        $this->dispatchWorkspaceToast(Toast::success(__('Invitation queued'), __('The new link replaces the previous invitation link.')));
+    }
+
     public function revokeInvitation(int $invitationId): void
     {
         $this->authorize('manageCollaborators', $this->review);
@@ -237,6 +208,7 @@ class CollaboratorsPage extends Workspace
                 'memberships.user',
                 'memberships.invitedBy',
                 'pendingInvitations.invitedBy',
+                'invitations',
             ])
             ->findOrFail($this->review->getKey());
     }

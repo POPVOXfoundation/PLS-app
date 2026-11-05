@@ -4,6 +4,8 @@ namespace App\Livewire\Pls\Reviews;
 
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
+use App\Domain\Reviews\Actions\CompletePlsReviewStep;
+use App\Domain\Reviews\Actions\ReopenPlsReviewStep;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Reviews\PlsReviewStep;
 use App\Domain\Reviews\Support\PlsReviewStepGuidance;
@@ -32,6 +34,24 @@ class WorkflowPage extends Workspace
             'readinessChecks' => $this->readinessChecks($review),
             'workspaceRecord' => $this->workspaceRecord($review),
         ], $review);
+    }
+
+    public function completeCurrentStep(): void
+    {
+        $this->authorize('update', $this->review);
+        $step = $this->review->fresh('steps')->firstOpenStep();
+        if ($step) {
+            $this->review = app(CompletePlsReviewStep::class)->complete($step);
+            $this->dispatchWorkspaceToast(Toast::success(__('Stage completed'), __('The next methodology stage is now active.')));
+        }
+    }
+
+    public function reopenStep(int $stepId): void
+    {
+        $this->authorize('update', $this->review);
+        $step = $this->review->steps()->findOrFail($stepId);
+        $this->review = app(ReopenPlsReviewStep::class)->reopen($step);
+        $this->dispatchWorkspaceToast(Toast::success(__('Stage reopened'), __('This stage and later stages now need confirmation again.')));
     }
 
     public function prepareReviewEdit(): void
@@ -96,7 +116,7 @@ class WorkflowPage extends Workspace
                 ['label' => __('Working documents'), 'value' => (string) $documentCount],
             ],
             'background_data_plan', 'implementation_review' => [
-                ['label' => __('Evidence'), 'value' => (string) $documentCount],
+                ['label' => __('Documents & Sources'), 'value' => (string) $documentCount],
                 ['label' => __('Evidence items'), 'value' => (string) $review->evidenceItems->count()],
                 ['label' => __('Agencies reviewed'), 'value' => (string) $review->implementingAgencies->count()],
             ],
@@ -121,7 +141,7 @@ class WorkflowPage extends Workspace
                 ['label' => __('Recommendations'), 'value' => (string) $review->recommendations->count()],
             ],
             default => [
-                ['label' => __('Evidence'), 'value' => (string) $documentCount],
+                ['label' => __('Documents & Sources'), 'value' => (string) $documentCount],
                 ['label' => __('Findings'), 'value' => (string) $review->findings->count()],
                 ['label' => __('Recommendations'), 'value' => (string) $review->recommendations->count()],
             ],
@@ -143,9 +163,9 @@ class WorkflowPage extends Workspace
             'evidenceItems',
             'stakeholders',
             'implementingAgencies',
-            'consultations',
+            'consultations.materials',
             'submissions',
-            'findings',
+            'findings.citations',
             'recommendations',
             'reports',
             'governmentResponses',
@@ -154,9 +174,7 @@ class WorkflowPage extends Workspace
 
     private function documentCount(PlsReview $review): int
     {
-        return $review->documents
-            ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
-            ->count();
+        return $review->documents->count();
     }
 
     /**
@@ -175,11 +193,16 @@ class WorkflowPage extends Workspace
             default => 'pls.reviews.reports',
         };
 
+        if ($step?->step_key === 'define_scope' && filled($review->description) && $review->legislation->isNotEmpty()) {
+            $guidance['summary'] = __('Scope and legislation are recorded. Check the source versions, then confirm this stage when the team is ready.');
+            $guidance['action'] = __('Your saved documents and findings remain available while you confirm methodology stages.');
+        }
+
         return [
             'action' => $guidance['action'] ?? __('Review the current materials and choose the next practical task for the inquiry team.'),
             'button' => match ($routeName) {
                 'pls.reviews.legislation' => __('Open legislation'),
-                'pls.reviews.documents' => __('Open evidence'),
+                'pls.reviews.documents' => __('Open documents'),
                 'pls.reviews.stakeholders' => __('Open stakeholders'),
                 'pls.reviews.consultations' => __('Open consultations'),
                 'pls.reviews.analysis' => __('Open analysis'),
@@ -221,9 +244,9 @@ class WorkflowPage extends Workspace
 
         if ($evidenceCount === 0) {
             $items[] = [
-                'action' => __('Add evidence'),
+                'action' => __('Add to record'),
                 'description' => __('Upload background papers, implementation records, or other evidence.'),
-                'label' => __('Evidence'),
+                'label' => __('Documents & Sources'),
                 'route' => route('pls.reviews.documents', ['review' => $review]),
             ];
         }
@@ -283,7 +306,7 @@ class WorkflowPage extends Workspace
             ],
             [
                 'detail' => trans_choice('{0} no uploaded files|{1} uploaded file|[2,*] uploaded files', $evidenceCount, ['count' => $evidenceCount]),
-                'label' => __('Evidence'),
+                'label' => __('Documents & Sources'),
                 'route' => route('pls.reviews.documents', ['review' => $review]),
                 'value' => (string) $evidenceCount,
             ],
@@ -381,11 +404,11 @@ class WorkflowPage extends Workspace
                 'route' => route('pls.reviews.legislation', ['review' => $review]),
             ],
             [
-                'action' => __('Open evidence'),
+                'action' => __('Open documents'),
                 'detail' => $evidenceCount > 0
-                    ? trans_choice('{1} One evidence record is available.|[2,*] :count evidence records are available.', $evidenceCount, ['count' => $evidenceCount])
+                    ? trans_choice('{1} One document or source is available.|[2,*] :count documents and sources are available.', $evidenceCount, ['count' => $evidenceCount])
                     : __('Add implementation records or other evidence before drawing conclusions.'),
-                'label' => __('Evidence'),
+                'label' => __('Documents & Sources'),
                 'ready' => $evidenceCount > 0,
                 'route' => route('pls.reviews.documents', ['review' => $review]),
             ],
@@ -401,19 +424,19 @@ class WorkflowPage extends Workspace
             [
                 'action' => __('Open consultations'),
                 'detail' => $consultationRecordCount > 0
-                    ? __('Consultation activity or written submissions are recorded.')
+                    ? ($review->consultations->contains(fn ($consultation) => $consultation->held_at !== null && $consultation->materials->isEmpty()) ? __('A completed consultation still needs its results.') : __('Consultation activity or written submissions are recorded.'))
                     : __('Plan consultation or log written evidence when it is appropriate for this review.'),
                 'label' => __('Consultation record'),
-                'ready' => $consultationRecordCount > 0,
+                'ready' => $consultationRecordCount > 0 && ! $review->consultations->contains(fn ($consultation) => $consultation->held_at !== null && $consultation->materials->isEmpty()),
                 'route' => route('pls.reviews.consultations', ['review' => $review]),
             ],
             [
                 'action' => __('Open analysis'),
-                'detail' => $review->findings->isNotEmpty()
-                    ? __('The review team has confirmed findings for the working record.')
+                'detail' => $review->findings->contains(fn ($finding) => $finding->hasReviewedSupport())
+                    ? __('Reviewed source passages are linked to findings. Check coverage and contrary evidence before drafting.')
                     : __('Confirm human-reviewed findings before relying on them in a report.'),
                 'label' => __('Reviewed findings'),
-                'ready' => $review->findings->isNotEmpty(),
+                'ready' => $review->findings->isNotEmpty() && $review->findings->every(fn ($finding) => $finding->hasReviewedSupport()),
                 'route' => route('pls.reviews.analysis', ['review' => $review]),
             ],
         ];
@@ -437,8 +460,8 @@ class WorkflowPage extends Workspace
                 return [
                     'date' => $document->updated_at?->format('j M Y') ?? '',
                     'label' => $isLegislation ? __('Legislation') : $this->documentTypeLabel($document->document_type),
-                    'route' => route($isLegislation ? 'pls.reviews.legislation' : 'pls.reviews.documents', ['review' => $review]),
-                    'status' => $this->documentStatusLabel(is_string($analysisStatus) ? $analysisStatus : null),
+                    'route' => route('pls.reviews.documents.show', ['review' => $review, 'document' => $document]),
+                    'status' => $document->processingLabel(),
                     'title' => $document->title,
                 ];
             })

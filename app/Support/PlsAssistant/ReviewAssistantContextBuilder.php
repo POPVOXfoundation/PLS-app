@@ -72,6 +72,16 @@ class ReviewAssistantContextBuilder
         $workspaceKey = $this->resolveWorkspaceKey($workspaceKey);
         $review = $this->hydrateReview($review);
         $playbook = $this->playbooks->tab($workspaceKey);
+        // Keep built-in copy aligned with the register name without rewriting
+        // administrator-authored playbooks or their version history.
+        if ($workspaceKey === 'documents') {
+            if ($playbook['role'] === 'Evidence Intelligence Assistant') {
+                $playbook['role'] = 'Documents and Sources Assistant';
+            }
+            if (str_starts_with($playbook['intro'], "You're in Evidence.")) {
+                $playbook['intro'] = "You're in Documents & Sources. I can help you review what you've uploaded, identify missing materials, and distinguish contextual documents from evidence supporting a finding.";
+            }
+        }
         $structuredContext = $this->structuredContext($review, $workspaceKey, $prompt);
 
         return [
@@ -88,7 +98,7 @@ class ReviewAssistantContextBuilder
 
     public function hydrateReview(PlsReview $review): PlsReview
     {
-        return $review->load([
+        $review->load([
             'owner',
             'country',
             'reviewGroup.legislature.jurisdiction.country',
@@ -111,6 +121,11 @@ class ReviewAssistantContextBuilder
             'reports.governmentResponses',
             'governmentResponses.report',
         ]);
+        $review->setRelation('documents', $review->documents->reject(fn (Document $document) => $document->excludedFromAnalysis())->values());
+        $review->setRelation('legislation', $review->legislation->reject(fn ($law) => $law->sourceDocument?->excludedFromAnalysis())->values());
+
+        return $review;
+
     }
 
     /**
@@ -138,7 +153,11 @@ class ReviewAssistantContextBuilder
 
     public function workspaceLabel(string $workspaceKey): string
     {
-        return $this->playbooks->workspaceLabel($workspaceKey);
+        return match ($workspaceKey) {
+            'documents' => __('Documents & Sources'),
+            'settings' => __('Team'),
+            default => $this->playbooks->workspaceLabel($workspaceKey),
+        };
     }
 
     public function resolveWorkspaceKey(string $workspaceKey): string
@@ -403,7 +422,9 @@ class ReviewAssistantContextBuilder
     private function legislationFacts(PlsReview $review): array
     {
         if ($review->legislation->isEmpty()) {
-            return ['No legislation is linked to this review yet.'];
+            return $review->documents->contains('document_type', DocumentType::LegislationText)
+                ? ['Legislation source files are uploaded. Their extracted text is included below; the formal legislation record is awaiting confirmation.']
+                : ['No legislation is uploaded or linked to this review yet.'];
         }
 
         return [
@@ -631,7 +652,7 @@ class ReviewAssistantContextBuilder
         $documents = $this->documentsForWorkspace($review);
 
         return array_values(array_filter([
-            $review->legislation->isEmpty() ? 'No legislation is linked to this review.' : null,
+            ($review->legislation->isEmpty() && ! $review->documents->contains('document_type', DocumentType::LegislationText)) ? 'No legislation is uploaded or linked to this review.' : null,
             $documents->isEmpty() ? 'No documents are uploaded for this review yet.' : null,
             $review->stakeholders->isEmpty() ? 'No stakeholders are recorded yet.' : null,
             ($review->consultations->isEmpty() && $review->submissions->isEmpty()) ? 'No consultations or submissions are recorded yet.' : null,
@@ -649,6 +670,8 @@ class ReviewAssistantContextBuilder
         $documents = $this->documentsForWorkspace($review);
 
         return array_values(array_filter([
+            ...$review->documents->filter(fn (Document $document): bool => $document->isReportingTemplate())->map(fn (Document $document): string => $document->title.': blank template or drafting guidance; do not treat its fields as reported facts or implementation results.')->all(),
+            'Saved findings are reviewer records, not independently verified conclusions. Cite source details links supplied with the text and quote supporting passages; identify contrary evidence and uncertainty.',
             $documents->isEmpty() ? 'Document-grounded answers will be limited because there are no review documents yet.' : null,
             $review->findings->isEmpty() ? 'Any analytical conclusions would be weak because the findings record is still empty.' : null,
             $review->recommendations->isEmpty() ? 'Recommendation support is limited because no recommendations are recorded yet.' : null,
@@ -664,7 +687,7 @@ class ReviewAssistantContextBuilder
         $documents = $this->documentsForWorkspace($review);
 
         return array_values(array_filter([
-            $review->legislation->isNotEmpty() ? 'Legislation record present.' : 'Legislation record missing.',
+            ($review->legislation->isNotEmpty() || $review->documents->contains('document_type', DocumentType::LegislationText)) ? 'Legislation source or record present.' : 'Legislation record missing.',
             $documents->isNotEmpty() ? 'Document record present.' : 'Document record missing.',
             $review->stakeholders->isNotEmpty() ? 'Stakeholder record present.' : 'Stakeholder record missing.',
             $review->consultations->isNotEmpty() || $review->submissions->isNotEmpty() ? 'Consultation evidence present.' : 'Consultation evidence missing.',
@@ -678,9 +701,7 @@ class ReviewAssistantContextBuilder
      */
     private function documentsForWorkspace(PlsReview $review): Collection
     {
-        return $review->documents->reject(
-            fn (Document $document): bool => $document->document_type === DocumentType::LegislationText,
-        )->values();
+        return $review->documents->values();
     }
 
     /**

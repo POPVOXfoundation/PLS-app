@@ -43,7 +43,7 @@ class UpdateReviewDocument
                 'original_name' => $uploadedOriginalName,
             ], static fn (mixed $value): bool => $value !== null && $value !== '');
         } else {
-            $storedPath = $validated['storage_path'];
+            $storedPath = $validated['storage_path'] ?? $document->storage_path;
         }
 
         $document->update([

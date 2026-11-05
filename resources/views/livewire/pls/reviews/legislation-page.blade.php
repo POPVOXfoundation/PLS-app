@@ -20,7 +20,7 @@
             x-on:livewire-upload-progress="progress = $event.detail.progress"
             class="space-y-5"
         >
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div class="flex flex-col gap-3">
                 <div class="space-y-2">
                     <flux:heading size="lg">{{ __('Upload legislation') }}</flux:heading>
                     <flux:text x-show="uploadOpen" x-cloak class="text-sm text-zinc-500 dark:text-zinc-400">
@@ -124,7 +124,7 @@
                                 <span class="min-w-0 space-y-1">
                                     <span class="flex flex-wrap items-center gap-2">
                                         <flux:badge size="sm">{{ $row['record_label'] }}</flux:badge>
-                                        <flux:heading size="base" class="truncate">{{ $row['title'] }}</flux:heading>
+                                        <flux:heading size="base" class="break-words">{{ $row['title'] }}</flux:heading>
                                         <span x-show="! expanded" x-cloak class="text-xs font-medium text-zinc-400 dark:text-zinc-500">{{ __('Expand') }}</span>
                                     </span>
 
@@ -149,7 +149,7 @@
                                 </div>
 
                                 @if ($row['source_document_id'] !== null)
-                                    <flux:button size="sm" variant="subtle" icon="document-text" wire:click="viewSourceText({{ $row['source_document_id'] }})">
+                                    <flux:button size="sm" variant="subtle" icon="document-text" :href="route('pls.reviews.documents.show', [$review, $row['source_document_id']])" wire:navigate>
                                         {{ __('View text') }}
                                     </flux:button>
 
@@ -396,20 +396,27 @@
                     @foreach ($recordRows as $row)
                         <flux:table.row :key="$row['id']">
                             <flux:table.cell variant="strong">
-                                @if (in_array($row['action'], ['review', 'edit'], true) && $row['source_document_id'] !== null)
-                                    <button
-                                        type="button"
-                                        wire:click="startReviewDocument({{ $row['source_document_id'] }})"
-                                        class="text-left text-base font-normal text-zinc-900 transition hover:text-violet-700 dark:text-white dark:hover:text-violet-300"
-                                    >
+                                @if ($row['source_document_id'] !== null)
+                                    <a href="{{ route('pls.reviews.documents.show', [$review, $row['source_document_id']]) }}" wire:navigate
+                                        class="text-base text-violet-700 underline decoration-violet-300 underline-offset-4 hover:text-violet-900 dark:text-violet-300">
                                         {{ $row['title'] }}
-                                    </button>
+                                    </a>
                                 @else
                                     {{ $row['title'] }}
                                 @endif
 
                                 @if ($row['subtitle'])
                                     <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ $row['subtitle'] }}</flux:text>
+                                @endif
+                                @if (! empty($row['warnings']))
+                                    <details class="mt-2 text-xs text-amber-800 dark:text-amber-200">
+                                        <summary class="cursor-pointer">{{ __('Review notes') }} ({{ count($row['warnings']) }})</summary>
+                                        <ul class="mt-2 list-disc space-y-1 whitespace-normal pl-4">
+                                            @foreach ($row['warnings'] as $warning)
+                                                <li>{{ $warning }}</li>
+                                            @endforeach
+                                        </ul>
+                                    </details>
                                 @endif
 
                                 @php
@@ -436,7 +443,7 @@
                                             size="sm"
                                             variant="ghost"
                                             icon="document-text"
-                                            wire:click="viewSourceText({{ $row['source_document_id'] }})"
+                                            :href="route('pls.reviews.documents.show', [$review, $row['source_document_id']])" wire:navigate
                                         >
                                             {{ __('Text') }}
                                         </flux:button>
@@ -483,7 +490,7 @@
 
                                     @if ($row['kind'] === 'source' && $row['source_document_id'] !== null)
                                         <flux:modal.trigger name="confirm-source-delete">
-                                            <flux:button
+                                            <flux:button aria-label="Delete record"
                                                 variant="subtle"
                                                 size="sm"
                                                 icon="trash"
@@ -667,6 +674,16 @@
                         </flux:text>
                     </div>
                 </div>
+                @if ($analysisWarnings !== [])
+                    <div role="status" class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+                        <strong>{{ __('Warnings') }}</strong>
+                        <ul class="mt-2 list-disc space-y-1 pl-5">
+                            @foreach ($analysisWarnings as $warning)
+                                <li>{{ $warning }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
                 @if ($analysisDuplicateCandidates !== [] && $analysisStatus !== 'saved')
                     <div class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
                         <div class="space-y-3">

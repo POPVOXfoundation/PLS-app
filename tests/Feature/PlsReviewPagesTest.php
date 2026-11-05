@@ -283,14 +283,14 @@ test('review overview summarizes recorded work, gaps, and recent uploads', funct
         ->assertSee('Workspace record')
         ->assertSee('Ready to move forward?')
         ->assertSee('Implementation Progress Report')
-        ->assertSee('PLS methodology reference')
+        ->assertSee('Methodology stage checklist')
         ->assertSee('Current focus');
 
     $html = $component->html();
 
     expect($html)->toContain('Open legislation')
         ->and($html)->toContain('Workspace record')
-        ->and($html)->toContain('PLS methodology reference')
+        ->and($html)->toContain('Methodology stage checklist')
         ->and($html)->not->toContain('data-flux-accordion-item')
         ->and($html)->not->toContain('wire:click="selectStep(');
 });
@@ -328,12 +328,12 @@ test('all review section routes render inside the shared workspace shell', funct
     $routes = [
         'pls.reviews.workflow' => 'Review overview',
         'pls.reviews.legislation' => 'No records saved for this review yet.',
-        'pls.reviews.documents' => 'Add evidence',
+        'pls.reviews.documents' => 'Add to record',
         'pls.reviews.stakeholders' => 'Stakeholders',
         'pls.reviews.consultations' => 'Consultation plan',
-        'pls.reviews.analysis' => 'Confirmed findings & recommendations',
+        'pls.reviews.analysis' => 'Reviewed findings & recommendations',
         'pls.reviews.reports' => 'Government responses',
-        'pls.reviews.settings' => 'Workspace settings',
+        'pls.reviews.settings' => 'Team',
     ];
 
     foreach ($routes as $route => $expectedText) {
@@ -373,9 +373,9 @@ test('documents page uses inline upload analysis instead of metadata-first add a
 
     $this->get(route('pls.reviews.documents', ['review' => $review->id]))
         ->assertOk()
-        ->assertSee('Add evidence')
-        ->assertSee('Drag files here or choose files')
-        ->assertSee('Records')
+        ->assertSee('Add to record')
+        ->assertSee('Preview additions')
+        ->assertSee('Complete document register')
         ->assertDontSee('Storage path')
         ->assertDontSee('File size (bytes)');
 });

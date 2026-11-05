@@ -26,7 +26,6 @@ class ReviewAssistantGroundingRepository
             'review' => $this->reviewReferences(
                 review: $review,
                 prompt: $prompt,
-                excludeLegislationSources: $workspaceKey === 'documents',
             ),
         ];
     }
@@ -153,13 +152,25 @@ class ReviewAssistantGroundingRepository
     /**
      * @return list<array{excerpt: string, label: string, source: string}>
      */
-    private function reviewReferences(PlsReview $review, string $prompt, bool $excludeLegislationSources = false): array
+    private function reviewReferences(PlsReview $review, string $prompt): array
     {
         $tokens = $this->promptTokens($prompt);
 
-        return $review->documents
-            ->reject(fn (Document $document): bool => $excludeLegislationSources && $document->document_type === DocumentType::LegislationText)
-            ->map(function (Document $document) use ($tokens): array {
+        // Legislation is the basis of every workspace, including Evidence. Include
+        // every extracted section in source order, outside the ranked evidence limit.
+        $legislation = $review->documents->reject(fn (Document $document) => $document->excludedFromAnalysis())
+            ->where('document_type', DocumentType::LegislationText)
+            ->map(fn (Document $document): array => [
+                'label' => $document->title,
+                'source' => 'review',
+                'excerpt' => $document->extractedText() !== ''
+                    ? 'Source details: '.route('pls.reviews.documents.show', [$review, $document])."\nSource warnings: ".implode(' ', $document->reviewWarnings())."\nFull extracted legislation text:\n".$document->extractedText()
+                    : 'Legislation uploaded, but extracted text is not yet available. '.($document->summary ?? ''),
+            ])->values()->all();
+
+        $evidence = $review->documents->reject(fn (Document $document) => $document->excludedFromAnalysis())
+            ->reject(fn (Document $document): bool => $document->document_type === DocumentType::LegislationText)
+            ->map(function (Document $document) use ($tokens, $review): array {
                 $scoredChunks = $document->relationLoaded('chunks') && $document->chunks->isNotEmpty()
                     ? $document->chunks
                         ->map(fn ($chunk) => [
@@ -188,7 +199,7 @@ class ReviewAssistantGroundingRepository
                 return [
                     'label' => $document->title,
                     'source' => 'review',
-                    'excerpt' => trim($excerpt),
+                    'excerpt' => 'Source details: '.route('pls.reviews.documents.show', [$review, $document])."\nSource role: ".$document->evidenceRoleLabel()."\nWarnings: ".implode(' ', $document->reviewWarnings())."\nSelected source text (not necessarily the full document):\n".trim($excerpt),
                     'score' => $score,
                 ];
             })
@@ -202,6 +213,8 @@ class ReviewAssistantGroundingRepository
             ])
             ->values()
             ->all();
+
+        return [...$legislation, ...$evidence];
     }
 
     /**

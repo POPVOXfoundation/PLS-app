@@ -36,6 +36,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Ai\Prompts\AgentPrompt;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -660,11 +661,11 @@ test('bill-style source text is kept as a primary record and avoids structural s
         ->call('startReviewDocument', $document->id)
         ->assertSet('analysisTitle', 'Southern Deep Port Development Facility Bill, 2024')
         ->assertSet('analysisShortTitle', 'Southern Deep Port Development Facility Bill')
-        ->assertSet('analysisType', LegislationType::Act->value)
+        ->assertSet('analysisType', LegislationType::Bill->value)
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
         ->assertSet('analysisSummary', fn (string $summary): bool => str_contains(strtolower($summary), 'deep port facility'))
         ->assertSet('analysisDateEnacted', '')
-        ->assertSet('analysisWarnings', ['This looks like a bill or draft text, so an enactment date may not be available yet.'])
+        ->assertSet('analysisWarnings', fn ($warnings) => in_array('This looks like a bill or draft text, so an enactment date may not be available yet.', $warnings) && count($warnings) === 2)
         ->assertDontSee('Ready');
 });
 
@@ -811,7 +812,7 @@ test('processing legislation rows show the active progress stage in the records 
         ->assertSee('Filling record');
 });
 
-test('large legislation source prompts are trimmed before the ai extraction step', function () {
+test('large legislation sources reach the AI extractor in full', function () {
     Storage::fake('s3');
     Queue::fake();
     config()->set('pls_assistant.assistant_sources.extractor', 'textract');
@@ -821,8 +822,9 @@ test('large legislation source prompts are trimmed before the ai extraction step
         'title' => 'Review of large legislation prompt handling',
     ]);
 
+    $closingPassage = 'Schedule: The final oversight report is due within 90 days.';
     $largeText = implode("\n", array_fill(0, 1200, 'Section text describing the implementation, obligations, penalties, and procedural framework for the instrument.'));
-    $largeText = "Southern Deep Port Development Facility Bill, 2024\nShort title: Deep Port Bill\nEnacted on June 1, 2024.\n\n".$largeText;
+    $largeText = "Southern Deep Port Development Facility Bill, 2024\nShort title: Deep Port Bill\nEnacted on June 1, 2024.\n\n".$largeText."\n".$closingPassage;
 
     $extractor = new class($largeText) implements AssistantSourceTextExtractor
     {
@@ -842,22 +844,15 @@ test('large legislation source prompts are trimmed before the ai extraction step
     $factory->shouldReceive('make')->once()->andReturn($extractor);
     app()->instance(AssistantSourceTextExtractorFactory::class, $factory);
 
-    LegislationSourceExtractorAgent::fake(function (string $prompt) {
-        expect(strlen($prompt))->toBeLessThan(22000)
-            ->and($prompt)->toContain('Source text excerpt:')
-            ->and($prompt)->toContain('Short title: Deep Port Bill')
-            ->and($prompt)->not->toContain(str_repeat('Section text describing the implementation, obligations, penalties, and procedural framework for the instrument.', 20));
-
-        return [
-            'title' => 'Southern Deep Port Development Facility Bill, 2024',
-            'short_title' => 'Deep Port Bill',
-            'legislation_type' => LegislationType::Act->value,
-            'date_enacted' => '2024-06-01',
-            'summary' => 'Provides the framework for the southern deep port facility.',
-            'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
-            'warnings' => [],
-        ];
-    });
+    LegislationSourceExtractorAgent::fake([[
+        'title' => 'Southern Deep Port Development Facility Bill, 2024',
+        'short_title' => 'Deep Port Bill',
+        'legislation_type' => LegislationType::Act->value,
+        'date_enacted' => '2024-06-01',
+        'summary' => 'Provides the framework for the southern deep port facility.',
+        'relationship_type' => ReviewLegislationRelationshipType::Primary->value,
+        'warnings' => [],
+    ]]);
 
     Livewire::test(LegislationPage::class, ['review' => $review])
         ->set('sourceUpload', UploadedFile::fake()->create('southern-deep-port-development-facility-bill-2024.pdf', 256, 'application/pdf'))
@@ -866,6 +861,9 @@ test('large legislation source prompts are trimmed before the ai extraction step
     $document = $review->fresh()->documents()->sole();
 
     runLegislationSourcePipeline($document->id);
+
+    LegislationSourceExtractorAgent::assertPrompted(fn (AgentPrompt $prompt): bool => $prompt->contains('Short title: Deep Port Bill')
+        && $prompt->contains($closingPassage));
 
     Livewire::test(LegislationPage::class, ['review' => $review])
         ->call('refreshPendingAnalyses')
@@ -933,9 +931,9 @@ test('full legislation extraction failures use a lighter record pass', function 
         ->call('refreshPendingAnalyses')
         ->assertSee('Needs review')
         ->call('startReviewDocument', $document->id)
-        ->assertSet('analysisWarnings', ['PLSAssist used a shorter record pass for this source. Review the extracted details before saving.'])
+        ->assertSet('analysisWarnings', fn ($warnings) => in_array('PLSAssist used a shorter record pass for this source. Review the extracted details before saving.', $warnings) && count($warnings) === 2)
         ->assertSet('analysisTitle', 'Southern Deep Port Development Facility Bill, 2024')
-        ->assertSet('analysisType', LegislationType::Act->value)
+        ->assertSet('analysisType', LegislationType::Bill->value)
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
         ->assertSee('Review record');
 
@@ -1087,6 +1085,7 @@ test('legislation sources fall back to a basic draft when both ai passes fail', 
         ->and($analysis['scrutiny_preparation'])->toBe(emptyLegislationScrutinyPreparation())
         ->and($analysis['warnings'])->toBe([
             'PLSAssist could not complete the AI record for this source. A basic editable draft has been prepared from the extracted text. Review and complete it before saving.',
+            'The source text was extracted, but the AI record step failed. Retry the source to try again.',
         ]);
 });
 
@@ -1407,7 +1406,7 @@ test('processing document extraction requeues in the background until text is re
 
     Livewire::test(DocumentsPage::class, ['review' => $review])
         ->call('refreshPendingAnalyses')
-        ->assertSee('Filling record');
+        ->assertSee('Reading text / preparing record');
 
     Queue::assertPushed(ProcessReviewDocument::class, fn (ProcessReviewDocument $job): bool => $job->documentId === $document->id && $job->step === 'enrich');
 
@@ -1474,11 +1473,11 @@ test('processing document rows show the active progress stage in the records tab
 
     Livewire::test(DocumentsPage::class, ['review' => $review])
         ->assertSee('Queued')
-        ->assertSee('Extracting text')
-        ->assertSee('Filling record');
+        ->assertSee('Reading text / preparing record')
+        ->assertSee('Reading text / preparing record');
 });
 
-test('legislation source documents do not appear in the documents workspace', function () {
+test('legislation source documents are linked from the evidence workspace', function () {
     $review = plsReview([
         'title' => 'Review of separated workspaces',
     ]);
@@ -1497,7 +1496,8 @@ test('legislation source documents do not appear in the documents workspace', fu
 
     Livewire::test(DocumentsPage::class, ['review' => $review])
         ->assertSee('Implementation memo')
-        ->assertDontSee('Legislation upload');
+        ->assertSee('Legislation upload')
+        ->assertSee('Legislation in the record');
 });
 
 test('workflow document metrics exclude legislation source uploads', function () {
@@ -1537,7 +1537,7 @@ test('workflow document metrics exclude legislation source uploads', function ()
         ->instance()
         ->stepMetricCards($loadedReview, $loadedReview->currentStep());
 
-    expect(collect($cards)->firstWhere('label', 'Working documents')['value'])->toBe('1');
+    expect(collect($cards)->firstWhere('label', 'Working documents')['value'])->toBe('2');
 });
 
 test('uploaded legislation can infer delegated relationship details', function () {
@@ -2053,7 +2053,7 @@ test('analysis workspace renders findings in a compact table layout', function (
         ->assertSee('Add recommendation')
         ->assertSee('Show more')
         ->assertSee('Recommendations')
-        ->assertSee('Review team record')
+        ->assertSee('Reviewer accepted')->assertSee('Source support unverified')
         ->assertSee('Update delegated regulations')
         ->assertDontSee('Gov. responses')
         ->assertDontSee('No reviewed findings recorded yet');
@@ -2109,11 +2109,11 @@ test('report assistance keeps drafting in the assistant for human review', funct
     ]);
 
     $component = Livewire::test(ReportsPage::class, ['review' => $review])
-        ->assertSee('Live report preview')
+        ->assertSee('Report readiness checklist')
         ->assertSee('Working draft')
         ->assertSee('Draft with PLSAssist')
         ->assertSee('Human review required')
-        ->assertSee('Build report outline')
+        ->assertSee('Generate outline')
         ->assertSee('Draft findings section')
         ->assertSee('Check report coverage')
         ->call('requestReportOutline')

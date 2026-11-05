@@ -73,22 +73,24 @@
             <p class="mt-4 max-w-3xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">{{ $currentAction['summary'] }}</p>
             <p class="mt-3 max-w-3xl text-sm font-medium leading-6 text-zinc-800 dark:text-zinc-200">{{ $currentAction['action'] }}</p>
 
-            <div class="mt-4">
+            <div class="mt-4 flex flex-wrap gap-3">
                 <flux:button variant="primary" :href="$currentAction['route']" wire:navigate icon="arrow-right">
                     {{ $currentAction['button'] }}
                 </flux:button>
+                @can('update', $review)
+                    @if ($review->firstOpenStep())<flux:button wire:click="completeCurrentStep" wire:loading.attr="disabled">{{ __('Confirm current stage complete') }}</flux:button>@endif
+                @endcan
             </div>
         </div>
 
         <div class="self-center rounded-lg border border-violet-200/80 bg-white/75 p-4 dark:border-violet-500/25 dark:bg-zinc-950/40">
-            <div class="flex items-center justify-between gap-3">
-                <p class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Review progress') }}</p>
-                <span class="text-xs tabular-nums text-zinc-500 dark:text-zinc-400">{{ $review->progressPercentage() }}%</span>
-            </div>
-            <flux:progress :value="$review->progressPercentage()" />
-            <p class="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-                {{ __('Step :current of :total in the WFD PLS methodology.', ['current' => $review->current_step_number, 'total' => $review->steps->count()]) }}
-            </p>
+            <flux:heading>{{ __('Record checks') }}</flux:heading>
+            <ul class="mt-3 space-y-3 text-sm">
+                <li>{{ filled($review->description) ? __('Scope recorded') : __('Scope still needed') }}</li>
+                <li><flux:link :href="route('pls.reviews.legislation', $review)" wire:navigate>{{ $review->documents->where('document_type', \App\Domain\Documents\Enums\DocumentType::LegislationText)->isNotEmpty() ? __('Legislation uploaded — check version and completeness') : __('Legislation still needed') }}</flux:link></li>
+                <li><flux:link :href="route('pls.reviews.documents', $review)" wire:navigate>{{ __(':count documents and sources in the record', ['count' => $review->documents->count()]) }}</flux:link></li>
+            </ul>
+            <flux:text class="mt-4 text-xs">{{ __('The team confirms each methodology stage below. Uploading documents does not complete a stage.') }}</flux:text>
         </div>
     </section>
 
@@ -159,7 +161,7 @@
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
                 <flux:heading size="lg" level="2">{{ __('Recent uploads') }}</flux:heading>
-                <flux:text class="mt-1 text-sm">{{ __('The latest legislation and evidence records attached to this review.') }}</flux:text>
+                <flux:text class="mt-1 text-sm">{{ __('The latest legislation and source documents attached to this review.') }}</flux:text>
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
@@ -167,7 +169,7 @@
                     {{ __('Add legislation') }}
                 </flux:button>
                 <flux:button size="sm" variant="ghost" :href="route('pls.reviews.documents', ['review' => $review])" wire:navigate icon="arrow-up-tray">
-                    {{ __('Add evidence') }}
+                    {{ __('Add to record') }}
                 </flux:button>
             </div>
         </div>
@@ -189,9 +191,9 @@
         </div>
     </section>
 
-    <details class="group rounded-lg border border-zinc-200 bg-white px-5 py-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50 sm:px-6">
+    <details id="methodology-checklist" open class="group rounded-lg border border-zinc-200 bg-white px-5 py-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50 sm:px-6">
         <summary class="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-zinc-800 marker:hidden dark:text-zinc-200">
-            <span>{{ __('PLS methodology reference') }}</span>
+            <span>{{ __('Methodology stage checklist') }}</span>
             <flux:icon icon="chevron-down" class="size-4 transition group-open:rotate-180" />
         </summary>
         <p class="mt-3 max-w-3xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
@@ -201,7 +203,8 @@
             @foreach ($review->steps as $step)
                 <li class="flex gap-3 text-sm">
                     <span class="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-xs font-semibold tabular-nums text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">{{ $step->step_number }}</span>
-                    <span class="leading-6 text-zinc-700 dark:text-zinc-300">{{ $step->title }}</span>
+                    <span class="leading-6 text-zinc-700 dark:text-zinc-300">{{ $step->title }} · {{ \Illuminate\Support\Str::headline($step->status->value) }}
+                    @can('update', $review)@if ($step->isTerminal())<button type="button" class="block text-violet-700 underline" wire:click="reopenStep({{ $step->id }})" wire:confirm="Reopen this stage? Later stages will also need confirmation again.">{{ __('Reopen stage') }}</button>@endif@endcan</span>
                 </li>
             @endforeach
         </ol>

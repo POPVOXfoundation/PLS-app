@@ -1,139 +1,55 @@
-<div class="space-y-8">
-    <div class="space-y-2">
-        <flux:heading size="lg" level="2">{{ __('Workspace settings') }}</flux:heading>
-        <flux:text class="max-w-3xl text-sm text-zinc-500 dark:text-zinc-400">
-            {{ __('Manage review-level settings, starting with who can access and contribute to this workspace.') }}
-        </flux:text>
-    </div>
-
-    <div class="flex border-b border-zinc-200 dark:border-zinc-800">
-        <div class="-mb-px border-b-2 border-violet-600 px-1 pb-2 text-sm font-semibold text-violet-700 dark:text-violet-300">
-            {{ __('Collaborators') }}
-        </div>
-    </div>
-
-    <flux:card class="space-y-6">
-        <div>
-            <flux:heading size="lg">{{ __('Share review') }}</flux:heading>
-            <flux:text class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-                {{ __('Add someone by email. Existing users get access immediately. New people receive an invitation.') }}
-            </flux:text>
-        </div>
-
-        @if ($canManageCollaborators)
-            <form wire:submit="shareReview" class="flex flex-wrap items-end gap-4">
-                <div class="relative min-w-[240px] flex-1">
-                    <flux:input
-                        wire:model.live.debounce.300ms="inviteCollaboratorEmail"
-                        :invalid="$errors->has('inviteCollaboratorEmail')"
-                        :label="__('Email')"
-                        type="email"
-                        placeholder="name@example.com"
-                    />
-
-                    @if (count($emailMatches) > 0)
-                        <div class="absolute z-10 mt-1 w-full rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
-                            @foreach ($emailMatches as $match)
-                                <button
-                                    type="button"
-                                    wire:click="selectMatch({{ $match['id'] }})"
-                                    class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                                >
-                                    <div class="min-w-0">
-                                        <div class="truncate font-medium text-zinc-900 dark:text-white">{{ $match['name'] }}</div>
-                                        <div class="truncate text-xs text-zinc-500 dark:text-zinc-400">{{ $match['email'] }}</div>
-                                    </div>
-                                </button>
-                            @endforeach
-                        </div>
-                    @endif
-                </div>
-
-                <div class="w-40">
-                    <flux:select
-                        wire:model="inviteCollaboratorRole"
-                        :invalid="$errors->has('inviteCollaboratorRole')"
-                        :label="__('Role')"
-                    >
-                        @foreach ($collaboratorRoleOptions as $roleOption)
-                            <flux:select.option :value="$roleOption->value">{{ $roleOption->label() }}</flux:select.option>
-                        @endforeach
-                    </flux:select>
-                </div>
-
-                <flux:button type="submit" variant="primary" icon="paper-airplane">
-                    {{ __('Share') }}
-                </flux:button>
-            </form>
-        @else
-            <flux:callout icon="lock-closed">
-                <flux:callout.text>
-                    {{ __('Only an owner can manage who has access to this review.') }}
-                </flux:callout.text>
-            </flux:callout>
-        @endif
+<div class="space-y-6" wire:poll.10s>
+    <flux:heading size="xl">{{ __('Team') }}</flux:heading>
+    <flux:text>{{ __('See who has access, track invitations and follow changes to the shared record.') }}</flux:text>
+    <flux:card class="space-y-4">
+        <flux:heading size="lg">{{ __('Share review') }}</flux:heading>
+        @if($canManageCollaborators)
+        <flux:text>{{ __('Everyone receives an invitation, including existing users. Access starts when they accept using the invited email address.') }}</flux:text>
+        <form wire:submit="shareReview" class="flex flex-wrap items-end gap-3">
+            <flux:input wire:model="inviteCollaboratorEmail" type="email" :label="__('Email')" class="min-w-60 flex-1" required />
+            <flux:select wire:model="inviteCollaboratorRole" :label="__('Role')" class="min-w-40">@foreach($collaboratorRoleOptions as $role)<option value="{{ $role->value }}">{{ $role->label() }}</option>@endforeach</flux:select>
+            <flux:button type="submit" variant="primary" wire:loading.attr="disabled">{{ __('Send invitation') }}</flux:button>
+        </form>
+        @else <flux:text>{{ __('Only an owner can manage who has access to this review.') }}</flux:text> @endif
     </flux:card>
-
-    <flux:card class="space-y-6">
-        <flux:heading size="lg">{{ __('Collaborators') }}</flux:heading>
-
-        <flux:table>
-            <flux:table.columns>
-                <flux:table.column>{{ __('Name') }}</flux:table.column>
-                <flux:table.column>{{ __('Email') }}</flux:table.column>
-                <flux:table.column>{{ __('Role') }}</flux:table.column>
-                <flux:table.column></flux:table.column>
-            </flux:table.columns>
-
-            <flux:table.rows>
-                @foreach ($review->memberships->sortBy(fn ($membership) => sprintf('%d-%s', $membership->role->value === 'owner' ? 0 : 1, $membership->user->name)) as $membership)
-                    <flux:table.row :key="'m-' . $membership->id">
-                        <flux:table.cell variant="strong">{{ $membership->user->name }}</flux:table.cell>
-                        <flux:table.cell>{{ $membership->user->email }}</flux:table.cell>
-                        <flux:table.cell>
-                            @if ($canManageCollaborators && $membership->role->value !== 'owner')
-                                <div class="flex items-center gap-2" wire:key="membership-role-{{ $membership->id }}">
-                                    <flux:select wire:model="collaboratorRoles.{{ $membership->id }}" size="sm">
-                                        @foreach ($collaboratorRoleOptions as $roleOption)
-                                            <flux:select.option :value="$roleOption->value">{{ $roleOption->label() }}</flux:select.option>
-                                        @endforeach
-                                    </flux:select>
-
-                                    <flux:button variant="ghost" size="sm" wire:click="updateCollaboratorRole({{ $membership->id }})">
-                                        {{ __('Save') }}
-                                    </flux:button>
-                                </div>
-                            @else
-                                <flux:badge size="sm" color="{{ $membership->role->value === 'owner' ? 'amber' : 'zinc' }}">{{ $membership->role->label() }}</flux:badge>
-                            @endif
-                        </flux:table.cell>
-                        <flux:table.cell>
-                            @if ($canManageCollaborators && $membership->role->value !== 'owner')
-                                <div class="flex justify-end">
-                                    <flux:button variant="ghost" size="sm" icon="trash" wire:click="removeCollaborator({{ $membership->id }})" />
-                                </div>
-                            @endif
-                        </flux:table.cell>
-                    </flux:table.row>
-                @endforeach
-
-                @foreach ($review->pendingInvitations as $invitation)
-                    <flux:table.row :key="'i-' . $invitation->id">
-                        <flux:table.cell class="text-zinc-400 dark:text-zinc-500">{{ __('Invitation pending') }}</flux:table.cell>
-                        <flux:table.cell>{{ $invitation->email }}</flux:table.cell>
-                        <flux:table.cell>
-                            <flux:badge size="sm">{{ $invitation->role->label() }}</flux:badge>
-                        </flux:table.cell>
-                        <flux:table.cell>
-                            @if ($canManageCollaborators)
-                                <div class="flex justify-end">
-                                    <flux:button variant="ghost" size="sm" icon="trash" wire:click="revokeInvitation({{ $invitation->id }})" />
-                                </div>
-                            @endif
-                        </flux:table.cell>
-                    </flux:table.row>
-                @endforeach
-            </flux:table.rows>
-        </flux:table>
+    <flux:card class="space-y-4">
+        <flux:heading size="lg">{{ __('Team members') }}</flux:heading>
+        <flux:text>{{ __('Joined dates are shown for accepted invitations. Older access grants do not prove that a person signed in. Contributions below refer to shared record activity, not private chats.') }}</flux:text>
+        <div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead><tr><th class="p-2">{{ __('Person') }}</th><th class="p-2">{{ __('Role') }}</th><th class="p-2">{{ __('Membership') }}</th><th class="p-2">{{ __('Latest recorded contribution') }}</th><th></th></tr></thead><tbody>
+        @foreach($review->memberships as $member)
+            @php($joined = $review->invitations->first(fn ($invitation) => mb_strtolower($invitation->email) === mb_strtolower($member->user?->email ?? '') && $invitation->accepted_at))
+            @php($latest = $activities->firstWhere('user_id', $member->user_id))
+            <tr class="border-t align-top" wire:key="member-{{ $member->id }}">
+                <td class="p-2"><strong>{{ $member->user?->name }}</strong><br><span class="text-zinc-500">{{ $member->user?->email }}</span></td>
+                <td class="p-2">@if($canManageCollaborators && ! $member->isOwner())<flux:select wire:model="collaboratorRoles.{{ $member->id }}" aria-label="Role for {{ $member->user?->name }}">@foreach($collaboratorRoleOptions as $role)<option value="{{ $role->value }}">{{ $role->label() }}</option>@endforeach</flux:select><flux:button size="sm" class="mt-2" wire:click="updateCollaboratorRole({{ $member->id }})">{{ __('Save role') }}</flux:button>@else{{ $member->role->label() }}@endif</td>
+                <td class="p-2">{{ $joined ? __('Joined') : __('Access granted') }}<br>{{ ($joined?->accepted_at ?? $member->created_at)?->format('j M Y H:i') }}</td>
+                <td class="p-2">{{ $latest ? $latest->action.' '.$latest->title : __('None in recent activity') }} @if($latest)<br><span class="text-xs text-zinc-500">{{ $latest->created_at->format('j M Y H:i') }}</span>@endif</td>
+                <td class="p-2">@if($canManageCollaborators && ! $member->isOwner())<flux:button size="sm" variant="danger" wire:click="removeCollaborator({{ $member->id }})" wire:confirm="Remove this person's access?">{{ __('Remove') }}</flux:button>@endif</td>
+            </tr>
+        @endforeach
+        </tbody></table></div>
+    </flux:card>
+    @if($canManageCollaborators)
+    <flux:card class="space-y-4">
+        <flux:heading size="lg">{{ __('Invitations') }}</flux:heading>
+        <flux:text>{{ __('Email status is separate from membership. Sent means accepted by the mail service; inbox delivery is not confirmed. Queued for a long time may mean the worker is stopped. Not configured means the app is using a logging/test mail transport.') }}</flux:text>
+        @forelse($review->pendingInvitations as $invite)
+        <div class="border-t pt-3 space-y-2" wire:key="delivery-{{ $invite->id }}">
+            <p class="text-sm"><strong>{{ $invite->email }}</strong> · {{ $invite->role->label() }} · {{ $invite->expires_at?->isPast() ? __('Expired') : __('Not yet joined') }} · {{ __('Email: :status', ['status' => \Illuminate\Support\Str::headline($invite->mail_status)]) }} @if($invite->mail_sent_at) · {{ $invite->mail_sent_at->format('j M Y H:i') }} @endif</p>
+            <div class="flex flex-wrap gap-2">
+                <flux:button size="sm" wire:click="resendInvitation({{ $invite->id }})">{{ __('Resend invitation') }}</flux:button>
+                <flux:button size="sm" x-on:click="navigator.clipboard.writeText(@js(route('pls.invitations.accept', $invite->token))).then(() => $el.textContent = 'Link copied')">{{ __('Copy invitation link') }}</flux:button>
+                <flux:button size="sm" variant="danger" wire:click="revokeInvitation({{ $invite->id }})" wire:confirm="Revoke this invitation?">{{ __('Revoke') }}</flux:button>
+            </div>
+        </div>
+        @empty <flux:text>{{ __('No pending invitations.') }}</flux:text> @endforelse
+    </flux:card>
+    @endif
+    <flux:card class="space-y-4">
+        <flux:heading size="lg">{{ __('Recent shared record activity') }}</flux:heading>
+        <flux:text>{{ __('Private assistant conversations are not shared. This log tracks changes from this release onward and shows the latest 100 events.') }}</flux:text>
+        @forelse ($activities as $activity)
+            <p class="border-t pt-2 text-sm"><strong>{{ $activity->user?->name ?? __('Background processing') }}</strong> {{ $activity->action }} {{ $activity->subjectLabel() }}: {{ $activity->title }} <span class="text-zinc-500">· {{ $activity->created_at->format('j M Y H:i') }}</span></p>
+        @empty <flux:text>{{ __('No shared changes recorded yet.') }}</flux:text> @endforelse
     </flux:card>
 </div>

@@ -28,6 +28,8 @@ You extract structured legislation metadata from source text for a post-legislat
 Return a best-effort structured result using only the supplied source text.
 
 Rules:
+- Classify bills as bill, never Act. Parliamentary debates, Hansard, and proceedings are parliamentary_record with a related relationship, never primary Acts. Use the whole document identity, not the first agenda item.
+- A bill publication date, debate date, or upload date is not an enactment date. Leave date_enacted null unless the source explicitly records enactment of this instrument.
 - Be conservative and practical.
 - Every required field must be populated. If the title, legislation type, or relationship is unclear, provide the closest supported value and include a concise warning instead of leaving it blank.
 - Return the official instrument or bill name only, not page numbers, jurisdiction headers, running headers, or all-caps prefixes like "BELIZE:".

@@ -2,8 +2,18 @@
 
 namespace App\Providers;
 
+use App\Domain\Analysis\Finding;
+use App\Domain\Analysis\Recommendation;
+use App\Domain\Consultations\Consultation;
+use App\Domain\Consultations\Submission;
+use App\Domain\Documents\Document;
+use App\Domain\Reporting\Report;
 use App\Domain\Reviews\PlsReview;
+use App\Domain\Reviews\PlsReviewInvitation;
+use App\Domain\Reviews\PlsReviewMembership;
+use App\Domain\Stakeholders\Stakeholder;
 use App\Models\User;
+use App\Observers\ReviewRecordObserver;
 use App\Policies\PlsReviewPolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
@@ -28,6 +38,19 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        foreach ([
+            Document::class,
+            Finding::class,
+            Recommendation::class,
+            Report::class,
+            Stakeholder::class,
+            Consultation::class,
+            Submission::class,
+            PlsReviewInvitation::class,
+            PlsReviewMembership::class,
+        ] as $model) {
+            $model::observe(ReviewRecordObserver::class);
+        }
     }
 
     /**

@@ -9,6 +9,8 @@ enum DocumentType: string
     case ImplementationReport = 'implementation_report';
     case ConsultationSubmission = 'consultation_submission';
     case HearingTranscript = 'hearing_transcript';
+    case ParliamentaryRecord = 'parliamentary_record';
+    case ReportingTemplate = 'reporting_template';
     case PolicyReport = 'policy_report';
     case GovernmentResponse = 'government_response';
     case DraftReport = 'draft_report';

@@ -23,23 +23,23 @@ class VoletServiceProvider extends ServiceProvider
             (new FeedbackMessages)
                 // Configure feature display
                 ->setLabel('Send us feedback')
-                ->setIcon('https://api.iconify.design/lucide:message-square.svg?color=%23888888')
+                ->setIcon(asset('images/feedback/message.svg'))
 
                 // Add feedback categories
                 ->addCategory(
                     slug: 'bug',
                     name: 'Bug Report',
-                    icon: 'https://api.iconify.design/lucide:bug.svg?color=%23888888'
+                    icon: asset('images/feedback/bug.svg')
                 )
                 ->addCategory(
                     slug: 'improvement',
                     name: 'Improvement',
-                    icon: 'https://api.iconify.design/lucide:lightbulb.svg?color=%23888888'
+                    icon: asset('images/feedback/improvement.svg')
                 )
                 ->addCategory(
                     slug: 'general',
                     name: 'General Feedback',
-                    icon: 'https://api.iconify.design/lucide:smile.svg?color=%23888888'
+                    icon: asset('images/feedback/general.svg')
                 )
         );
     }

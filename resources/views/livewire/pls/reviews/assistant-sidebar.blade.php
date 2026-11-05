@@ -10,7 +10,9 @@
         pendingMessage: '',
         assistantOpen: false,
         assistantExpanded: false,
+        followResponse: true,
         queuePrompt(prompt) {
+            this.followResponse = true;
             this.pendingMessage = prompt;
             this.assistantOpen = true;
             this.scrollToBottom();
@@ -36,11 +38,11 @@
                         return;
                     }
 
-                    const responses = this.$refs.messages.querySelectorAll('[data-message-role="assistant"]');
+                    const responses = this.$refs.messages.querySelectorAll('[data-message-role=assistant]');
                     const latest = responses[responses.length - 1];
 
                     if (latest) {
-                        this.$refs.messages.scrollTo({ top: Math.max(0, latest.offsetTop - 12), behavior: 'smooth' });
+                        this.$refs.messages.scrollTo({ top: Math.max(0, latest.getBoundingClientRect().top - this.$refs.messages.getBoundingClientRect().top + this.$refs.messages.scrollTop - 12), behavior: 'smooth' });
                     }
                 };
 
@@ -51,11 +53,11 @@
             });
         },
     }"
-    x-on:assistant-message-added.window="pendingMessage = ''; assistantOpen = true; ($event.detail || {}).focus === 'response' ? scrollToLatestResponse() : scrollToBottom()"
+    x-on:assistant-message-added.window="pendingMessage = ''; assistantOpen = true; ($event.detail || {}).focus === 'response' ? (followResponse && scrollToLatestResponse()) : scrollToBottom()"
     x-on:assistant-open-requested.window="queuePrompt($event.detail.prompt || '')"
     x-bind:class="assistantExpanded
-        ? 'fixed inset-x-3 bottom-3 z-50 sm:left-auto sm:w-[min(46rem,calc(100vw-1.5rem))] xl:right-6 print:hidden'
-        : 'fixed inset-x-3 bottom-3 z-50 sm:left-auto sm:w-[22rem] xl:right-6 print:hidden'"
+        ? 'fixed inset-x-3 bottom-20 z-50 sm:bottom-3 sm:left-auto sm:w-[min(46rem,calc(100vw-1.5rem))] xl:right-6 print:hidden'
+        : 'fixed inset-x-3 bottom-20 z-50 sm:bottom-3 sm:left-auto sm:w-[22rem] xl:right-6 print:hidden'"
 >
     <section
         x-show="assistantOpen"
@@ -63,7 +65,7 @@
         x-transition
         x-bind:class="assistantExpanded
             ? 'mb-3 flex h-[min(74vh,44rem)] min-h-[28rem] flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_24px_80px_-36px_rgba(15,23,42,0.45)] dark:border-zinc-700 dark:bg-zinc-900'
-            : 'mb-3 flex max-h-[58vh] min-h-[22rem] flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_24px_80px_-36px_rgba(15,23,42,0.45)] sm:max-h-[34rem] dark:border-zinc-700 dark:bg-zinc-900'"
+            : 'mb-3 flex h-[58dvh] max-h-[calc(100dvh-14rem)] flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_24px_80px_-36px_rgba(15,23,42,0.45)] sm:max-h-[34rem] dark:border-zinc-700 dark:bg-zinc-900'"
     >
         <div class="border-b border-violet-700 bg-violet-800 px-4 py-2.5">
             <div class="flex items-center justify-between gap-3">
@@ -102,7 +104,7 @@
         </div>
 
         <div
-            x-ref="messages"
+            x-ref="messages" x-on:wheel="followResponse = false" x-on:touchstart="followResponse = false" x-on:keydown.page-up="followResponse = false"
             x-init="requestAnimationFrame(() => { $el.scrollTop = $el.scrollHeight })"
             class="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(250,250,252,0.9)_0%,rgba(255,255,255,1)_18%)] px-4 py-3.5 dark:[background:var(--color-zinc-900)]"
         >
@@ -157,22 +159,15 @@
                             'ml-auto inline-flex w-auto max-w-[70%] rounded-[1rem] rounded-br-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-zinc-800 dark:border-zinc-600 dark:bg-zinc-700/50 dark:text-zinc-100' => $message['role'] === 'user',
                         ])>
                             @if ($message['role'] === 'assistant')
-                                <div class="text-[13px] leading-5 [&>*+*]:mt-1.5 [&>p+p]:mt-1.5 [&>p.heading]:mt-3 [&>p.heading:first-child]:mt-0 [&>p.heading+*]:mt-0.5 [&>ul+p:not(.heading)]:mt-1.5">
-                                    @foreach ($this->assistantMessageBlocks($message['content']) as $block)
-                                        @if ($block['type'] === 'heading')
-                                            <p class="heading m-0 font-semibold text-violet-800 dark:text-violet-300">
-                                                {{ $block['content'] }}
-                                            </p>
-                                        @elseif ($block['type'] === 'list')
-                                            <ul class="m-0 list-disc space-y-0.5 pl-5 marker:text-violet-400">
-                                                @foreach ($block['items'] as $item)
-                                                    <li>{{ $item }}</li>
-                                                @endforeach
-                                            </ul>
-                                        @else
-                                            <p class="m-0">{{ $block['content'] }}</p>
-                                        @endif
-                                    @endforeach
+                                @php($parts = $this->responseParts($message['content']))
+                                <div class="pls-prose prose prose-sm max-w-none break-words dark:prose-invert [&_a]:text-violet-700 [&_table]:text-xs [&_table]:block [&_table]:overflow-x-auto">
+                                    {!! \Illuminate\Support\Str::markdown($parts['answer'], ['html_input' => 'strip', 'allow_unsafe_links' => false]) !!}
+                                    @if($parts['detail'] !== '')
+                                        <details class="mt-3"><summary class="cursor-pointer text-sm font-medium text-violet-700">{{ __('Details, sources and limitations') }}</summary>
+                                            {!! \Illuminate\Support\Str::markdown($parts['detail'], ['html_input' => 'strip', 'allow_unsafe_links' => false]) !!}
+                                        </details>
+                                    @endif
+                                    @if(str_contains($message['content'], 'added to the Analysis workspace'))<flux:link :href="route('pls.reviews.analysis', $review)" wire:navigate>{{ __('Open saved findings') }}</flux:link>@endif
                                 </div>
                             @else
                                 <div class="text-[13px] leading-5">
@@ -224,6 +219,7 @@
 
         <div class="border-t border-zinc-200/80 bg-white px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">
             @if ($assistantMessages !== [])
+                <button type="button" class="text-xs text-violet-700 underline" x-on:click="scrollToLatestResponse()">{{ __('Jump to latest answer') }}</button>
                 <div class="mb-2 flex flex-wrap gap-1">
                     @foreach ($assistantContext['playbook']['suggested_prompts'] as $prompt)
                         <button
@@ -250,13 +246,14 @@
             >
                 <flux:composer
                     wire:model="assistantInput"
+                    maxlength="10000"
                     submit="enter"
                     x-bind:rows="assistantExpanded ? 3 : 1"
                     placeholder="{{ $this->assistantPlaceholder($assistantContext['workspace_key']) }}"
                 >
                     <x-slot:actionsTrailing>
                         <flux:modal.trigger name="confirm-reset-chat">
-                            <flux:button
+                            <flux:button aria-label="Retry"
                                 type="button"
                                 variant="ghost"
                                 size="sm"
@@ -266,7 +263,7 @@
                                 class="!text-zinc-400 hover:!text-zinc-500"
                             />
                         </flux:modal.trigger>
-                        <flux:button
+                        <flux:button aria-label="Send message"
                             variant="primary"
                             size="sm"
                             icon="paper-airplane"
@@ -343,13 +340,14 @@
             >
                 <flux:composer
                     wire:model="assistantInput"
+                    maxlength="10000"
                     submit="enter"
                     rows="1"
                     placeholder="{{ $this->assistantPlaceholder($assistantContext['workspace_key']) }}"
                 >
                     <x-slot:actionsTrailing>
                         <flux:modal.trigger name="confirm-reset-chat">
-                            <flux:button
+                            <flux:button aria-label="Retry"
                                 type="button"
                                 variant="ghost"
                                 size="sm"
@@ -359,7 +357,7 @@
                                 class="!text-zinc-400 hover:!text-zinc-500"
                             />
                         </flux:modal.trigger>
-                        <flux:button
+                        <flux:button aria-label="Send message"
                             variant="primary"
                             size="sm"
                             icon="paper-airplane"

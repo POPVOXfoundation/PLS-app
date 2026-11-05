@@ -6,6 +6,7 @@ use App\Ai\Agents\ReviewDocumentExtractorAgent;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Support\PlsAssistant\AssistantSourceTextExtractorFactory;
+use App\Support\PlsAssistant\SourceIdentity;
 use App\Support\PlsAssistant\StakeholderSuggestionNormalizer;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -149,6 +150,17 @@ class AnalyzeReviewDocument
                 rawText: $rawText,
                 pollAfterSeconds: $extractionContext['poll_after_seconds'] ?? null,
             );
+        }
+
+        $sourceKind = SourceIdentity::kind($rawText);
+        if ($sourceKind === 'parliamentary_record') {
+            $aiExtraction['document_type'] = DocumentType::ParliamentaryRecord->value;
+            $aiExtraction['title'] = 'Parliamentary debates — '.$document->title;
+        } elseif ($sourceKind === 'bill') {
+            $aiExtraction['document_type'] = DocumentType::LegislationText->value;
+        }
+        if (preg_match('/blank.{0,35}template|template.{0,65}(?:without filled|no (?:filled|completed|reported) data)/i', implode(' ', $aiExtraction['warnings'] ?? []))) {
+            $aiExtraction['document_type'] = DocumentType::ReportingTemplate->value;
         }
 
         return [
@@ -416,7 +428,7 @@ class AnalyzeReviewDocument
 
         $type = DocumentType::tryFrom(trim($value));
 
-        if ($type === null || $type === DocumentType::LegislationText) {
+        if ($type === null) {
             return null;
         }
 

@@ -168,9 +168,9 @@ test('owner can add contributor by existing user email', function () {
         ->call('shareReview')
         ->assertHasNoErrors();
 
-    $this->assertDatabaseHas('pls_review_memberships', [
+    $this->assertDatabaseHas('pls_review_invitations', [
         'pls_review_id' => $review->id,
-        'user_id' => $invitee->id,
+        'email' => $invitee->email,
         'role' => PlsReviewMembershipRole::Contributor->value,
         'invited_by' => $owner->id,
     ]);
@@ -192,15 +192,16 @@ test('owner can add viewer by existing user email', function () {
         ->call('shareReview')
         ->assertHasNoErrors();
 
-    $this->assertDatabaseHas('pls_review_memberships', [
+    $this->assertDatabaseHas('pls_review_invitations', [
         'pls_review_id' => $review->id,
-        'user_id' => $invitee->id,
+        'email' => $invitee->email,
         'role' => PlsReviewMembershipRole::Viewer->value,
     ]);
 });
 
 test('owner can invite unknown email as contributor', function () {
     Notification::fake();
+    config(['mail.default' => 'smtp', 'mail.mailers.smtp.transport' => 'smtp']);
 
     $owner = User::factory()->reviewer()->create();
     $review = plsReview([
@@ -436,7 +437,7 @@ test('invitation accept flow creates membership with correct role', function () 
     expect($invitation->fresh()->accepted_at)->not->toBeNull();
 });
 
-test('existing collaborators receive a warning toast when accepting an invitation again', function () {
+test('existing collaborators can accept without duplicating membership', function () {
     $owner = User::factory()->reviewer()->create();
     $invitee = User::factory()->reviewer()->create();
     $review = plsReview([
@@ -458,9 +459,9 @@ test('existing collaborators receive a warning toast when accepting an invitatio
     $this->actingAs($invitee)
         ->get(route('pls.invitations.accept', ['token' => $invitation->token]))
         ->assertRedirect(route('pls.reviews.workflow', ['review' => $review]))
-        ->assertSessionHas('toast', Toast::warning(
-            __('Access already granted'),
-            __('You already have access to this review.'),
+        ->assertSessionHas('toast', Toast::success(
+            __('Invitation accepted'),
+            __('Invitation accepted. Welcome to the review.'),
         ));
 });
 
@@ -481,7 +482,7 @@ test('accepted invitation cannot be reused', function () {
 
     $this->actingAs($invitee)
         ->get(route('pls.invitations.accept', ['token' => $invitation->token]))
-        ->assertNotFound();
+        ->assertStatus(410);
 });
 
 test('email mismatch prevents invitation acceptance', function () {

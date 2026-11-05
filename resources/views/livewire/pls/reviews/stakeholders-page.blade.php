@@ -25,6 +25,7 @@
         </div>
     </section>
 
+    <flux:callout class="mb-5" icon="information-circle">{{ __('Stakeholders are people or organisations. Their submissions are contributions linked to documents in Documents & Sources. The same document appears in the register and here; it is not a second copy. Link a document to a finding in Analysis when it supports or contradicts a claim.') }} <flux:link :href="route('pls.reviews.documents', $review)" wire:navigate>{{ __('Open complete document register') }}</flux:link></flux:callout>
     <flux:card x-show="activeTab === 'suggestions'" x-cloak class="space-y-6">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="space-y-2">
@@ -91,7 +92,9 @@
                                         <div>{{ __('Source phrase: :source', ['source' => $suggestion['source']]) }}</div>
                                     @endif
                                     @if ($suggestion['source_title'] !== '')
-                                        <div>{{ __('From: :title', ['title' => $suggestion['source_title']]) }}</div>
+                                        @foreach (($suggestion['sources'] ?? [$suggestion]) as $source)
+                                            @if ($source['source_document_id'])<div><flux:link :href="route('pls.reviews.documents.show', [$review, $source['source_document_id']])" wire:navigate>{{ $source['source_title'] }}</flux:link><p>{{ $source['source'] }}</p></div>@endif
+                                        @endforeach
                                     @endif
                                 </div>
                             </div>
@@ -116,6 +119,8 @@
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="space-y-2">
                 <flux:heading size="lg">{{ __('Suggested stakeholders') }}</flux:heading>
+                <flux:input wire:model.live.debounce.300ms="suggestionSearch" type="search" :label="__('Search suggestions')" />
+                <flux:text>{{ __('Repeated names and explicit abbreviations are grouped. Suggestions supported by more sources appear first; this does not establish a legal responsibility.') }}</flux:text>
                 <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
                     {{ __('PLSAssist can suggest stakeholders named or implied by uploaded legislation and evidence. Review each suggestion before adding it.') }}
                 </flux:text>
@@ -153,7 +158,9 @@
                                         <div>{{ __('Source phrase: :source', ['source' => $suggestion['source']]) }}</div>
                                     @endif
                                     @if ($suggestion['source_title'] !== '')
-                                        <div>{{ __('From: :title', ['title' => $suggestion['source_title']]) }}</div>
+                                        @foreach (($suggestion['sources'] ?? [$suggestion]) as $source)
+                                            @if ($source['source_document_id'])<div><flux:link :href="route('pls.reviews.documents.show', [$review, $source['source_document_id']])" wire:navigate>{{ $source['source_title'] }}</flux:link><p>{{ $source['source'] }}</p></div>@endif
+                                        @endforeach
                                     @endif
                                 </div>
                             </div>
@@ -226,10 +233,10 @@
                             <flux:table.cell class="text-sm text-zinc-500 dark:text-zinc-400">{{ $contactDetails['source'] ?? __('Added manually') }}</flux:table.cell>
                             <flux:table.cell>
                                 <div class="flex justify-end gap-1">
-                                    <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingStakeholder({{ $stakeholder->id }})" />
+                                    <flux:button aria-label="Edit record" variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingStakeholder({{ $stakeholder->id }})" />
 
                                     <flux:modal.trigger name="confirm-stakeholder-delete">
-                                        <flux:button
+                                        <flux:button aria-label="Delete record"
                                             variant="ghost"
                                             size="sm"
                                             icon="trash"
@@ -276,10 +283,10 @@
                             </flux:table.cell>
                             <flux:table.cell>
                                 <div class="flex justify-end gap-1">
-                                    <flux:button variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingImplementingAgency({{ $agency->id }})" />
+                                    <flux:button aria-label="Edit record" variant="ghost" size="sm" icon="pencil-square" wire:click="startEditingImplementingAgency({{ $agency->id }})" />
 
                                     <flux:modal.trigger name="confirm-implementing-agency-delete">
-                                        <flux:button
+                                        <flux:button aria-label="Delete record"
                                             variant="ghost"
                                             size="sm"
                                             icon="trash"

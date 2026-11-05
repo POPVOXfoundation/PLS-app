@@ -29,6 +29,7 @@ class AssistantSidebar extends Component
 
     public PlsReview $review;
 
+    #[Locked]
     public string $workspaceKey = 'workflow';
 
     public string $assistantInput = '';
@@ -39,6 +40,7 @@ class AssistantSidebar extends Component
     /**
      * @var list<array{content: string, role: string}>
      */
+    #[Locked]
     public array $assistantMessages = [];
 
     public ?string $assistantError = null;
@@ -66,6 +68,7 @@ class AssistantSidebar extends Component
     public function submitAssistantPrompt(): void
     {
         $this->authorize('view', $this->review);
+        $this->validate(['assistantInput' => ['string', 'max:10000']]);
 
         $prompt = Str::of($this->assistantInput)->trim()->toString();
         $sendProvisionalFindingsToInbox = $this->shouldSendProvisionalFindingsToInbox && $this->workspaceKey === 'analysis';
@@ -85,6 +88,22 @@ class AssistantSidebar extends Component
 
         $context = $this->contextBuilder()->build($this->review, $this->workspaceKey, $prompt);
         $agent = $this->assistantAgent($context);
+
+        $requestCharacters = mb_strlen((string) $agent->instructions()) + mb_strlen(implode("\n", array_column($this->assistantMessages, 'content')));
+        if ($requestCharacters > config('pls_assistant.max_context_characters')) {
+            $this->assistantError = __('This review is too large for a complete assistant response in one request. No legislation text has been omitted and no partial review has been generated. Please ask the support team to arrange a full-document review.');
+            $this->assistantInput = $prompt;
+            array_pop($this->assistantMessages);
+            if ($sendProvisionalFindingsToInbox) {
+                $this->dispatch('provisional-findings-failed')->to(AnalysisPage::class);
+            }
+            if ($sendReportOutlineToWorkspace) {
+                $this->dispatch('report-outline-failed')->to(ReportsPage::class);
+            }
+            $this->dispatch('assistant-message-added');
+
+            return;
+        }
 
         try {
             $conversationId = $this->conversationResolver()->resolve(
@@ -137,7 +156,9 @@ class AssistantSidebar extends Component
         } catch (Throwable $exception) {
             report($exception);
 
-            $this->assistantError = __('The assistant is unavailable right now. Check the AI provider configuration or try again.');
+            $this->assistantError = __('The assistant could not complete this response. Your question is preserved below; please try again.');
+            $this->assistantInput = $prompt;
+            array_pop($this->assistantMessages);
 
             if ($sendProvisionalFindingsToInbox) {
                 $this->dispatch('provisional-findings-failed')->to(AnalysisPage::class);
@@ -199,7 +220,7 @@ class AssistantSidebar extends Component
     {
         return match ($workspaceKey) {
             'legislation' => __('Ask about this legislation...'),
-            'documents' => __('Ask about this evidence...'),
+            'documents' => __('Ask about these documents...'),
             'stakeholders' => __('Ask about stakeholder coverage...'),
             'consultations' => __('Ask about this consultation process...'),
             'analysis' => __('Ask about findings or recommendations...'),
@@ -277,6 +298,8 @@ class AssistantSidebar extends Component
             return $this->assistantMessages;
         }
 
+        abort_unless(DB::table('agent_conversations')->where('id', $this->assistantConversationId)->where('user_id', auth()->id())->where('pls_review_id', $this->review->id)->exists(), 403);
+
         $messages = resolve(ConversationStore::class)
             ->getLatestConversationMessages($this->assistantConversationId, 20)
             ->filter(fn (Message $message): bool => in_array($message->role->value, ['assistant', 'user'], true))
@@ -325,9 +348,7 @@ class AssistantSidebar extends Component
                 : __('Suggest provisional findings');
         }
 
-        return $role === 'assistant'
-            ? $this->normalizeAssistantMessage($content)
-            : $content;
+        return $content;
     }
 
     private function sendReportOutlineToWorkspace(bool $sendReportOutlineToWorkspace, string $content): void
@@ -361,8 +382,23 @@ class AssistantSidebar extends Component
     }
 
     /**
-     * @return list<array{type: 'heading'|'list'|'text', content?: string, items?: list<string>}>
+     * @return array{answer: string, detail: string}
      */
+    public function responseParts(string $content): array
+    {
+        $paragraphs = preg_split('/\n\s*\n/', trim($content));
+        $answer = [];
+        // Keep the direct answer visible; expand longer explanations on demand.
+        while ($paragraphs !== [] && (count($answer) < 2 || mb_strlen(implode("\n\n", $answer)) < 100)) {
+            if ($answer !== [] && preg_match('/^#{1,6}\s/', $paragraphs[0])) {
+                break;
+            }
+            $answer[] = array_shift($paragraphs);
+        }
+
+        return ['answer' => implode("\n\n", $answer), 'detail' => implode("\n\n", $paragraphs)];
+    }
+
     public function assistantMessageBlocks(string $content): array
     {
         $blocks = [];

@@ -219,7 +219,7 @@ function storageFailureSend(mixed $sidebar, array $case): mixed
 {
     return $sidebar->call(
         'sendRequestedPrompt',
-        $case['prompt'],
+        prompt: $case['prompt'],
         provisionalFindings: $case['handoff'] === 'provisionalFindings',
         reportOutline: $case['handoff'] === 'reportOutline',
     );

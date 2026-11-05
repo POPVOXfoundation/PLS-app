@@ -6,6 +6,7 @@ use App\Domain\Documents\Document;
 use App\Domain\Documents\DocumentChunk;
 use App\Domain\Documents\Enums\AssistantSourceScope;
 use App\Domain\Documents\Enums\DocumentType;
+use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Livewire\Pls\Reviews\AssistantSidebar;
 use App\Models\User;
 use App\Support\PlsAssistant\PlaybookRepository;
@@ -42,7 +43,7 @@ it('shows the configured role and prompts for the current tab', function (string
     ],
     'documents' => [
         'documents',
-        'Evidence Intelligence Assistant',
+        'Documents and Sources Assistant',
         [
             'What documents do I have so far?',
             "What's missing for this type of inquiry?",
@@ -73,7 +74,7 @@ test('assistant intro changes by tab', function () {
     Livewire::test(AssistantSidebar::class, [
         'review' => $review,
         'workspaceKey' => 'documents',
-    ])->assertSee("You're in Evidence. I can help you review what you've uploaded");
+    ])->assertSee("You're in Documents & Sources. I can help you review what you've uploaded");
 });
 
 test('assistant composer submits on enter while preserving shift enter for new lines', function () {
@@ -216,8 +217,8 @@ test('documents prompts are grounded in the current review record', function () 
 
     ReviewAssistantAgent::assertPrompted(function (AgentPrompt $prompt) {
         expect((string) $prompt->agent->instructions())
-            ->toContain('Active tab: Evidence')
-            ->toContain('Tab role: Evidence Intelligence Assistant')
+            ->toContain('Active tab: Documents & Sources')
+            ->toContain('Tab role: Documents and Sources Assistant')
             ->toContain('Implementation Progress Report')
             ->toContain('Tracks implementation delays across ministries.');
 
@@ -225,7 +226,7 @@ test('documents prompts are grounded in the current review record', function () 
     });
 });
 
-test('documents prompts exclude legislation source documents from document facts and review grounding', function () {
+test('documents prompts include uploaded legislation in document facts and review grounding', function () {
     $review = plsReview([
         'title' => 'Separated grounding review',
     ]);
@@ -263,7 +264,7 @@ test('documents prompts exclude legislation source documents from document facts
     ReviewAssistantAgent::assertPrompted(function (AgentPrompt $prompt) {
         expect((string) $prompt->agent->instructions())
             ->toContain('Implementation Memo')
-            ->not->toContain('Legislation source upload');
+            ->toContain('Legislation source upload');
 
         return $prompt->contains('Summarize the uploaded documents.');
     });
@@ -460,6 +461,68 @@ test('the same review keeps one assistant conversation across tab changes for th
     $workflow->assertSet('assistantConversationId', $firstConversationId);
 });
 
+test('pages opened before the first prompt reuse the review conversation without losing replies', function (string $secondWorkspace, string $secondPrompt, string $expectedReply) {
+    $review = plsReview();
+    ReviewAssistantAgent::fake(['First page response', 'Second page response']);
+
+    $first = Livewire::test(AssistantSidebar::class, ['review' => $review, 'workspaceKey' => 'workflow']);
+    $stale = Livewire::test(AssistantSidebar::class, ['review' => $review, 'workspaceKey' => $secondWorkspace]);
+    $first->assertSet('assistantConversationId', null);
+    $stale->assertSet('assistantConversationId', null);
+
+    $first->call('sendPrompt', 'Summarize the current step.')->assertHasNoErrors();
+    $conversationId = $first->get('assistantConversationId');
+    $stale->call('sendPrompt', $secondPrompt)->assertHasNoErrors()
+        ->assertSet('assistantConversationId', $conversationId)
+        ->assertSee('First page response')->assertSee($expectedReply);
+
+    expect(DB::table('agent_conversations')->count())->toBe(1)
+        ->and(DB::table('agent_conversation_messages')->where('conversation_id', $conversationId)->count())->toBe(4)
+        ->and(DB::table('agent_conversations')->value('playbook_version'))->toBe(app(PlaybookRepository::class)->versionForTab($secondWorkspace));
+})->with([
+    'model response' => ['analysis', 'Group the current evidence into themes.', 'Second page response'],
+    'local guidance response' => ['workflow', 'Generate final findings.', 'I can help with workflow stages and next steps'],
+]);
+
+test('overlapping first prompts reserve one conversation before either response is stored', function () {
+    $review = plsReview();
+    $first = Livewire::test(AssistantSidebar::class, ['review' => $review, 'workspaceKey' => 'analysis']);
+    $second = Livewire::test(AssistantSidebar::class, ['review' => $review, 'workspaceKey' => 'analysis']);
+
+    ReviewAssistantAgent::fake(function (string $prompt) use ($second, $review) {
+        expect(DB::table('agent_conversations')->where('pls_review_id', $review->id)->where('user_id', auth()->id())->count())->toBe(1);
+        if ($prompt === 'First concurrent question') {
+            $second->call('sendPrompt', 'Second concurrent question')->assertHasNoErrors();
+        }
+
+        return 'Reply to '.$prompt;
+    });
+
+    $first->call('sendPrompt', 'First concurrent question')->assertHasNoErrors()
+        ->assertSee('Reply to First concurrent question')->assertSee('Reply to Second concurrent question');
+    expect($first->get('assistantConversationId'))->toBe($second->get('assistantConversationId'))
+        ->and(DB::table('agent_conversations')->count())->toBe(1)
+        ->and(DB::table('agent_conversations')->value('title'))->toBe('First concurrent question')
+        ->and(DB::table('agent_conversation_messages')->count())->toBe(4);
+});
+
+test('review members keep private conversations when reserving conversations in the same review', function () {
+    $review = plsReview();
+    $member = User::factory()->create();
+    $review->memberships()->create(['user_id' => $member->id, 'role' => PlsReviewMembershipRole::Viewer]);
+    ReviewAssistantAgent::fake(['Owner private reply', 'Member private reply']);
+    $owner = Livewire::test(AssistantSidebar::class, ['review' => $review, 'workspaceKey' => 'analysis'])
+        ->call('sendPrompt', 'Owner private question');
+
+    $this->actingAs($member);
+    $viewer = Livewire::test(AssistantSidebar::class, ['review' => $review, 'workspaceKey' => 'analysis'])
+        ->assertSet('assistantConversationId', null)
+        ->call('sendPrompt', 'Member private question')->assertHasNoErrors()
+        ->assertSee('Member private reply')->assertDontSee('Owner private reply');
+    expect($viewer->get('assistantConversationId'))->not->toBe($owner->get('assistantConversationId'))
+        ->and(DB::table('agent_conversations')->count())->toBe(2);
+});
+
 test('different reviews keep separate assistant conversations', function () {
     $firstReview = plsReview([
         'title' => 'First assistant conversation review',
@@ -529,12 +592,12 @@ test('assistant responses are normalized before display', function () {
         ],
         [
             'role' => 'assistant',
-            'content' => "Status: Pending\n\nWhat this means in practice:\n- Link the governing law.\n- Upload the briefing pack.",
+            'content' => "**Status:** Pending\n\n**What this means in practice:**\n- Link the governing law.\n- Upload the briefing pack.",
         ],
     ]);
 
     $component
-        ->assertSee('Status: Pending')
+        ->assertSee('<strong>Status:</strong> Pending', false)
         ->assertSee('What this means in practice:')
         ->assertSee('Link the governing law.')
         ->assertSee('Upload the briefing pack.')
@@ -557,16 +620,19 @@ test('assistant shows an inline error state when the sdk call fails', function (
     ])
         ->call('sendPrompt', 'Summarize the current step.');
 
-    expect($component->get('assistantMessages'))->toBe([
-        [
-            'role' => 'user',
-            'content' => 'Summarize the current step.',
-        ],
-    ]);
+    expect($component->get('assistantMessages'))->toBe([]);
 
     $component
-        ->assertSet('assistantError', 'The assistant is unavailable right now. Check the AI provider configuration or try again.')
-        ->assertSee('The assistant is unavailable right now. Check the AI provider configuration or try again.');
+        ->assertSet('assistantInput', 'Summarize the current step.')
+        ->assertSee('The assistant could not complete this response. Your question is preserved below; please try again.');
+
+    $conversationId = DB::table('agent_conversations')->value('id');
+    ReviewAssistantAgent::fake(['Recovered reply']);
+    $component->call('submitAssistantPrompt')->assertHasNoErrors()
+        ->assertSet('assistantConversationId', $conversationId)->assertSet('assistantError', null)
+        ->assertSee('Recovered reply');
+    expect(DB::table('agent_conversations')->count())->toBe(1)
+        ->and(DB::table('agent_conversation_messages')->count())->toBe(2);
 });
 
 test('global reference docs are included for process questions', function () {
@@ -715,7 +781,8 @@ test('mixed grounding keeps global jurisdiction and review layers distinct', fun
         expect((string) $prompt->agent->instructions())
             ->toContain('Global reference guidance: WFD Manual: Use post-legislative scrutiny to connect evidence, findings, and follow-up.')
             ->toContain('Jurisdiction guidance: Local PLS Guidance: In this jurisdiction, implementation delays should be tied to agency accountability and reporting timelines.')
-            ->toContain('Review record and documents: Implementation Memo: The current review record shows one ministry has delayed implementation by six months.');
+            ->toContain('Review record and documents: Implementation Memo: Source details:')
+            ->toContain('The current review record shows one ministry has delayed implementation by six months.');
 
         return $prompt->contains('Combine the process guidance, local practice, and current review evidence on implementation delays.');
     });

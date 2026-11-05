@@ -10,76 +10,20 @@
     }"
     class="space-y-6"
 >
-    <flux:card class="space-y-5">
-        <div
-            x-data="{ uploading: false, progress: 0 }"
-            x-on:livewire-upload-start="uploading = true; progress = 0"
-            x-on:livewire-upload-finish="uploading = false; progress = 100"
-            x-on:livewire-upload-cancel="uploading = false; progress = 0"
-            x-on:livewire-upload-error="uploading = false"
-            x-on:livewire-upload-progress="progress = $event.detail.progress"
-            class="space-y-5"
-        >
-            <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div class="max-w-2xl space-y-2">
-                    <flux:heading size="lg">{{ __('Evidence') }}</flux:heading>
-                    <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                        {{ __('Upload review evidence and source materials. PLSAssist will read each file and keep the record here for review.') }}
-                    </flux:text>
-                </div>
-
-                <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('PDF, DOCX, TXT, or MD') }}</flux:text>
-            </div>
-
-            @can('update', $review)
-                <div class="space-y-4">
-                    <flux:file-upload
-                        wire:model="documentUploads"
-                        accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
-                        multiple
-                        :label="__('Add evidence')"
-                    >
-                        <flux:file-upload.dropzone
-                            class="!min-h-24 !py-3"
-                            :heading="__('Drag files here or choose files')"
-                            :text="__('PDF, DOCX, TXT, or MD, :limit', ['limit' => $this->uploadLimitLabel()])"
-                        />
-                    </flux:file-upload>
-
-                    <flux:field>
-                        <flux:error name="documentUploads" />
-                        <flux:error name="documentUploads.*" />
-                    </flux:field>
-
-                    <flux:field x-cloak x-show="uploading" class="space-y-2">
-                        <div class="flex items-center justify-between gap-3">
-                            <flux:label>{{ __('Uploading') }}</flux:label>
-                            <flux:text color="sky">
-                                <span x-text="`${progress}%`"></span>
-                            </flux:text>
-                        </div>
-
-                        <flux:progress value="0" color="sky" x-bind:value="progress" />
-
-                        <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                            {{ __('Moving evidence into the review workspace. Once uploaded, PLSAssist will start reading it in the background.') }}
-                        </flux:text>
-                    </flux:field>
-                </div>
-
-                <div class="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400" wire:loading.flex wire:target="documentUploads">
-                    <flux:icon icon="arrow-path" class="size-4 animate-spin text-sky-500" />
-                    <span>{{ __('Adding evidence to records...') }}</span>
-                </div>
-            @else
-                <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                    {{ __('You can review saved evidence records here, but only contributors can upload or edit them.') }}
-                </flux:text>
-            @endcan
-        </div>
-    </flux:card>
-
+    <flux:heading size="xl">{{ __('Documents & Sources') }}</flux:heading>
+    <flux:text>{{ __('The full record: legislation, contextual material, templates and stakeholder submissions. Evidence is the support or contradiction you link to a finding in Analysis; a document in this register is not automatically verified evidence.') }}</flux:text>
+    <livewire:pls.reviews.record-intake :review="$review" />
+    <div class="flex flex-wrap gap-2">
+        <flux:button :href="route('pls.reviews.documents.register', [$review, 'format' => 'xlsx'])" icon="arrow-down-tray">{{ __('Download register (Excel)') }}</flux:button>
+        <flux:button :href="route('pls.reviews.documents.register', $review)" icon="arrow-down-tray">{{ __('Download register (CSV)') }}</flux:button>
+    </div>
+    <div class="flex flex-wrap gap-3" aria-label="Document processing counts">
+        @foreach(['' => 'All sources', 'ready' => 'Text ready', 'queued' => 'Queued', 'processing' => 'Reading text', 'needs_attention' => 'Needs attention', 'uploaded' => 'Text unavailable'] as $key => $label)
+            <flux:button size="sm" wire:click="$set('statusFilter', '{{ $key }}')">{{ __($label) }} · {{ $key === '' ? $review->documents->count() : $review->documents->filter(fn ($doc) => $doc->processingStatus() === $key)->count() }}</flux:button>
+        @endforeach
+    </div>
     @if ($hasLegislationSources)
+        <details><summary class="cursor-pointer text-sm text-violet-700">{{ __('Stakeholder suggestions') }}</summary>
         <flux:card class="space-y-4 border-violet-200 bg-violet-50/40 dark:border-violet-500/30 dark:bg-violet-500/5">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div class="space-y-2">
@@ -163,12 +107,26 @@
         </flux:card>
     @endif
 
-    <flux:card wire:poll.2s.keep-alive="refreshPendingAnalyses" class="space-y-5">
+    @if ($hasLegislationSources)</details>@endif
+
+    @if ($review->documents->contains('document_type', \App\Domain\Documents\Enums\DocumentType::LegislationText))
+        <flux:card class="space-y-3">
+            <flux:heading>{{ __('Legislation in the record') }}</flux:heading>
+            <flux:text>{{ __('Legislation is included in assistant responses. Legislative sources uploaded here are also available in Legislation for review and confirmation.') }}</flux:text>
+            <ul class="space-y-2">
+                @foreach ($review->documents->where('document_type', \App\Domain\Documents\Enums\DocumentType::LegislationText) as $source)
+                    <li><flux:link :href="route('pls.reviews.documents.show', [$review, $source])" wire:navigate>{{ $source->title }}</flux:link></li>
+                @endforeach
+            </ul>
+        </flux:card>
+    @endif
+
+    <flux:card wire:poll.10s="refreshPendingAnalyses" class="space-y-5">
         <div class="flex items-center justify-between gap-4">
             <div class="space-y-1">
-                <flux:heading size="lg">{{ __('Records') }}</flux:heading>
+                <flux:heading size="lg">{{ __('Complete document register') }}</flux:heading>
                 <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                    {{ __('Uploads stay here as they process, save, or need review attention.') }}
+                    {{ __('Processing reads text; team review checks the source. These are separate statuses. Open a title for details or use Original to view the source.') }}
                 </flux:text>
             </div>
 
@@ -180,9 +138,15 @@
             @endif
         </div>
 
+        <div class="grid gap-3 sm:grid-cols-3">
+            <flux:input wire:model.live.debounce.300ms="search" :label="__('Search documents')" placeholder="Title or summary" type="search" />
+            <flux:select wire:model.live="typeFilter" :label="__('Document type')"><option value="">{{ __('All types') }}</option>@foreach (\App\Domain\Documents\Enums\DocumentType::cases() as $type)<option value="{{ $type->value }}">{{ \Illuminate\Support\Str::headline($type->value) }}</option>@endforeach</flux:select>
+            <flux:select wire:model.live="sortOrder" :label="__('Sort by')"><option value="newest">{{ __('Recently updated') }}</option><option value="title">{{ __('Title') }}</option></flux:select>
+        </div>
+        <flux:select wire:model.live="reviewFilter" :label="__('Team review')"><option value="">{{ __('All review states') }}</option><option value="unchecked">{{ __('Not checked') }}</option><option value="checked">{{ __('Checked by team') }}</option><option value="excluded">{{ __('Excluded from analysis') }}</option></flux:select>
         @if ($recordRows === [])
             <flux:text class="text-sm text-zinc-500 dark:text-zinc-400">
-                {{ __('No evidence linked to this review yet.') }}
+                {{ $search !== '' || $typeFilter !== '' ? __('No documents match these filters. Clear them to see all records.') : __('No documents or sources added yet.') }}
             </flux:text>
         @else
             <div class="space-y-1">
@@ -200,18 +164,19 @@
                         class="grid min-w-0 gap-3 border-b border-zinc-200 py-4 last:border-b-0 dark:border-zinc-800 lg:grid-cols-[minmax(0,1fr)_9rem_7rem_8rem_auto] lg:items-center lg:gap-4"
                     >
                         <div class="min-w-0 space-y-1">
-                            @if (in_array($row['action'], ['review', 'edit'], true))
-                                <button
-                                    type="button"
-                                    wire:click="startEditingDocument({{ $row['id'] }})"
-                                    class="block max-w-full text-left text-base font-normal text-zinc-900 transition hover:text-violet-700 dark:text-white dark:hover:text-violet-300"
-                                >
-                                    <span class="break-words">{{ $row['title'] }}</span>
-                                </button>
-                            @else
-                                <div class="break-words text-base text-zinc-900 dark:text-white">{{ $row['title'] }}</div>
-                            @endif
+                            <a href="{{ route('pls.reviews.documents.show', [$review, $row['id']]) }}" wire:navigate
+                                class="block max-w-full break-words text-left text-base text-violet-700 underline decoration-violet-300 underline-offset-4 hover:text-violet-900 dark:text-violet-300">
+                                {{ $row['title'] }}
+                            </a>
 
+                            <p class="text-xs text-zinc-500">{{ $row['review_status'] }}</p>
+                            <p class="text-xs text-zinc-500">{{ __('Source / organisation') }}: {{ $row['organisation'] ?: __('Not recorded') }} · {{ __('Source date') }}: {{ $row['source_date'] ?: __('Not recorded') }}</p>
+                            <p class="text-xs text-zinc-500">{{ __('Added by') }}: {{ $row['added_by'] }} @if($row['linked']) · {{ __('Linked to') }}: {{ $row['linked'] }} @endif</p>
+                            @if($row['original_url'])<flux:link :href="$row['original_url']" target="_blank" rel="noopener noreferrer">{{ __('Original document') }}</flux:link>@endif
+
+                            @if ($row['warnings'] !== [])
+                                <p class="text-sm text-amber-800 dark:text-amber-300">{{ implode(' ', $row['warnings']) }}</p>
+                            @endif
                             @if ($row['summary'] !== '')
                                 <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
                                     {{ \Illuminate\Support\Str::limit($row['summary'], 180) }}
@@ -267,7 +232,7 @@
                                 @endif
 
                                 <flux:modal.trigger name="confirm-document-delete">
-                                    <flux:button
+                                    <flux:button aria-label="Delete record"
                                         variant="subtle"
                                         size="sm"
                                         icon="trash"

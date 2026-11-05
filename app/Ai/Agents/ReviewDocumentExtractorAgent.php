@@ -30,7 +30,7 @@ Rules:
 - Be conservative and practical.
 - Return a clean working title for the document, not jurisdiction headers, running headers, or page furniture.
 - Classify the document using only the allowed review document types.
-- Never classify a document as legislation_text in this workspace. Legislation source documents belong on the legislation tab.
+- If the document itself is an Act, bill, regulation, or other legislative instrument, classify it as legislation_text so the complete source can be reviewed in the legislation workflow. Do not classify a report that merely discusses legislation as legislation_text.
 - Write the summary in plain language as one or two short sentences.
 - Key themes should be short phrases, not full paragraphs.
 - Notable excerpts should be short verbatim passages copied from the text when they are genuinely informative.
@@ -52,7 +52,7 @@ TEXT;
             'title' => $schema->string()->required(),
             'document_type' => $schema->string()->enum(array_map(
                 static fn (DocumentType $type): string => $type->value,
-                DocumentType::reviewWorkspaceCases(),
+                DocumentType::cases(),
             ))->required(),
             'summary' => $schema->string()->nullable()->required(),
             'key_themes' => $schema->array()->items($schema->string())->required(),
