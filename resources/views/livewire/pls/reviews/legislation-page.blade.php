@@ -124,7 +124,11 @@
                                 <span class="min-w-0 space-y-1">
                                     <span class="flex flex-wrap items-center gap-2">
                                         <flux:badge size="sm">{{ $row['record_label'] }}</flux:badge>
-                                        <flux:heading size="base" class="truncate">{{ $row['title'] }}</flux:heading>
+                                        @if ($row['source_document_id'] !== null)
+                                            <flux:link :href="route('pls.reviews.documents.show', [$review, $row['source_document_id']])" wire:navigate>{{ $row['title'] }}</flux:link>
+                                        @else
+                                            <flux:heading size="base" class="truncate">{{ $row['title'] }}</flux:heading>
+                                        @endif
                                         <span x-show="! expanded" x-cloak class="text-xs font-medium text-zinc-400 dark:text-zinc-500">{{ __('Expand') }}</span>
                                     </span>
 
@@ -592,18 +596,19 @@
                 </div>
 
                 <div class="flex flex-wrap gap-2">
-                    <flux:button
-                        size="sm"
-                        variant="primary"
-                        icon="chat-bubble-left-right"
-                        wire:click="askAssistantAboutSourceInsight"
-                        wire:loading.attr="disabled"
-                        wire:target="askAssistantAboutSourceInsight"
-                        x-on:click="$dispatch('assistant-open-requested', { prompt: @js($sourceInsightAssistantPrompt) }); window.Flux?.modal?.('source-insight')?.close?.()"
-                    >
-                        <span wire:loading.remove wire:target="askAssistantAboutSourceInsight">{{ __('Ask assistant') }}</span>
-                        <span wire:loading wire:target="askAssistantAboutSourceInsight">{{ __('Sending...') }}</span>
-                    </flux:button>
+                    @if ($sourceInsightIncluded)
+                        <flux:button
+                            size="sm"
+                            variant="primary"
+                            icon="chat-bubble-left-right"
+                            wire:click="askAssistantAboutSourceInsight"
+                            wire:loading.attr="disabled"
+                            wire:target="askAssistantAboutSourceInsight"
+                        >
+                            <span wire:loading.remove wire:target="askAssistantAboutSourceInsight">{{ __('Ask assistant') }}</span>
+                            <span wire:loading wire:target="askAssistantAboutSourceInsight">{{ __('Sending...') }}</span>
+                        </flux:button>
+                    @endif
 
                     @if ($sourceInsightOriginalUrl !== '')
                         <flux:button size="sm" variant="subtle" icon="arrow-top-right-on-square" :href="$sourceInsightOriginalUrl" target="_blank" rel="noopener">

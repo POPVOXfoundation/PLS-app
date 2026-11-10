@@ -27,6 +27,7 @@ You extract structured metadata from uploaded review documents for a post-legisl
 Return a best-effort structured result using only the supplied source text.
 
 Rules:
+- Classify blank reporting templates and frameworks as reporting_template. Their placeholders and questions are structure, not evidence of findings or implementation results. Warn when the source contains a template without recorded results.
 - Be conservative and practical.
 - Return a clean working title for the document, not jurisdiction headers, running headers, or page furniture.
 - Classify the document using only the allowed review document types.

@@ -3,16 +3,22 @@
 namespace App\Notifications;
 
 use App\Domain\Reviews\PlsReview;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
+use App\Domain\Reviews\PlsReviewMembership;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Messages\MailMessage;
-use Illuminate\Notifications\Notification;
 
-class ReviewAccessGrantedNotification extends Notification implements ShouldQueue
+class ReviewAccessGrantedNotification extends ReviewMailNotification
 {
-    use Queueable;
+    public function __construct(public PlsReview $review, public ?int $membershipId = null)
+    {
+        $this->deliveryToken = (string) PlsReviewMembership::query()->whereKey($membershipId)->value('mail_token');
+        $this->afterCommit();
+    }
 
-    public function __construct(public PlsReview $review) {}
+    public function deliveryRecord(): ?Model
+    {
+        return PlsReviewMembership::query()->whereKey($this->membershipId)->where('mail_token', $this->deliveryToken)->first();
+    }
 
     /** @return list<string> */
     public function via(object $notifiable): array

@@ -10,6 +10,20 @@
     }"
 >
     <div class="space-y-8">
+        @can('update', $review)
+            <flux:card class="space-y-4">
+                <flux:heading size="lg">{{ __('Create a report') }}</flux:heading>
+                <flux:select wire:model="generationTemplateId" :label="__('Report structure')">
+                    <flux:select.option value="">{{ __('Standard PLS structure') }}</flux:select.option>
+                    @foreach ($review->documents->filter(fn ($document) => $document->isReportTemplate()) as $template)
+                        <flux:select.option :value="$template->id">{{ $template->title }}</flux:select.option>
+                    @endforeach
+                </flux:select>
+                <flux:error name="templateId" />
+                <flux:button wire:click="generateFullReport" variant="primary">{{ __('Generate report') }}</flux:button>
+                <flux:button wire:click="prepareReportCreate">{{ __('Start a blank draft') }}</flux:button>
+            </flux:card>
+        @endcan
         @if ($reportWorkflowFocus)
             <flux:card class="space-y-2">
                 <flux:heading size="sm">{{ $reportWorkflowFocus['label'] }}</flux:heading>
@@ -308,7 +322,7 @@
                             <flux:table.row :key="$report->id">
                                 <flux:table.cell variant="strong">
                                     <div class="flex items-center gap-2">
-                                        <flux:button variant="ghost" size="sm" wire:click="viewReport({{ $report->id }})">{{ $report->title }}</flux:button>
+                                        <flux:link :href="route('pls.reviews.reports.edit', [$review, $report])" wire:navigate>{{ $report->title }}</flux:link>
                                         <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($report->report_type->value) }}</flux:badge>
                                     </div>
                                     @if ($report->document)
@@ -453,6 +467,7 @@
                 @endif
                 @if ($viewingReport->document)
                     <flux:button :href="route('pls.reviews.documents.original', [$review, $viewingReport->document])" target="_blank">{{ __('Open linked document') }}</flux:button>
+                    <flux:button :href="route('pls.reviews.documents.show', [$review, $viewingReport->document])" wire:navigate>{{ __('Source details') }}</flux:button>
                 @endif
             </div>
         @endif

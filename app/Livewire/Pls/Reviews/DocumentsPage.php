@@ -422,7 +422,7 @@ class DocumentsPage extends Workspace
         $this->documentEditingId = (string) $document->id;
         $this->documentTitle = $document->title;
         $this->documentType = $document->document_type->value;
-        $this->documentStoragePath = $document->storage_path;
+        $this->documentStoragePath = (string) $document->storage_path;
         $this->documentMimeType = $document->mime_type ?? '';
         $this->documentFileSize = $document->file_size === null ? '' : (string) $document->file_size;
         $this->documentSummary = $document->summary ?? '';

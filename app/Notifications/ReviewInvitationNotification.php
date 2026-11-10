@@ -3,18 +3,26 @@
 namespace App\Notifications;
 
 use App\Domain\Reviews\PlsReviewInvitation;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Messages\MailMessage;
-use Illuminate\Notifications\Notification;
 
-class ReviewInvitationNotification extends Notification implements ShouldQueue
+class ReviewInvitationNotification extends ReviewMailNotification
 {
-    use Queueable;
+    public string $invitationToken = '';
 
-    public function __construct(
-        public PlsReviewInvitation $invitation,
-    ) {}
+    public function __construct(public PlsReviewInvitation $invitation)
+    {
+        $this->deliveryToken = (string) $invitation->mail_token;
+        $this->invitationToken = $invitation->token;
+        $this->afterCommit();
+    }
+
+    public function deliveryRecord(): ?Model
+    {
+        $record = PlsReviewInvitation::query()->whereKey($this->invitation->id)->where('mail_token', $this->deliveryToken)->where('token', $this->invitationToken)->first();
+
+        return $record?->isPending() ? $record : null;
+    }
 
     /**
      * @return list<string>
@@ -37,7 +45,7 @@ class ReviewInvitationNotification extends Notification implements ShouldQueue
                 'review' => $review->title,
                 'role' => $this->invitation->role->label(),
             ]))
-            ->action(__('Accept invitation'), route('pls.invitations.accept', ['token' => $this->invitation->token]))
+            ->action(__('Accept invitation'), route('pls.invitations.accept', ['token' => $this->invitationToken]))
             ->line(__('This invitation was sent to :email.', ['email' => $this->invitation->email]));
     }
 }

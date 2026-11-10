@@ -4,6 +4,8 @@ namespace App\Livewire\Pls\Reviews;
 
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
+use App\Domain\Reviews\Actions\CompletePlsReviewStep;
+use App\Domain\Reviews\Actions\ReopenPlsReviewStep;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Reviews\PlsReviewStep;
 use App\Domain\Reviews\Support\PlsReviewStepGuidance;
@@ -32,6 +34,27 @@ class WorkflowPage extends Workspace
             'readinessChecks' => $this->readinessChecks($review),
             'workspaceRecord' => $this->workspaceRecord($review),
         ], $review);
+    }
+
+    public function completeStep(int $stepId, CompletePlsReviewStep $action): void
+    {
+        $this->authorize('update', $this->review);
+        $step = $this->review->steps()->findOrFail($stepId);
+        $this->review = $action->complete($step);
+        $this->dispatch('review-workspace-updated');
+    }
+
+    public function reopenStep(int $stepId, ReopenPlsReviewStep $action): void
+    {
+        $this->authorize('update', $this->review);
+        $step = $this->review->steps()->findOrFail($stepId);
+        if (! $step->isTerminal()) {
+            $this->addError('step', __('Only a completed or skipped stage can be reopened.'));
+
+            return;
+        }
+        $this->review = $action->reopen($step);
+        $this->dispatch('review-workspace-updated');
     }
 
     public function prepareReviewEdit(): void

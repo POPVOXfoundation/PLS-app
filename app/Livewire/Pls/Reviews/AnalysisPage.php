@@ -509,12 +509,7 @@ class AnalysisPage extends Workspace
                                 ? __('Legislation')
                                 : ($isConsultationResult ? __('Consultation result') : ($isSubmission ? __('Written submission') : __('Evidence'))),
                             'matched_terms' => array_slice($matchedTerms, 0, 4),
-                            'route' => route(
-                                $isLegislation
-                                    ? 'pls.reviews.legislation'
-                                    : (($isConsultationResult || $isSubmission) ? 'pls.reviews.consultations' : 'pls.reviews.documents'),
-                                ['review' => $review],
-                            ),
+                            'route' => route('pls.reviews.documents.show', [$review, $document]),
                             'score' => count($matchedTerms),
                             'title' => $document->title,
                         ];

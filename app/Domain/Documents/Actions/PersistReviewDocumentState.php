@@ -4,6 +4,7 @@ namespace App\Domain\Documents\Actions;
 
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
+use Illuminate\Support\Str;
 
 class PersistReviewDocumentState
 {
@@ -11,6 +12,10 @@ class PersistReviewDocumentState
     {
         $metadata = $document->metadata ?? [];
 
+        data_set($metadata, 'extraction.run_id', (string) Str::uuid());
+        if (! $document->chunks()->exists()) {
+            unset($metadata['extraction']['textract_job_id'], $metadata['extraction']['page_coverage']);
+        }
         data_set($metadata, 'extraction.status', 'queued');
         data_set($metadata, 'extraction.error', null);
         data_set($metadata, 'extraction.queued_at', now()->toIso8601String());
@@ -141,6 +146,10 @@ class PersistReviewDocumentState
     {
         $metadata = $document->metadata ?? [];
 
+        data_set($metadata, 'extraction.run_id', (string) Str::uuid());
+        if (! $document->chunks()->exists()) {
+            unset($metadata['extraction']['textract_job_id'], $metadata['extraction']['page_coverage']);
+        }
         data_set($metadata, 'extraction.status', 'queued');
         data_set($metadata, 'extraction.poll_attempts', 0);
         data_set($metadata, 'extraction.error', null);
