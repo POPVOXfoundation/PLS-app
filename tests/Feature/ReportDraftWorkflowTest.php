@@ -4,11 +4,14 @@ use App\Ai\Agents\ReviewAssistantAgent;
 use App\Domain\Analysis\Finding;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
+use App\Domain\Legislation\Legislation;
+use App\Domain\Legislation\LegislationObjective;
 use App\Domain\Reporting\Actions\QueueReportDraft;
 use App\Domain\Reporting\Actions\UpdateReport;
 use App\Domain\Reporting\Report;
 use App\Domain\Reporting\Validation\UpdateReportValidator;
 use App\Domain\Reviews\PlsReview;
+use App\Domain\Stakeholders\ImplementingAgency;
 use App\Jobs\GenerateReviewReportDraft;
 use App\Livewire\Pls\Reviews\ReportEditorPage;
 use App\Models\User;
@@ -203,11 +206,47 @@ test('selected section generation preserves the rest of the saved report', funct
     $review = plsReview();
     $report = Report::factory()->create(['pls_review_id' => $review->id, 'status' => 'draft', 'content' => "## Scope\nOriginal scope\n\n## Findings\nOriginal findings", 'document_id' => null]);
     Livewire::test(ReportEditorPage::class, ['review' => $review, 'report' => $report])
-        ->set('sectionToRegenerate', 1)->call('regenerateSection')->assertHasNoErrors();
+        ->set('sectionToRegenerate', 1)->call('regenerateSection', $report->revision)->assertHasNoErrors();
     Bus::assertDispatched(GenerateReviewReportDraft::class, fn ($job): bool => $job->section === 1);
     $report->refresh();
     ReviewAssistantAgent::fake(["## Findings\nReplacement findings"]);
     app()->call([new GenerateReviewReportDraft($report->id, $report->generation_token, $report->revision, section: 1), 'handle']);
     expect($report->fresh()->content)->toBe("## Scope\nOriginal scope\n\n## Findings\nReplacement findings");
     expect($report->versions()->count())->toBe(2);
+});
+
+test('report context includes the linked legal baseline and excludes objectives from excluded legislation', function () {
+    $review = plsReview();
+    $report = Report::factory()->create(['pls_review_id' => $review->id, 'document_id' => null]);
+    $law = Legislation::factory()->create(['source_document_id' => null, 'title' => 'Public Services Act']);
+    $excludedDocument = Document::factory()->create(['pls_review_id' => $review->id, 'metadata' => ['source_review' => ['excluded' => true]]]);
+    $excludedLaw = Legislation::factory()->create(['source_document_id' => $excludedDocument->id, 'title' => 'Excluded law']);
+    $review->legislation()->attach([$law->id => ['relationship_type' => 'primary'], $excludedLaw->id => ['relationship_type' => 'related']]);
+    LegislationObjective::factory()->create(['pls_review_id' => $review->id, 'legislation_id' => $law->id, 'title' => 'Expand access']);
+    LegislationObjective::factory()->create(['pls_review_id' => $review->id, 'legislation_id' => $excludedLaw->id, 'title' => 'Excluded objective']);
+    ImplementingAgency::factory()->create(['pls_review_id' => $review->id, 'name' => 'Public Services Office']);
+
+    $context = json_decode(app(FullReviewReportContext::class)->build($report, null), true, flags: JSON_THROW_ON_ERROR);
+    expect($context['legislation'])->toHaveCount(1)
+        ->and($context['legislation'][0])->toMatchArray(['title' => 'Public Services Act', 'relationship_type' => 'primary'])
+        ->and($context['legislation_objectives'])->toHaveCount(1)
+        ->and($context['legislation_objectives'][0])->toMatchArray(['legislation_id' => $law->id, 'title' => 'Expand access'])
+        ->and($context['implementing_agencies'][0]['name'])->toBe('Public Services Office');
+});
+
+test('a stale section selection cannot regenerate a section of a newer revision', function () {
+    Bus::fake();
+    $review = plsReview();
+    $report = Report::factory()->create([
+        'pls_review_id' => $review->id, 'status' => 'draft', 'document_id' => null,
+        'content' => "## Scope\nScope text\n\n## Findings\nFindings text",
+    ]);
+    $revision = $report->revision;
+    $component = Livewire::test(ReportEditorPage::class, ['review' => $review, 'report' => $report])
+        ->assertSeeHtml('wire:click="regenerateSection('.$revision.')"')->set('sectionToRegenerate', 1);
+    $report->update(['revision' => $revision + 1, 'content' => "## Introduction\nNew section\n\n".$report->content]);
+
+    $component->call('regenerateSection', $revision)->assertHasErrors('generation');
+    Bus::assertNotDispatched(GenerateReviewReportDraft::class);
+    expect($report->fresh()->generation_status)->toBeNull();
 });

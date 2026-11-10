@@ -81,7 +81,17 @@ class ReportEditorPage extends Workspace
         $this->resetValidation();
     }
 
-    public function regenerate(QueueReportDraft $action, ?int $section = null): void
+    public function regenerate(QueueReportDraft $action): void
+    {
+        $this->queueGeneration($action);
+    }
+
+    public function regenerateSection(QueueReportDraft $action, int $revision): void
+    {
+        $this->queueGeneration($action, $this->sectionToRegenerate, $revision);
+    }
+
+    private function queueGeneration(QueueReportDraft $action, ?int $section = null, ?int $expectedRevision = null): void
     {
         $this->authorize('update', $this->review);
         if ($this->editing) {
@@ -90,15 +100,7 @@ class ReportEditorPage extends Workspace
             return;
         }
         $report = $this->review->reports()->findOrFail($this->reportId);
-        if ($section !== null && ! array_key_exists($section, GenerateReviewReportDraft::sections($report->content ?? ''))) {
-            abort(422);
-        }
-        $action->queue($this->review, $report, $report->generation_template_id, $section);
-    }
-
-    public function regenerateSection(QueueReportDraft $action): void
-    {
-        $this->regenerate($action, $this->sectionToRegenerate);
+        $action->queue($this->review, $report, $report->generation_template_id, $section, $expectedRevision);
     }
 
     public function finishEditing(): void

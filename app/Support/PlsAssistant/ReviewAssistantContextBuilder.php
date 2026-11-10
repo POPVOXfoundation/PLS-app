@@ -487,7 +487,10 @@ class ReviewAssistantContextBuilder
      */
     private function consultationFacts(PlsReview $review): array
     {
-        if ($review->consultations->isEmpty() && $review->submissions->isEmpty()) {
+        $documentIds = $review->documents->modelKeys();
+        $submissions = $review->submissions->filter(fn (Submission $submission): bool => $submission->document_id === null || in_array($submission->document_id, $documentIds, true));
+
+        if ($review->consultations->isEmpty() && $submissions->isEmpty()) {
             return ['No consultations or submissions are recorded yet.'];
         }
 
@@ -501,18 +504,18 @@ class ReviewAssistantContextBuilder
                 $completedCount,
                 $plannedCount,
             ),
-            'Submissions: '.$review->submissions->count(),
+            'Submissions: '.$submissions->count(),
             ...$this->formatList($review->consultations, fn (Consultation $consultation): string => sprintf(
                 '%s [%s]%s%s%s',
                 $consultation->title,
                 Str::headline($consultation->consultation_type->value),
                 $consultation->held_at ? ' Held: '.$consultation->held_at->toDateString() : ' Planned',
                 $consultation->summary ? ' Summary: '.$consultation->summary : '',
-                $this->consultationMaterialFacts($consultation),
+                $this->consultationMaterialFacts($consultation, $documentIds),
             )),
-            ...($review->submissions->isEmpty()
+            ...($submissions->isEmpty()
                 ? ['No submissions are logged yet.']
-                : $this->formatList($review->submissions, fn (Submission $submission): string => sprintf(
+                : $this->formatList($submissions, fn (Submission $submission): string => sprintf(
                     'Submission from %s%s',
                     $submission->stakeholder?->name ?? 'Unknown stakeholder',
                     $submission->summary ? ': '.$submission->summary : '',
@@ -520,17 +523,17 @@ class ReviewAssistantContextBuilder
         ];
     }
 
-    private function consultationMaterialFacts(Consultation $consultation): string
+    private function consultationMaterialFacts(Consultation $consultation, array $documentIds): string
     {
         if ($consultation->materials->isEmpty()) {
             return '';
         }
 
         $materials = $consultation->materials
-            ->map(function ($material): string {
+            ->map(function ($material) use ($documentIds): string {
                 $document = $material->document;
 
-                if ($document === null) {
+                if ($document === null || ! in_array($document->id, $documentIds, true)) {
                     return '';
                 }
 

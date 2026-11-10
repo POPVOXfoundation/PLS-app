@@ -14,16 +14,22 @@ use Throwable;
 
 class QueueReportDraft
 {
-    public function queue(PlsReview $review, ?Report $report = null, ?int $templateId = null, ?int $section = null): Report
+    public function queue(PlsReview $review, ?Report $report = null, ?int $templateId = null, ?int $section = null, ?int $expectedRevision = null): Report
     {
         if ($templateId !== null && ! $review->documents()->whereKey($templateId)->where(fn ($query) => $query->where('metadata->purpose', 'report_template')->orWhere('document_type', DocumentType::ReportingTemplate->value))->exists()) {
             throw ValidationException::withMessages(['templateId' => __('Choose a report template from this review.')]);
         }
-        $report = DB::transaction(function () use ($review, $report, $templateId): Report {
+        $report = DB::transaction(function () use ($review, $report, $templateId, $section, $expectedRevision): Report {
             $current = $report === null ? $review->reports()->create([
                 'title' => Str::limit(__('Draft report: :title', ['title' => $review->title]), 255, ''),
                 'report_type' => 'draft_report', 'status' => 'draft',
             ]) : $review->reports()->lockForUpdate()->findOrFail($report->id);
+            if ($expectedRevision !== null && $current->revision !== $expectedRevision) {
+                throw ValidationException::withMessages(['generation' => __('The report changed. Select a section from the current draft and try again.')]);
+            }
+            if ($section !== null && ! array_key_exists($section, GenerateReviewReportDraft::sections($current->content ?? ''))) {
+                abort(422);
+            }
             if ($current->status->value !== 'draft') {
                 throw ValidationException::withMessages(['generation' => __('Start a new draft to generate report text. Published and archived reports are preserved.')]);
             }

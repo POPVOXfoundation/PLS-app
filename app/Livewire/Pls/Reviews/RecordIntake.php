@@ -8,6 +8,7 @@ use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Domain\Reviews\PlsReview;
 use App\Support\Documents\ReviewRecordSpreadsheet;
+use App\Support\Documents\ReviewUpload;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\DB;
@@ -66,7 +67,7 @@ class RecordIntake extends Component
             'spreadsheet' => ['nullable', 'file', 'mimes:csv,txt,xlsx', 'max:2048'],
             'title' => ['string', 'max:255'], 'url' => ['nullable', 'url:http,https', 'max:2048'], 'type' => [Rule::enum(DocumentType::class)],
         ]);
-        $rows = $this->spreadsheet ? app(ReviewRecordSpreadsheet::class)->read($this->spreadsheet->getRealPath(), strtolower($this->spreadsheet->getClientOriginalExtension())) : [];
+        $rows = $this->spreadsheet ? app(ReviewRecordSpreadsheet::class)->readUpload($this->spreadsheet) : [];
         $names = array_map(fn ($file): string => $file->getClientOriginalName(), $this->files);
         if ($this->spreadsheet === null) {
             foreach ($names as $name) {
@@ -82,7 +83,8 @@ class RecordIntake extends Component
 
             return;
         }
-        $seen = [];
+        $seenHashes = [];
+        $seenUrls = [];
         $existing = $this->review->documents()->get();
         foreach ($rows as $index => $row) {
             $row = array_merge(array_fill_keys(ReviewRecordSpreadsheet::COLUMNS, ''), $row);
@@ -101,10 +103,15 @@ class RecordIntake extends Component
             if ($fileIndex === null && $row['url'] === '') {
                 $errors[] = __('Provide a matching file or source URL.');
             }
-            $hash = $fileIndex === null ? '' : hash_file('sha256', $this->files[$fileIndex]->getRealPath());
-            $key = $hash !== '' ? $hash : $row['url'];
-            $duplicate = isset($seen[$key]) || $existing->contains(fn (Document $document): bool => ($hash !== '' && data_get($document->metadata, 'content_sha256') === $hash) || ($row['url'] !== '' && data_get($document->metadata, 'source_url') === $row['url']));
-            $seen[$key] = true;
+            $hash = $fileIndex === null ? '' : ReviewUpload::sha256($this->files[$fileIndex]);
+            $duplicate = isset($seenHashes[$hash]) || isset($seenUrls[$row['url']])
+                || $existing->contains(fn (Document $document): bool => ($hash !== '' && data_get($document->metadata, 'content_sha256') === $hash) || ($row['url'] !== '' && data_get($document->metadata, 'source_url') === $row['url']));
+            if ($hash !== '') {
+                $seenHashes[$hash] = true;
+            }
+            if ($row['url'] !== '') {
+                $seenUrls[$row['url']] = true;
+            }
             $this->preview[] = ['row' => $index + 1, 'data' => $row, 'file_index' => $fileIndex, 'hash' => $hash, 'duplicate' => $duplicate, 'errors' => $errors];
         }
         if ($this->spreadsheet && array_diff($names, array_column($rows, 'filename'))) {
@@ -128,29 +135,20 @@ class RecordIntake extends Component
 
                     return;
                 }
-                try {
-                    foreach ($this->preview as $item) {
-                        $row = $item['data'];
-                        $metadata = ['source_url' => $row['url'], 'source_date' => $row['date'], 'organisation' => $row['organisation'], 'notes' => $row['notes'], 'content_sha256' => $item['hash'], 'added_by' => auth()->id()];
-                        if ($row['type'] === DocumentType::ReportingTemplate->value) {
-                            $metadata['purpose'] = 'report_template';
-                        }
-                        $document = $item['file_index'] === null
-                                ? $this->review->documents()->create(['title' => $row['title'], 'document_type' => $row['type'], 'metadata' => $metadata])
-                                : app(StoreReviewDocumentMetadata::class)->storeDocument(['pls_review_id' => $this->review->id, 'title' => $row['title'], 'document_type' => $row['type'], 'file' => $this->files[$item['file_index']], 'storage_path' => null, 'metadata' => $metadata]);
-                        $stored[] = $document;
-                        if ($row['stakeholder'] !== '' && $row['type'] === DocumentType::ConsultationSubmission->value) {
-                            $stakeholder = $this->review->stakeholders()->firstOrCreate(['name' => $row['stakeholder']], ['stakeholder_type' => 'Unclassified']);
-                            $this->review->submissions()->create(['document_id' => $document->id, 'stakeholder_id' => $stakeholder->id, 'submitted_at' => $row['date'] ?: null, 'summary' => $row['notes'] ?: null]);
-                        }
+                foreach ($this->preview as $item) {
+                    $row = $item['data'];
+                    $metadata = ['source_url' => $row['url'], 'source_date' => $row['date'], 'organisation' => $row['organisation'], 'notes' => $row['notes'], 'content_sha256' => $item['hash'], 'added_by' => auth()->id()];
+                    if ($row['type'] === DocumentType::ReportingTemplate->value) {
+                        $metadata['purpose'] = 'report_template';
                     }
-                } catch (Throwable $exception) {
-                    foreach ($stored as $document) {
-                        if (filled($document->storage_path)) {
-                            Storage::disk(data_get($document->metadata, 'disk', config('filesystems.default')))->delete($document->storage_path);
-                        }
+                    $document = $item['file_index'] === null
+                            ? $this->review->documents()->create(['title' => $row['title'], 'document_type' => $row['type'], 'metadata' => $metadata])
+                            : app(StoreReviewDocumentMetadata::class)->storeDocument(['pls_review_id' => $this->review->id, 'title' => $row['title'], 'document_type' => $row['type'], 'file' => $this->files[$item['file_index']], 'storage_path' => null, 'metadata' => $metadata], preserveUpload: true);
+                    $stored[] = $document;
+                    if ($row['stakeholder'] !== '' && $row['type'] === DocumentType::ConsultationSubmission->value) {
+                        $stakeholder = $this->review->stakeholders()->firstOrCreate(['name' => $row['stakeholder']], ['stakeholder_type' => 'Unclassified']);
+                        $this->review->submissions()->create(['document_id' => $document->id, 'stakeholder_id' => $stakeholder->id, 'submitted_at' => $row['date'] ?: null, 'summary' => $row['notes'] ?: null]);
                     }
-                    throw $exception;
                 }
             });
         } catch (Throwable $exception) {

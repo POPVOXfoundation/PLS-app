@@ -3,6 +3,7 @@
 namespace App\Support\Reports;
 
 use App\Domain\Documents\Document;
+use App\Domain\Legislation\Legislation;
 use App\Domain\Reporting\Report;
 use App\Support\PlsAssistant\ReviewAssistantContextBuilder;
 use LengthException;
@@ -19,8 +20,18 @@ class FullReviewReportContext
             throw new \DomainException('The selected template has no available text. Upload and process a template before retrying.');
         }
         $review->loadMissing('findings.citations.document.chunks', 'findings.citations.finding', 'consultations.materials.document');
+        $legislation = $review->legislation->reject(fn (Legislation $law): bool => $law->sourceDocument !== null && ! $documents->contains('id', $law->source_document_id));
         $record = [
             'review' => $review->only(['id', 'title', 'description']),
+            'legislation' => $legislation->map(fn (Legislation $law): array => [
+                ...$law->only(['id', 'title', 'short_title', 'legislation_type', 'date_enacted']),
+                'relationship_type' => $law->pivot->relationship_type,
+                'summary' => $law->source_document_id === null || $law->sourceDocument !== null ? $law->summary : null,
+            ])->values()->all(),
+            'legislation_objectives' => $review->legislationObjectives
+                ->whereIn('legislation_id', $legislation->modelKeys())
+                ->map->only(['legislation_id', 'title', 'description'])->values()->all(),
+            'implementing_agencies' => $review->implementingAgencies->map->only(['name', 'agency_type'])->all(),
             'findings' => $review->findings->map(fn ($finding): array => [
                 ...$finding->only(['id', 'title', 'finding_type', 'summary', 'detail']),
                 'passages' => $finding->citations->filter(fn ($citation): bool => $documents->contains('id', $citation->document_id))->map(fn ($citation): array => [

@@ -8,6 +8,7 @@ use App\Livewire\Pls\Reviews\RecordIntake;
 use App\Livewire\Pls\Reviews\SourcePage;
 use App\Models\User;
 use App\Support\Documents\ReviewRecordSpreadsheet;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
@@ -47,11 +48,16 @@ test('source links remain unread references and can receive an original without 
     expect($document->storage_path)->toBeNull()->and($document->originalUrl())->toBe('https://example.com/record');
     expect($document->processingLabel())->toContain('Reference only');
     Bus::assertNothingDispatched();
+    config()->set('filesystems.default', 'tmp-for-tests');
     Livewire::test(SourcePage::class, ['review' => $review, 'document' => $document])
         ->set('sourceUpload', UploadedFile::fake()->createWithContent('record.txt', 'Complete original source text.'))
         ->call('attachOriginal')->assertHasNoErrors();
     expect($review->documents()->count())->toBe(1);
-    expect($document->fresh()->storage_path)->not->toBeNull();
+    $document->refresh();
+    expect($document->storage_path)->not->toBeNull()
+        ->and($document->file_size)->toBe(strlen('Complete original source text.'))
+        ->and($document->metadata['content_sha256'])->toBe(hash('sha256', 'Complete original source text.'));
+    expect(Storage::disk('tmp-for-tests')->get($document->storage_path))->toBe('Complete original source text.');
     Bus::assertDispatched(ProcessReviewDocument::class);
 });
 
@@ -131,17 +137,68 @@ test('oversized metadata batches are rejected before records are written', funct
     expect($review->documents()->count())->toBe(0);
 });
 
-test('an observer failure after uploading rolls back the batch and removes the allocated original file', function () {
+test('a later row failure rolls back originals and allows a same disk retry', function () {
     $review = plsReview();
-    Event::listen('eloquent.created: '.Document::class, function (): void {
-        throw new RuntimeException('Synthetic database failure after original storage');
+    config()->set('filesystems.default', 'tmp-for-tests');
+    $component = Livewire::test(RecordIntake::class, ['review' => $review])->set('files', [
+        UploadedFile::fake()->createWithContent('first.txt', 'First original'),
+        UploadedFile::fake()->createWithContent('second.txt', 'Second original'),
+    ])->call('previewImport')->assertHasNoErrors();
+
+    Event::listen('eloquent.created: '.Document::class, function (Document $document): void {
+        if ($document->title === 'second') {
+            throw new RuntimeException('Synthetic database failure after original storage');
+        }
     });
     try {
-        Livewire::test(RecordIntake::class, ['review' => $review])->set('files', [UploadedFile::fake()->createWithContent('rollback.txt', 'Source content')])
-            ->call('previewImport')->call('import')->assertHasErrors('files');
+        $component->call('import')->assertHasErrors('files');
         expect($review->documents()->count())->toBe(0);
-        expect(Storage::disk('local')->allFiles('pls/reviews'))->toBe([]);
+        expect(Storage::disk('tmp-for-tests')->allFiles('pls/reviews'))->toBe([]);
+        Bus::assertNothingDispatched();
     } finally {
         Event::forget('eloquent.created: '.Document::class);
     }
+
+    $component->call('import')->assertHasNoErrors();
+    expect($review->documents()->count())->toBe(2);
+    Bus::assertDispatchedTimes(ProcessReviewDocument::class, 2);
+});
+
+test('intake reads a spreadsheet and hashes originals when the upload disk exposes only object keys', function () {
+    $disk = Storage::fake('tmp-for-tests');
+    Storage::set('tmp-for-tests', new class($disk->getDriver(), $disk->getAdapter()) extends FilesystemAdapter
+    {
+        public function path($path)
+        {
+            return 'remote-object-key/'.$path;
+        }
+    });
+
+    $review = plsReview();
+    Livewire::test(RecordIntake::class, ['review' => $review])
+        ->set('files', [UploadedFile::fake()->createWithContent('remote.txt', 'Remote original')])
+        ->set('spreadsheet', recordCsv([['title' => 'Remote record', 'filename' => 'remote.txt']]))
+        ->call('previewImport')->assertHasNoErrors()->call('import')->assertHasNoErrors();
+
+    $document = $review->documents()->sole();
+    expect($document->title)->toBe('Remote record')
+        ->and($document->metadata['content_sha256'])->toBe(hash('sha256', 'Remote original'));
+    expect(Storage::disk('local')->get($document->storage_path))->toBe('Remote original');
+});
+
+test('files with different hashes and the same URL require batch duplicate confirmation', function () {
+    $review = plsReview();
+    $sheet = recordCsv([
+        ['title' => 'First record', 'filename' => 'first.txt', 'url' => 'https://example.com/shared'],
+        ['title' => 'Second record', 'filename' => 'second.txt', 'url' => 'https://example.com/shared'],
+    ]);
+    $component = Livewire::test(RecordIntake::class, ['review' => $review])->set('files', [
+        UploadedFile::fake()->createWithContent('first.txt', 'First original'),
+        UploadedFile::fake()->createWithContent('second.txt', 'Second original'),
+    ])->set('spreadsheet', $sheet)->call('previewImport')->assertSet('preview.1.duplicate', true)
+        ->call('import')->assertHasErrors('files');
+
+    expect($review->documents()->count())->toBe(0);
+    $component->set('allowDuplicates', true)->call('import')->assertHasNoErrors();
+    expect($review->documents()->count())->toBe(2);
 });

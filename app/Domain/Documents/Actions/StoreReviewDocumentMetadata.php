@@ -5,6 +5,7 @@ namespace App\Domain\Documents\Actions;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Validation\StoreDocumentMetadataValidator;
 use App\Domain\Reviews\PlsReview;
+use App\Support\Documents\ReviewUpload;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
@@ -27,7 +28,7 @@ class StoreReviewDocumentMetadata
     /**
      * @param  array<string, mixed>  $input
      */
-    public function storeDocument(array $input): Document
+    public function storeDocument(array $input, bool $preserveUpload = false): Document
     {
         $validated = $this->validator->validate($input);
         $uploadedFile = $validated['file'] ?? null;
@@ -38,10 +39,10 @@ class StoreReviewDocumentMetadata
         $uploadedFileSize = $this->uploadedFileSize($uploadedFile);
 
         if ($uploadedFile instanceof TemporaryUploadedFile) {
-            $storedPath = $uploadedFile->store(
-                sprintf('pls/reviews/%d/documents', $validated['pls_review_id']),
-                ['disk' => $storageDisk],
-            );
+            $directory = sprintf('pls/reviews/%d/documents', $validated['pls_review_id']);
+            $storedPath = $preserveUpload
+                ? ReviewUpload::copyTo($uploadedFile, $storageDisk, $directory)
+                : $uploadedFile->store($directory, ['disk' => $storageDisk]);
             if (! is_string($storedPath) || $storedPath === '') {
                 throw new \RuntimeException('The uploaded source could not be stored.');
             }

@@ -1,11 +1,15 @@
 <?php
 
 use App\Ai\Agents\ReviewAssistantAgent;
+use App\Domain\Consultations\Consultation;
+use App\Domain\Consultations\ConsultationMaterial;
+use App\Domain\Consultations\Submission;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Livewire\Pls\Reviews\AssistantSidebar;
 use App\Livewire\Pls\Reviews\StakeholdersPage;
 use App\Models\User;
+use App\Support\PlsAssistant\ReviewAssistantContextBuilder;
 use App\Support\PlsAssistant\StakeholderSuggestionNormalizer;
 use Livewire\Livewire;
 
@@ -70,3 +74,22 @@ test('feedback assets are served locally rather than relying on external icon ho
     }
     expect(config('volet.icon'))->toBe('/images/feedback/chat.svg');
 });
+
+test('assistant consultation facts omit excluded documents and their linked submissions', function (string $workspace) {
+    $review = plsReview();
+    $consultation = Consultation::factory()->create(['pls_review_id' => $review->id]);
+    $excluded = Document::factory()->create([
+        'pls_review_id' => $review->id, 'title' => 'Excluded material title', 'summary' => 'Excluded material summary',
+        'metadata' => ['source_review' => ['excluded' => true]],
+    ]);
+    $included = Document::factory()->create(['pls_review_id' => $review->id, 'title' => 'Included material title']);
+    foreach ([$excluded, $included] as $document) {
+        ConsultationMaterial::factory()->create(['consultation_id' => $consultation->id, 'document_id' => $document->id]);
+    }
+    Submission::factory()->create(['pls_review_id' => $review->id, 'document_id' => $excluded->id, 'summary' => 'Excluded submission summary']);
+    Submission::factory()->create(['pls_review_id' => $review->id, 'document_id' => null, 'summary' => 'Independent submission summary']);
+
+    $context = app(ReviewAssistantContextBuilder::class)->build($review, $workspace)['context'];
+    expect($context)->toContain('Included material title', 'Independent submission summary')
+        ->not->toContain('Excluded material title', 'Excluded material summary', 'Excluded submission summary');
+})->with(['consultations', 'analysis', 'reports']);

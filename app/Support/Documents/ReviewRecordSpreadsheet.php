@@ -3,6 +3,7 @@
 namespace App\Support\Documents;
 
 use Illuminate\Validation\ValidationException;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Spatie\SimpleExcel\SimpleExcelReader;
 use Throwable;
 use ZipArchive;
@@ -10,6 +11,30 @@ use ZipArchive;
 class ReviewRecordSpreadsheet
 {
     public const COLUMNS = ['title', 'filename', 'url', 'type', 'date', 'organisation', 'stakeholder', 'notes'];
+
+    /** @return list<array<string, string>> */
+    public function readUpload(TemporaryUploadedFile $upload): array
+    {
+        $scratch = tmpfile();
+        if ($scratch === false) {
+            throw ValidationException::withMessages(['spreadsheet' => __('The spreadsheet could not be opened.')]);
+        }
+
+        try {
+            $stream = ReviewUpload::open($upload);
+            try {
+                if (stream_copy_to_stream($stream, $scratch) !== $upload->getSize()) {
+                    throw ValidationException::withMessages(['spreadsheet' => __('The spreadsheet could not be read.')]);
+                }
+            } finally {
+                fclose($stream);
+            }
+
+            return $this->read(stream_get_meta_data($scratch)['uri'], strtolower($upload->getClientOriginalExtension()));
+        } finally {
+            fclose($scratch);
+        }
+    }
 
     /** @return list<array<string, string>> */
     public function read(string $path, string $extension): array

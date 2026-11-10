@@ -7,6 +7,7 @@ use App\Domain\Documents\Actions\QueueReviewSourceProcessing;
 use App\Domain\Documents\Document;
 use App\Domain\Legislation\Enums\LegislationType;
 use App\Domain\Reviews\PlsReview;
+use App\Support\Documents\ReviewUpload;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -51,18 +52,31 @@ class SourcePage extends Workspace
         $this->authorize('update', $this->review);
         $this->validate(['sourceUpload' => ['required', 'file', 'mimes:pdf,docx,txt,md', 'max:51200']]);
         $disk = (string) config('filesystems.default');
-        $path = $this->sourceUpload->store('pls/reviews/'.$this->review->id.'/documents', ['disk' => $disk]);
-        if (! is_string($path) || $path === '') {
+        $uploadMetadata = [
+            'disk' => $disk,
+            'original_name' => $this->sourceUpload->getClientOriginalName(),
+            'content_sha256' => ReviewUpload::sha256($this->sourceUpload),
+        ];
+        $mimeType = $this->sourceUpload->getMimeType();
+        $fileSize = $this->sourceUpload->getSize();
+        try {
+            $path = ReviewUpload::copyTo($this->sourceUpload, $disk, 'pls/reviews/'.$this->review->id.'/documents');
+        } catch (\RuntimeException $exception) {
+            report($exception);
             $this->addError('sourceUpload', __('The original could not be stored. Please retry.'));
 
             return;
         }
         try {
-            $document = DB::transaction(function () use ($disk, $path): Document {
+            $document = DB::transaction(function () use ($uploadMetadata, $path, $mimeType, $fileSize): Document {
                 $document = $this->review->documents()->lockForUpdate()->findOrFail($this->sourceId);
                 abort_if(filled($document->storage_path), 409, __('This source already has an original file.'));
-                $metadata = array_merge($document->metadata ?? [], ['disk' => $disk, 'original_name' => $this->sourceUpload->getClientOriginalName(), 'content_sha256' => hash_file('sha256', $this->sourceUpload->getRealPath())]);
-                $document->update(['storage_path' => $path, 'mime_type' => $this->sourceUpload->getMimeType(), 'file_size' => $this->sourceUpload->getSize(), 'metadata' => $metadata]);
+                $document->update([
+                    'storage_path' => $path,
+                    'mime_type' => $mimeType,
+                    'file_size' => $fileSize,
+                    'metadata' => array_merge($document->metadata ?? [], $uploadMetadata),
+                ]);
 
                 return $document;
             });

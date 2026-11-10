@@ -26,7 +26,7 @@
                         <flux:select.option :value="$index">{{ __('Section :number', ['number' => $index + 1]) }} · {{ \Illuminate\Support\Str::limit(strtok($section, "\n"), 90) }}</flux:select.option>
                     @endforeach
                 </flux:select>
-                <flux:button wire:click="regenerateSection" wire:confirm="{{ __('Replace only this section from the current record? Saved versions will remain available.') }}">{{ __('Generate selected section') }}</flux:button>
+                <flux:button wire:click="regenerateSection({{ $report->revision }})" wire:confirm="{{ __('Replace only this section from the current record? Saved versions will remain available.') }}">{{ __('Generate selected section') }}</flux:button>
             </div>
         @endif
     @endcan
