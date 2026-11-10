@@ -15,6 +15,8 @@ class GenerateReviewReportDraft implements ShouldQueue
 {
     use Queueable;
 
+    private const PROVIDER_TIMEOUT_SECONDS = 200;
+
     public int $tries = 1;
 
     public int $timeout = 230;
@@ -61,7 +63,7 @@ class GenerateReviewReportDraft implements ShouldQueue
             if (mb_strlen((string) $agent->instructions()) + mb_strlen($prompt) > (int) config('pls_assistant.max_context_characters', 300000)) {
                 throw new \LengthException('The complete report request exceeds the size limit, including its instructions and selected section. No source text was silently shortened.');
             }
-            $content = trim((string) $agent->prompt($prompt));
+            $content = trim((string) $agent->prompt($prompt, timeout: self::PROVIDER_TIMEOUT_SECONDS));
             if ($content === '' || mb_strlen($content) > 200000) {
                 throw new \DomainException('The model returned an empty or oversized draft. Existing report text was preserved.');
             }

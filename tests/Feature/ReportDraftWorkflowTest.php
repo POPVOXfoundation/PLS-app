@@ -20,6 +20,7 @@ use App\Support\Reports\ReportDocumentExporter;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Str;
+use Laravel\Ai\Prompts\AgentPrompt;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -61,6 +62,7 @@ test('report generation stores a complete saved draft and version', function () 
     } else {
         app()->call([$job, 'handle']);
     }
+    ReviewAssistantAgent::assertPrompted(fn (AgentPrompt $prompt): bool => $prompt->timeout === 200 && $prompt->timeout < $job->timeout);
     expect($report->fresh()->generation_status)->toBe('completed');
     expect($report->fresh()->content)->toContain('Provisional result');
     expect($report->versions()->count())->toBe(2);
