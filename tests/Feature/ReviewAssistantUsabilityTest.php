@@ -7,6 +7,8 @@ use App\Domain\Consultations\Submission;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
 use App\Livewire\Pls\Reviews\AssistantSidebar;
+use App\Livewire\Pls\Reviews\ConsultationsPage;
+use App\Livewire\Pls\Reviews\LegislationPage;
 use App\Livewire\Pls\Reviews\StakeholdersPage;
 use App\Models\User;
 use App\Support\PlsAssistant\ReviewAssistantContextBuilder;
@@ -93,3 +95,63 @@ test('assistant consultation facts omit excluded documents and their linked subm
     expect($context)->toContain('Included material title', 'Independent submission summary')
         ->not->toContain('Excluded material title', 'Excluded material summary', 'Excluded submission summary');
 })->with(['consultations', 'analysis', 'reports']);
+
+test('the consultation summary button sends only included titles and stops when all results are excluded', function () {
+    $review = plsReview();
+    $consultation = Consultation::factory()->create(['pls_review_id' => $review->id]);
+    $included = Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Public hearing transcript',
+        'metadata' => ['document_analysis' => ['status' => 'saved']],
+    ]);
+    $excluded = Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'title' => 'Confidential interview with named witness',
+        'metadata' => ['source_review' => ['excluded' => true], 'document_analysis' => ['status' => 'saved', 'key_themes' => ['Confidential theme']]],
+    ]);
+    foreach ([$included, $excluded] as $document) {
+        ConsultationMaterial::factory()->create(['consultation_id' => $consultation->id, 'document_id' => $document->id]);
+    }
+
+    $component = Livewire::test(ConsultationsPage::class, ['review' => $review])
+        ->assertSee('Summarize results')
+        ->assertDontSee('Confidential theme')
+        ->call('askAssistantForConsultationInsights', $consultation->id)
+        ->assertDispatched('assistant-prompt-requested', fn (string $event, array $parameters): bool => str_contains($parameters['prompt'], $included->title)
+            && ! str_contains($parameters['prompt'], $excluded->title));
+
+    $included->update(['metadata' => array_merge($included->metadata, ['source_review' => ['excluded' => true]])]);
+
+    $component->call('askAssistantForConsultationInsights', $consultation->id)
+        ->assertNotDispatched('assistant-prompt-requested')
+        ->assertDontSee('Summarize results')
+        ->assertSee('No consultation results are included for assistant summaries.')
+        ->assertSee($excluded->title);
+});
+
+test('the legislation source shortcut rechecks exclusions when the assistant request is sent', function () {
+    $review = plsReview();
+    $source = Document::factory()->create(['pls_review_id' => $review->id, 'document_type' => DocumentType::LegislationText, 'metadata' => []]);
+
+    $component = Livewire::test(LegislationPage::class, ['review' => $review])
+        ->call('viewSourceInsight', $source->id, 'Reporting duties')
+        ->call('askAssistantAboutSourceInsight')
+        ->assertDispatched('assistant-prompt-requested')
+        ->assertDispatched('assistant-open-requested');
+
+    $source->update(['metadata' => ['source_review' => ['excluded' => true]]]);
+
+    $component->call('askAssistantAboutSourceInsight')
+        ->assertNotDispatched('assistant-prompt-requested')
+        ->assertNotDispatched('assistant-open-requested')
+        ->assertSet('sourceInsightIncluded', false);
+});
+
+test('the assistant sidebar keeps its response controls within the Alpine attribute', function () {
+    $component = Livewire::test(AssistantSidebar::class, ['review' => plsReview(), 'workspaceKey' => 'workflow']);
+    $document = new DOMDocument;
+    $document->loadHTML($component->html(), LIBXML_NOERROR | LIBXML_NOWARNING);
+    $sidebar = (new DOMXPath($document))->query('//*[@data-assistant-sidebar]')->item(0);
+
+    expect($sidebar?->getAttribute('x-data'))->toContain('querySelectorAll', 'const latest = responses[responses.length - 1]');
+});

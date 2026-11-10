@@ -596,18 +596,19 @@
                 </div>
 
                 <div class="flex flex-wrap gap-2">
-                    <flux:button
-                        size="sm"
-                        variant="primary"
-                        icon="chat-bubble-left-right"
-                        wire:click="askAssistantAboutSourceInsight"
-                        wire:loading.attr="disabled"
-                        wire:target="askAssistantAboutSourceInsight"
-                        x-on:click="$dispatch('assistant-open-requested', { prompt: @js($sourceInsightAssistantPrompt) }); window.Flux?.modal?.('source-insight')?.close?.()"
-                    >
-                        <span wire:loading.remove wire:target="askAssistantAboutSourceInsight">{{ __('Ask assistant') }}</span>
-                        <span wire:loading wire:target="askAssistantAboutSourceInsight">{{ __('Sending...') }}</span>
-                    </flux:button>
+                    @if ($sourceInsightIncluded)
+                        <flux:button
+                            size="sm"
+                            variant="primary"
+                            icon="chat-bubble-left-right"
+                            wire:click="askAssistantAboutSourceInsight"
+                            wire:loading.attr="disabled"
+                            wire:target="askAssistantAboutSourceInsight"
+                        >
+                            <span wire:loading.remove wire:target="askAssistantAboutSourceInsight">{{ __('Ask assistant') }}</span>
+                            <span wire:loading wire:target="askAssistantAboutSourceInsight">{{ __('Sending...') }}</span>
+                        </flux:button>
+                    @endif
 
                     @if ($sourceInsightOriginalUrl !== '')
                         <flux:button size="sm" variant="subtle" icon="arrow-top-right-on-square" :href="$sourceInsightOriginalUrl" target="_blank" rel="noopener">

@@ -3,6 +3,7 @@
 namespace App\Support\Reports;
 
 use App\Domain\Documents\Document;
+use App\Domain\Legislation\Enums\LegislationType;
 use App\Domain\Legislation\Legislation;
 use App\Domain\Reporting\Report;
 use App\Support\PlsAssistant\ReviewAssistantContextBuilder;
@@ -23,11 +24,20 @@ class FullReviewReportContext
         $legislation = $review->legislation->reject(fn (Legislation $law): bool => $law->sourceDocument !== null && ! $documents->contains('id', $law->source_document_id));
         $record = [
             'review' => $review->only(['id', 'title', 'description']),
-            'legislation' => $legislation->map(fn (Legislation $law): array => [
-                ...$law->only(['id', 'title', 'short_title', 'legislation_type', 'date_enacted']),
-                'relationship_type' => $law->pivot->relationship_type,
-                'summary' => $law->source_document_id === null || $law->sourceDocument !== null ? $law->summary : null,
-            ])->values()->all(),
+            'legislation' => $legislation->map(function (Legislation $law): array {
+                $classification = data_get($law->sourceDocument?->metadata, 'source_review.classification', $law->legislation_type->value);
+                $fields = $law->only(['id', 'title', 'short_title', 'date_enacted']);
+                if (in_array($classification, [LegislationType::Bill->value, LegislationType::ParliamentaryDebate->value], true)) {
+                    unset($fields['date_enacted']);
+                }
+
+                return [
+                    ...$fields,
+                    'legislation_type' => $classification,
+                    'relationship_type' => $law->pivot->relationship_type,
+                    'summary' => $law->source_document_id === null || $law->sourceDocument !== null ? $law->summary : null,
+                ];
+            })->values()->all(),
             'legislation_objectives' => $review->legislationObjectives
                 ->whereIn('legislation_id', $legislation->modelKeys())
                 ->map->only(['legislation_id', 'title', 'description'])->values()->all(),

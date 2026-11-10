@@ -250,3 +250,25 @@ test('a stale section selection cannot regenerate a section of a newer revision'
     Bus::assertNotDispatched(GenerateReviewReportDraft::class);
     expect($report->fresh()->generation_status)->toBeNull();
 });
+
+test('report legislation uses review classification and removes enactment dates from bills and debates', function (string $classification) {
+    $review = plsReview();
+    $report = Report::factory()->create(['pls_review_id' => $review->id, 'document_id' => null]);
+    $source = Document::factory()->create([
+        'pls_review_id' => $review->id,
+        'document_type' => DocumentType::LegislationText,
+        'metadata' => ['source_review' => ['classification' => $classification]],
+    ]);
+    $law = Legislation::factory()->create(['source_document_id' => $source->id, 'legislation_type' => 'act', 'date_enacted' => '2024-04-12']);
+    $act = Legislation::factory()->create(['source_document_id' => null, 'legislation_type' => 'act', 'date_enacted' => '2024-05-13']);
+    $review->legislation()->attach([$law->id => ['relationship_type' => 'related'], $act->id => ['relationship_type' => 'primary']]);
+
+    $context = json_decode(app(FullReviewReportContext::class)->build($report, null), true, flags: JSON_THROW_ON_ERROR);
+    $legislation = collect($context['legislation'])->keyBy('id');
+
+    expect($legislation[$law->id]['legislation_type'])->toBe($classification)
+        ->and($legislation[$law->id])->not->toHaveKey('date_enacted')
+        ->and($context['sources'][0]['classification'])->toBe($classification)
+        ->and($legislation[$act->id]['legislation_type'])->toBe('act')
+        ->and($legislation[$act->id]['date_enacted'])->toContain('2024-05-13');
+})->with(['bill', 'parliamentary_debate']);

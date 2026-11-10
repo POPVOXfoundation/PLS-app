@@ -278,19 +278,25 @@ class ConsultationsPage extends Workspace
 
     public function askAssistantForConsultationInsights(int $consultationId): void
     {
+        $this->authorize('view', $this->review);
+
         $consultation = $this->loadReview()->consultations
             ->firstWhere('id', $consultationId);
 
-        if (! $consultation instanceof Consultation || $consultation->materials->isEmpty()) {
+        if (! $consultation instanceof Consultation) {
             return;
         }
 
-        $sourceTitles = $consultation->materials
+        $sourceTitles = $this->includedConsultationMaterials($consultation)
             ->map(fn (ConsultationMaterial $material): string => $material->document?->title ?? '')
             ->filter()
             ->unique()
             ->values()
             ->implode('; ');
+
+        if ($sourceTitles === '') {
+            return;
+        }
 
         $this->dispatch('assistant-prompt-requested', prompt: sprintf(
             'Using only the uploaded results linked to the consultation "%s" (%s), draft a concise, source-grounded summary of what this consultation is revealing. Separate recurring themes, areas of agreement or difference, and gaps in perspective. Do not infer public opinion or representativeness beyond the uploaded material.',
@@ -562,12 +568,14 @@ class ConsultationsPage extends Workspace
     public function consultationInsight(Consultation $consultation): array
     {
         $materials = $consultation->materials->filter(fn (ConsultationMaterial $material): bool => $material->document instanceof Document);
-        $analyzedMaterials = $materials->filter(fn (ConsultationMaterial $material): bool => data_get($material->document->metadata, 'document_analysis.status') === 'saved');
+        $includedMaterials = $this->includedConsultationMaterials($consultation);
+        $analyzedMaterials = $includedMaterials->filter(fn (ConsultationMaterial $material): bool => data_get($material->document->metadata, 'document_analysis.status') === 'saved');
 
         return [
             'count' => $materials->count(),
             'analyzed_count' => $analyzedMaterials->count(),
-            'processing_count' => $materials->count() - $analyzedMaterials->count(),
+            'processing_count' => $includedMaterials->count() - $analyzedMaterials->count(),
+            'included_count' => $includedMaterials->count(),
             'themes' => $analyzedMaterials
                 ->flatMap(fn (ConsultationMaterial $material): array => data_get($material->document->metadata, 'document_analysis.key_themes', []))
                 ->filter(fn (mixed $theme): bool => is_string($theme) && trim($theme) !== '')
@@ -577,6 +585,13 @@ class ConsultationsPage extends Workspace
                 ->values()
                 ->all(),
         ];
+    }
+
+    private function includedConsultationMaterials(Consultation $consultation): Collection
+    {
+        return $consultation->materials->filter(fn (ConsultationMaterial $material): bool => $material->document instanceof Document
+            && (int) $material->document->pls_review_id === (int) $this->review->id
+            && ! data_get($material->document->metadata, 'source_review.excluded', false));
     }
 
     private function consultationTitleForMethod(ConsultationType $method, int $methodCount): string

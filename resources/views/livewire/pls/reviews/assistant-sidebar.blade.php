@@ -38,7 +38,7 @@
                         return;
                     }
 
-                    const responses = this.$refs.messages.querySelectorAll('[data-message-role="assistant"]');
+                    const responses = this.$refs.messages.querySelectorAll('[data-message-role=assistant]');
                     const latest = responses[responses.length - 1];
 
                     if (latest) {

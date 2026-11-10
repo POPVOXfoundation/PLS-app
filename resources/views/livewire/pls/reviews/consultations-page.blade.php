@@ -108,6 +108,10 @@
                                             @endforeach
                                         </div>
 
+                                        @if ($consultationInsight['included_count'] === 0)
+                                            <flux:text class="mt-3">{{ __('No consultation results are included for assistant summaries.') }}</flux:text>
+                                        @endif
+
                                         @if ($consultationInsight['themes'] !== [])
                                             <div class="mt-4">
                                                 <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Emerging themes from uploaded results') }}</div>
