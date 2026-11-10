@@ -148,6 +148,10 @@
                         <div class="flex items-center justify-between gap-3 bg-zinc-50/70 px-4 py-3 dark:bg-zinc-900/50">
                             <div class="min-w-0 flex-1">
                                 <span class="block text-sm font-semibold text-zinc-900 dark:text-white">{{ $finding->title }}</span>
+                                @foreach ($finding->citations()->with(['document.chunks', 'finding'])->get() as $citation)
+                                    <flux:link :href="route('pls.reviews.documents.show', [$review, $citation->document])" wire:navigate>{{ __('Source: :title', ['title' => $citation->document->title]) }}</flux:link>
+                                    <flux:text>{{ $citation->isCurrent() ? __('Passage checked against current text') : __('Source support needs rechecking') }}</flux:text>
+                                @endforeach
                             </div>
 
                             <div class="flex shrink-0 items-center gap-2">

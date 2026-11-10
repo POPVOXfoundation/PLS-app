@@ -154,6 +154,7 @@ test('viewer can access but cannot edit a review', function () {
 
 test('owner can add contributor by existing user email', function () {
     Notification::fake();
+    config()->set('mail.default', 'smtp');
 
     $owner = User::factory()->reviewer()->create();
     $invitee = User::factory()->reviewer()->create();
@@ -178,6 +179,7 @@ test('owner can add contributor by existing user email', function () {
 
 test('owner can add viewer by existing user email', function () {
     Notification::fake();
+    config()->set('mail.default', 'smtp');
 
     $owner = User::factory()->reviewer()->create();
     $invitee = User::factory()->reviewer()->create();
@@ -201,6 +203,7 @@ test('owner can add viewer by existing user email', function () {
 
 test('owner can invite unknown email as contributor', function () {
     Notification::fake();
+    config()->set('mail.default', 'smtp');
 
     $owner = User::factory()->reviewer()->create();
     $review = plsReview([
@@ -226,6 +229,7 @@ test('owner can invite unknown email as contributor', function () {
 
 test('owner can invite unknown email as viewer', function () {
     Notification::fake();
+    config()->set('mail.default', 'smtp');
 
     $owner = User::factory()->reviewer()->create();
     $review = plsReview([
@@ -269,6 +273,7 @@ test('duplicate existing collaborator is rejected', function () {
 
 test('duplicate pending invite is rejected', function () {
     Notification::fake();
+    config()->set('mail.default', 'smtp');
 
     $owner = User::factory()->reviewer()->create();
     $review = plsReview([
@@ -384,6 +389,7 @@ test('owner can remove collaborator membership', function () {
 
 test('owner can revoke pending invitation', function () {
     Notification::fake();
+    config()->set('mail.default', 'smtp');
 
     $owner = User::factory()->reviewer()->create();
     $review = plsReview([

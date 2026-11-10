@@ -9,9 +9,7 @@ use App\Domain\Reviews\PlsReview;
 
 class StoreReport
 {
-    public function __construct(private StoreReportValidator $validator)
-    {
-    }
+    public function __construct(private StoreReportValidator $validator) {}
 
     /**
      * @param  array<string, mixed>  $input
@@ -23,6 +21,7 @@ class StoreReport
         Report::query()->create([
             'pls_review_id' => $validated['pls_review_id'],
             'title' => $validated['title'],
+            'content' => $validated['content'] ?? null,
             'report_type' => $validated['report_type'],
             'status' => $validated['status'],
             'document_id' => $validated['document_id'] ?? null,

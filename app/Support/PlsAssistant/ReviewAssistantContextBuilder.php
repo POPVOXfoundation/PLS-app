@@ -71,6 +71,8 @@ class ReviewAssistantContextBuilder
     {
         $workspaceKey = $this->resolveWorkspaceKey($workspaceKey);
         $review = $this->hydrateReview($review);
+        $review->setRelation('documents', $review->documents->reject(fn (Document $document): bool => (bool) data_get($document->metadata, 'source_review.excluded', false)));
+        $review->setRelation('legislation', $review->legislation->reject(fn (Legislation $law): bool => (int) $law->sourceDocument?->pls_review_id === (int) $review->id && (bool) data_get($law->sourceDocument?->metadata, 'source_review.excluded', false)));
         $playbook = $this->playbooks->tab($workspaceKey);
         $structuredContext = $this->structuredContext($review, $workspaceKey, $prompt);
 
@@ -96,7 +98,7 @@ class ReviewAssistantContextBuilder
             'jurisdiction.country',
             'memberships.user',
             'steps',
-            'legislation.sourceDocument.chunks',
+            'legislation.sourceDocument' => fn ($query) => $query->where('pls_review_id', $review->id)->with('chunks'),
             'legislationObjectives',
             'documents.chunks',
             'stakeholders.submissions',
@@ -182,10 +184,10 @@ class ReviewAssistantContextBuilder
             ],
             'workflow' => [
                 'progress' => sprintf(
-                    'Step %d of %d (%d%%)',
+                    'Step %d of %d in the methodology; %d stages confirmed. This does not measure substantive work or source coverage.',
                     $review->current_step_number,
                     max($review->steps->count(), 1),
-                    $review->progressPercentage(),
+                    $review->steps->filter(fn ($step): bool => $step->isTerminal())->count(),
                 ),
                 'current_step' => $review->currentStepTitle(),
                 'current_step_status' => $currentStep?->statusLabel(),
@@ -411,19 +413,19 @@ class ReviewAssistantContextBuilder
             ...$this->formatList($review->legislation, fn (Legislation $legislation): string => sprintf(
                 '%s [%s]%s%s%s',
                 $legislation->title,
-                Str::headline($legislation->legislation_type->value),
+                Str::headline((string) ((int) $legislation->sourceDocument?->pls_review_id === (int) $review->id ? data_get($legislation->sourceDocument?->metadata, 'source_review.classification', $legislation->legislation_type->value) : $legislation->legislation_type->value)),
                 $legislation->pivot?->relationship_type ? ' Relationship: '.Str::headline((string) $legislation->pivot->relationship_type) : '',
                 $legislation->summary ? ' Summary: '.$legislation->summary : '',
-                $this->legislationExcerpts($legislation),
+                $this->legislationExcerpts($legislation, $review),
             )),
         ];
     }
 
-    private function legislationExcerpts(Legislation $legislation): string
+    private function legislationExcerpts(Legislation $legislation, PlsReview $review): string
     {
         $document = $legislation->sourceDocument;
 
-        if (! $document instanceof Document) {
+        if (! $document instanceof Document || (int) $document->pls_review_id !== (int) $review->id || (bool) data_get($document->metadata, 'source_review.excluded', false)) {
             return '';
         }
 
@@ -485,7 +487,10 @@ class ReviewAssistantContextBuilder
      */
     private function consultationFacts(PlsReview $review): array
     {
-        if ($review->consultations->isEmpty() && $review->submissions->isEmpty()) {
+        $documentIds = $review->documents->modelKeys();
+        $submissions = $review->submissions->filter(fn (Submission $submission): bool => $submission->document_id === null || in_array($submission->document_id, $documentIds, true));
+
+        if ($review->consultations->isEmpty() && $submissions->isEmpty()) {
             return ['No consultations or submissions are recorded yet.'];
         }
 
@@ -499,18 +504,18 @@ class ReviewAssistantContextBuilder
                 $completedCount,
                 $plannedCount,
             ),
-            'Submissions: '.$review->submissions->count(),
+            'Submissions: '.$submissions->count(),
             ...$this->formatList($review->consultations, fn (Consultation $consultation): string => sprintf(
                 '%s [%s]%s%s%s',
                 $consultation->title,
                 Str::headline($consultation->consultation_type->value),
                 $consultation->held_at ? ' Held: '.$consultation->held_at->toDateString() : ' Planned',
                 $consultation->summary ? ' Summary: '.$consultation->summary : '',
-                $this->consultationMaterialFacts($consultation),
+                $this->consultationMaterialFacts($consultation, $documentIds),
             )),
-            ...($review->submissions->isEmpty()
+            ...($submissions->isEmpty()
                 ? ['No submissions are logged yet.']
-                : $this->formatList($review->submissions, fn (Submission $submission): string => sprintf(
+                : $this->formatList($submissions, fn (Submission $submission): string => sprintf(
                     'Submission from %s%s',
                     $submission->stakeholder?->name ?? 'Unknown stakeholder',
                     $submission->summary ? ': '.$submission->summary : '',
@@ -518,17 +523,17 @@ class ReviewAssistantContextBuilder
         ];
     }
 
-    private function consultationMaterialFacts(Consultation $consultation): string
+    private function consultationMaterialFacts(Consultation $consultation, array $documentIds): string
     {
         if ($consultation->materials->isEmpty()) {
             return '';
         }
 
         $materials = $consultation->materials
-            ->map(function ($material): string {
+            ->map(function ($material) use ($documentIds): string {
                 $document = $material->document;
 
-                if ($document === null) {
+                if ($document === null || ! in_array($document->id, $documentIds, true)) {
                     return '';
                 }
 

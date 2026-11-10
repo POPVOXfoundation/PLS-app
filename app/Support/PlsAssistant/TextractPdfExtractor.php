@@ -112,6 +112,10 @@ class TextractPdfExtractor implements AssistantSourceTextExtractor
         $nextToken = null;
         $statusMessage = null;
         $lines = collect();
+        $totalPages = 0;
+        $pagesWithText = [];
+        $warnings = [];
+        $partialSuccess = false;
 
         do {
             $payload = ['JobId' => $jobId];
@@ -147,6 +151,14 @@ class TextractPdfExtractor implements AssistantSourceTextExtractor
                 );
             }
 
+            $totalPages = max($totalPages, (int) data_get($response->toArray(), 'DocumentMetadata.Pages', 0));
+            $partialSuccess = $partialSuccess || $status === 'PARTIAL_SUCCESS';
+            $warnings = array_merge($warnings, (array) $response->get('Warnings'));
+            foreach ((array) $response->get('Blocks') as $block) {
+                if (($block['BlockType'] ?? null) === 'LINE' && filled($block['Text'] ?? null) && isset($block['Page'])) {
+                    $pagesWithText[] = (int) $block['Page'];
+                }
+            }
             $lines = $lines->merge($this->lineBlocks($response));
             $nextToken = $response->get('NextToken');
         } while ($nextToken !== null);
@@ -171,6 +183,12 @@ class TextractPdfExtractor implements AssistantSourceTextExtractor
             metadata: [
                 'textract_job_id' => $jobId,
                 'status_message' => $statusMessage,
+                'page_coverage' => [
+                    'total_pages' => $totalPages,
+                    'pages_with_text' => collect($pagesWithText)->unique()->sort()->values()->all(),
+                    'job_status' => $partialSuccess ? 'PARTIAL_SUCCESS' : $status,
+                    'warnings' => $warnings,
+                ],
             ],
         );
     }

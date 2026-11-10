@@ -225,7 +225,7 @@ test('documents prompts are grounded in the current review record', function () 
     });
 });
 
-test('documents prompts exclude legislation source documents from document facts and review grounding', function () {
+test('documents prompts retain legislation grounding alongside ordinary document facts', function () {
     $review = plsReview([
         'title' => 'Separated grounding review',
     ]);
@@ -263,7 +263,7 @@ test('documents prompts exclude legislation source documents from document facts
     ReviewAssistantAgent::assertPrompted(function (AgentPrompt $prompt) {
         expect((string) $prompt->agent->instructions())
             ->toContain('Implementation Memo')
-            ->not->toContain('Legislation source upload');
+            ->toContain('Legislation source upload');
 
         return $prompt->contains('Summarize the uploaded documents.');
     });
@@ -508,7 +508,7 @@ test('assistant can show explicit uncertainty when the current record is insuffi
         ->assertSee('I do not have sufficient information to answer this from the current review record.');
 });
 
-test('assistant responses are normalized before display', function () {
+test('assistant preserves markdown and renders it safely before display', function () {
     $review = plsReview([
         'title' => 'Assistant formatting review',
     ]);
@@ -529,12 +529,12 @@ test('assistant responses are normalized before display', function () {
         ],
         [
             'role' => 'assistant',
-            'content' => "Status: Pending\n\nWhat this means in practice:\n- Link the governing law.\n- Upload the briefing pack.",
+            'content' => "**Status:** Pending\n\n**What this means in practice:**\n- Link the governing law.\n- Upload the briefing pack.",
         ],
     ]);
 
     $component
-        ->assertSee('Status: Pending')
+        ->assertSeeHtml('<strong>Status:</strong> Pending')
         ->assertSee('What this means in practice:')
         ->assertSee('Link the governing law.')
         ->assertSee('Upload the briefing pack.')
@@ -677,6 +677,7 @@ test('mixed grounding keeps global jurisdiction and review layers distinct', fun
     $document = Document::factory()->create([
         'pls_review_id' => $review->id,
         'title' => 'Implementation Memo',
+        'document_type' => DocumentType::ImplementationReport,
         'summary' => 'The current review record shows one ministry has delayed implementation by six months.',
     ]);
 

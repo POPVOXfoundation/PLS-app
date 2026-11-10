@@ -7,6 +7,7 @@ use App\Domain\Reviews\PlsReview;
 use App\Support\PlsAssistant\ReviewAssistantContextBuilder;
 use App\Support\PlsAssistant\ReviewAssistantRefusalGuard;
 use App\Support\PlsAssistant\ReviewConversationResolver;
+use App\Support\Reports\ReportDocumentExporter;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\DB;
@@ -84,6 +85,21 @@ class AssistantSidebar extends Component
         $this->dispatch('assistant-message-added');
 
         $context = $this->contextBuilder()->build($this->review, $this->workspaceKey, $prompt);
+        if ($this->refusalGuard()->navigationAnswer($this->review, $prompt) === null && mb_strlen($context['context']) > (int) config('pls_assistant.max_context_characters', 300000)) {
+            $this->assistantInput = $prompt;
+            $this->assistantError = __('The full source text is too large for one assistant request. No AI request was sent; legislation was not silently shortened. Ask the review owner to split the material into smaller reviews.');
+
+            if ($sendProvisionalFindingsToInbox) {
+                $this->dispatch('provisional-findings-failed')->to(AnalysisPage::class);
+            }
+
+            if ($sendReportOutlineToWorkspace) {
+                $this->dispatch('report-outline-failed')->to(ReportsPage::class);
+            }
+
+            return;
+        }
+
         $agent = $this->assistantAgent($context);
 
         try {
@@ -94,7 +110,7 @@ class AssistantSidebar extends Component
                 $context['playbook_version'],
             );
         } catch (Throwable $exception) {
-            $this->failExchangeStorage($exception, $sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace);
+            $this->failExchangeStorage($exception, $sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace, $prompt);
 
             return;
         }
@@ -110,7 +126,7 @@ class AssistantSidebar extends Component
             try {
                 $exchangeStored = $this->persistSyntheticAssistantExchange($agent, $conversationId, $prompt, $refusal, $context['playbook_version']);
             } catch (Throwable $exception) {
-                $this->failExchangeStorage($exception, $sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace);
+                $this->failExchangeStorage($exception, $sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace, $prompt);
 
                 return;
             }
@@ -137,6 +153,7 @@ class AssistantSidebar extends Component
         } catch (Throwable $exception) {
             report($exception);
 
+            $this->assistantInput = $prompt;
             $this->assistantError = __('The assistant is unavailable right now. Check the AI provider configuration or try again.');
 
             if ($sendProvisionalFindingsToInbox) {
@@ -155,7 +172,7 @@ class AssistantSidebar extends Component
         try {
             $exchangeStored = $this->storeExchangeIfConversationStillExists($conversationId, $agent, $prompt, $response, $context['playbook_version']);
         } catch (Throwable $exception) {
-            $this->failExchangeStorage($exception, $sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace);
+            $this->failExchangeStorage($exception, $sendProvisionalFindingsToInbox, $sendReportOutlineToWorkspace, $prompt);
 
             return;
         }
@@ -172,6 +189,15 @@ class AssistantSidebar extends Component
         $this->sendReportOutlineToWorkspace($sendReportOutlineToWorkspace, $this->messageContentForDisplay('assistant', (string) $response));
 
         $this->dispatch('assistant-message-added', focus: 'response');
+    }
+
+    /** @return array{answer: string, detail: string} */
+    public function formattedAnswer(string $content): array
+    {
+        $parts = preg_split('/\n\s*\n/', trim($content), 2) ?: [''];
+        $formatter = app(ReportDocumentExporter::class);
+
+        return ['answer' => $formatter->safeHtml($parts[0]), 'detail' => isset($parts[1]) ? $formatter->safeHtml($parts[1]) : ''];
     }
 
     public function sendPrompt(string $prompt, bool $provisionalFindings = false, bool $reportOutline = false): void
@@ -348,16 +374,7 @@ class AssistantSidebar extends Component
 
     private function normalizeAssistantMessage(string $content): string
     {
-        $normalized = str($content)
-            ->replace('**', '')
-            ->replace('__', '')
-            ->replaceMatches('/^#{1,6}\s*/m', '')
-            ->replaceMatches('/^\s*[-*]\s+/m', '- ')
-            ->replaceMatches('/^\s*\d+\.\s+/m', '- ')
-            ->trim()
-            ->toString();
-
-        return preg_replace("/\n{3,}/", "\n\n", $normalized) ?? $normalized;
+        return trim($content);
     }
 
     /**
@@ -543,10 +560,11 @@ class AssistantSidebar extends Component
      * The local user message stays in the chat so it can be resent. The conversation id is
      * not assigned and nothing is reloaded from the database, which has just failed.
      */
-    private function failExchangeStorage(Throwable $exception, bool $sendProvisionalFindingsToInbox, bool $sendReportOutlineToWorkspace): void
+    private function failExchangeStorage(Throwable $exception, bool $sendProvisionalFindingsToInbox, bool $sendReportOutlineToWorkspace, string $prompt): void
     {
         report($exception);
 
+        $this->assistantInput = $prompt;
         $this->assistantError = __('The assistant could not save this message. Try again.');
 
         if ($sendProvisionalFindingsToInbox) {

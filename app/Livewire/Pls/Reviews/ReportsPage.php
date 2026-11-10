@@ -6,6 +6,7 @@ use App\Domain\Documents\Actions\PersistReviewDocumentState;
 use App\Domain\Documents\Actions\StoreReviewDocumentMetadata;
 use App\Domain\Documents\Document;
 use App\Domain\Documents\Enums\DocumentType;
+use App\Domain\Reporting\Actions\QueueReportDraft;
 use App\Domain\Reporting\Actions\StoreGovernmentResponse;
 use App\Domain\Reporting\Actions\StoreReport;
 use App\Domain\Reporting\Actions\UpdateReport;
@@ -19,9 +20,11 @@ use App\Jobs\ProcessReviewDocument;
 use App\Support\Toast;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
@@ -52,6 +55,18 @@ class ReportsPage extends Workspace
 
     public string $reportTitle = '';
 
+    public string $generationTemplateId = '';
+
+    public string $reportContent = '';
+
+    #[Locked]
+    public int $reportRevision = 0;
+
+    #[Locked]
+    public ?int $viewingReportId = null;
+
+    public bool $showViewReportModal = false;
+
     public string $reportType = ReportType::DraftReport->value;
 
     public string $reportStatus = ReportStatus::Draft->value;
@@ -81,6 +96,9 @@ class ReportsPage extends Workspace
      */
     public ?array $reportOutline = null;
 
+    #[Locked]
+    public string $reportOutlineContent = '';
+
     public function mount(PlsReview $review): void
     {
         parent::mount($review);
@@ -95,6 +113,7 @@ class ReportsPage extends Workspace
 
         return $this->renderWorkspaceView('livewire.pls.reviews.reports-page', [
             'review' => $review,
+            'viewingReport' => $this->viewingReportId === null ? null : $review->reports->firstWhere('id', $this->viewingReportId),
             'reportTypes' => ReportType::cases(),
             'reportStatuses' => ReportStatus::cases(),
             'governmentResponseStatuses' => GovernmentResponseStatus::cases(),
@@ -231,6 +250,7 @@ class ReportsPage extends Workspace
     #[On('report-outline-generated')]
     public function receiveReportOutline(string $content): void
     {
+        $this->reportOutlineContent = '';
         $this->reportOutline = $this->parseReportOutline($content, $this->loadReview());
         $this->awaitingReportOutline = false;
         $this->reportOutlineError = null;
@@ -261,6 +281,17 @@ class ReportsPage extends Workspace
 
         $this->prepareReportCreate(ReportType::DraftReport->value, ReportStatus::Draft->value);
         $this->reportTitle = $this->reportOutline['title'];
+        $this->reportContent = $this->reportOutlineContent !== '' ? $this->reportOutlineContent : $this->reportOutline['title']."\n\n".collect($this->reportOutline['sections'])->map(
+            fn (array $section): string => $section['title']."\n".$section['purpose']."\n\nDraw on: ".$section['material']."\nLimitations: ".$section['limitations'],
+        )->implode("\n\n");
+    }
+
+    public function generateFullReport(QueueReportDraft $action): void
+    {
+        $this->authorizeReviewMutation();
+        $this->validate(['generationTemplateId' => ['nullable', 'integer']]);
+        $report = $action->queue($this->review, templateId: $this->generationTemplateId === '' ? null : (int) $this->generationTemplateId);
+        $this->redirectRoute('pls.reviews.reports.edit', ['review' => $this->review, 'report' => $report], navigate: true);
     }
 
     public function requestFindingsSectionDraft(): void
@@ -316,6 +347,7 @@ class ReportsPage extends Workspace
             $this->review = $action->store([
                 'pls_review_id' => $this->review->id,
                 'title' => $this->reportTitle,
+                'content' => $this->reportContent,
                 'report_type' => $this->reportType,
                 'status' => $status,
                 'document_id' => $this->blankToNull($this->reportDocumentId) === null ? null : (int) $this->reportDocumentId,
@@ -324,6 +356,7 @@ class ReportsPage extends Workspace
         } catch (ValidationException $exception) {
             $this->mapValidationErrors($exception, [
                 'title' => 'reportTitle',
+                'content' => 'reportContent',
                 'report_type' => 'reportType',
                 'status' => 'reportStatus',
                 'document_id' => 'reportDocumentId',
@@ -342,6 +375,14 @@ class ReportsPage extends Workspace
         ));
     }
 
+    public function viewReport(int $reportId): void
+    {
+        $this->authorize('view', $this->review);
+        $report = $this->review->reports()->findOrFail($reportId);
+        $this->viewingReportId = $report->id;
+        $this->showViewReportModal = true;
+    }
+
     public function startEditingReport(int $reportId): void
     {
         $this->authorizeReviewMutation();
@@ -356,6 +397,8 @@ class ReportsPage extends Workspace
 
         $this->reportEditingId = (string) $report->id;
         $this->reportTitle = $report->title;
+        $this->reportContent = $report->content ?? '';
+        $this->reportRevision = $report->revision;
         $this->reportType = $report->report_type->value;
         $this->reportStatus = $report->status->value;
         $this->reportDocumentId = $report->document_id === null ? '' : (string) $report->document_id;
@@ -364,6 +407,7 @@ class ReportsPage extends Workspace
         $this->resetValidation([
             'reportEditingId',
             'reportTitle',
+            'reportContent',
             'reportType',
             'reportStatus',
             'reportDocumentId',
@@ -380,8 +424,10 @@ class ReportsPage extends Workspace
         try {
             $this->review = $action->update([
                 'report_id' => $this->reportEditingId,
+                'expected_revision' => $this->reportRevision,
                 'pls_review_id' => $this->review->id,
                 'title' => $this->reportTitle,
+                'content' => $this->reportContent,
                 'report_type' => $this->reportType,
                 'status' => $this->reportStatus,
                 'document_id' => $this->blankToNull($this->reportDocumentId) === null ? null : (int) $this->reportDocumentId,
@@ -391,6 +437,7 @@ class ReportsPage extends Workspace
             $this->mapValidationErrors($exception, [
                 'report_id' => 'reportEditingId',
                 'title' => 'reportTitle',
+                'content' => 'reportContent',
                 'report_type' => 'reportType',
                 'status' => 'reportStatus',
                 'document_id' => 'reportDocumentId',
@@ -909,9 +956,11 @@ class ReportsPage extends Workspace
             return $this->bestPracticeReportOutline($review);
         }
 
+        $this->reportOutlineContent = $content;
+
         return [
             'title' => $title,
-            'sections' => array_slice($outlineSections, 0, 8),
+            'sections' => $outlineSections,
         ];
     }
 
@@ -1029,7 +1078,7 @@ class ReportsPage extends Workspace
     }
 
     /**
-     * @param  EloquentCollection<int, \Illuminate\Database\Eloquent\Model>  $records
+     * @param  EloquentCollection<int, Model>  $records
      */
     private function outlineRecordTitles(EloquentCollection $records, string $emptyMessage): string
     {
@@ -1141,9 +1190,11 @@ class ReportsPage extends Workspace
 
     private function resetReportForm(): void
     {
+        $this->reportRevision = 0;
         $this->reset([
             'reportEditingId',
             'reportTitle',
+            'reportContent',
             'reportDocumentId',
             'reportPublishedAt',
         ]);
@@ -1153,6 +1204,7 @@ class ReportsPage extends Workspace
 
         $this->resetValidation([
             'reportTitle',
+            'reportContent',
             'reportType',
             'reportStatus',
             'reportDocumentId',

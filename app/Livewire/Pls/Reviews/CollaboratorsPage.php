@@ -5,13 +5,20 @@ namespace App\Livewire\Pls\Reviews;
 use App\Domain\Reviews\Enums\PlsReviewMembershipRole;
 use App\Domain\Reviews\PlsReview;
 use App\Domain\Reviews\PlsReviewMembership;
+use App\Domain\Reviews\ReviewActivity;
 use App\Models\User;
+use App\Notifications\ReviewAccessGrantedNotification;
 use App\Notifications\ReviewInvitationNotification;
+use App\Notifications\ReviewMailNotification;
 use App\Support\Toast;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Throwable;
 
 class CollaboratorsPage extends Workspace
 {
@@ -42,6 +49,8 @@ class CollaboratorsPage extends Workspace
         return $this->renderWorkspaceView('livewire.pls.reviews.collaborators-page', [
             'review' => $review,
             'collaboratorRoleOptions' => [PlsReviewMembershipRole::Contributor, PlsReviewMembershipRole::Viewer],
+            'invitations' => $review->invitations()->whereNull('accepted_at')->latest()->get(),
+            'activities' => ReviewActivity::query()->where('pls_review_id', $review->id)->with('user')->latest('id')->limit(100)->get(),
             'canManageCollaborators' => auth()->user()?->can('manageCollaborators', $review) ?? false,
         ], $review);
     }
@@ -82,6 +91,8 @@ class CollaboratorsPage extends Workspace
     {
         $this->authorize('manageCollaborators', $this->review);
 
+        $this->inviteCollaboratorEmail = mb_strtolower(trim($this->inviteCollaboratorEmail));
+
         validator(
             [
                 'inviteCollaboratorEmail' => $this->inviteCollaboratorEmail,
@@ -101,7 +112,7 @@ class CollaboratorsPage extends Workspace
             ],
         )->validate();
 
-        $existingUser = User::where('email', $this->inviteCollaboratorEmail)->first();
+        $existingUser = User::whereRaw('LOWER(email) = ?', [$this->inviteCollaboratorEmail])->first();
 
         if ($existingUser) {
             $alreadyMember = $this->review->memberships()->where('user_id', $existingUser->id)->exists();
@@ -112,11 +123,14 @@ class CollaboratorsPage extends Workspace
                 return;
             }
 
-            $this->review->memberships()->create([
+            $membership = $this->review->memberships()->create([
                 'user_id' => $existingUser->id,
                 'role' => $this->inviteCollaboratorRole,
                 'invited_by' => auth()->id(),
+                'mail_status' => 'queued', 'mail_token' => (string) Str::uuid(), 'mail_requested_at' => now(),
             ]);
+
+            $this->queueNotice(new ReviewAccessGrantedNotification($this->review, $membership->id), $existingUser);
 
             $toast = Toast::success(
                 __('Access granted'),
@@ -124,7 +138,7 @@ class CollaboratorsPage extends Workspace
             );
         } else {
             $alreadyInvited = $this->review->pendingInvitations()
-                ->where('email', $this->inviteCollaboratorEmail)
+                ->whereRaw('LOWER(email) = ?', [$this->inviteCollaboratorEmail])
                 ->exists();
 
             if ($alreadyInvited) {
@@ -135,12 +149,13 @@ class CollaboratorsPage extends Workspace
 
             $invitation = $this->review->invitations()->create([
                 'email' => $this->inviteCollaboratorEmail,
+                'expires_at' => now()->addDays(14),
                 'role' => $this->inviteCollaboratorRole,
                 'invited_by' => auth()->id(),
+                'mail_status' => 'queued', 'mail_token' => (string) Str::uuid(), 'mail_requested_at' => now(),
             ]);
 
-            Notification::route('mail', $invitation->email)
-                ->notify(new ReviewInvitationNotification($invitation));
+            $this->queueNotice(new ReviewInvitationNotification($invitation), Notification::route('mail', $invitation->email));
 
             $toast = Toast::success(
                 __('Invitation sent'),
@@ -156,6 +171,37 @@ class CollaboratorsPage extends Workspace
         $this->resetValidation(['inviteCollaboratorEmail', 'inviteCollaboratorRole']);
 
         $this->dispatchWorkspaceToast($toast);
+    }
+
+    private function queueNotice(ReviewMailNotification $notice, User|AnonymousNotifiable $recipient): void
+    {
+        try {
+            $recipient->notify($notice);
+        } catch (Throwable $exception) {
+            report($exception);
+            $notice->failed($exception);
+            $this->addError('invitationMail', __('Access changes were saved, but the mail could not be queued. Use resend or copy the invitation link.'));
+        }
+    }
+
+    public function resendInvitation(int $invitationId): void
+    {
+        $this->authorize('manageCollaborators', $this->review);
+        $invitation = DB::transaction(function () use ($invitationId) {
+            $invitation = $this->review->invitations()->whereNull('accepted_at')->lockForUpdate()->findOrFail($invitationId);
+            $invitation->update(['token' => Str::random(64), 'expires_at' => now()->addDays(14), 'mail_status' => 'queued', 'mail_token' => (string) Str::uuid(), 'mail_requested_at' => now(), 'mail_accepted_at' => null]);
+
+            return $invitation;
+        });
+        $this->queueNotice(new ReviewInvitationNotification($invitation), Notification::route('mail', $invitation->email));
+    }
+
+    public function resendAccessNotice(int $membershipId): void
+    {
+        $this->authorize('manageCollaborators', $this->review);
+        $membership = $this->review->memberships()->with('user')->findOrFail($membershipId);
+        $membership->update(['mail_status' => 'queued', 'mail_token' => (string) Str::uuid(), 'mail_requested_at' => now(), 'mail_accepted_at' => null]);
+        $this->queueNotice(new ReviewAccessGrantedNotification($this->review, $membership->id), $membership->user);
     }
 
     public function updateCollaboratorRole(int $membershipId): void
@@ -214,7 +260,7 @@ class CollaboratorsPage extends Workspace
     {
         $this->authorize('manageCollaborators', $this->review);
 
-        $invitation = $this->review->pendingInvitations()->whereKey($invitationId)->first();
+        $invitation = $this->review->invitations()->whereNull('accepted_at')->whereKey($invitationId)->first();
 
         if ($invitation === null) {
             return;

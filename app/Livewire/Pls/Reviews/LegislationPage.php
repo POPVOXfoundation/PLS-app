@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Locked;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 
@@ -73,7 +74,10 @@ class LegislationPage extends Workspace
 
     public string $sourceInsightOriginalUrl = '';
 
-    public string $sourceInsightAssistantPrompt = '';
+    #[Locked]
+    public ?int $sourceInsightDocumentId = null;
+
+    public bool $sourceInsightIncluded = false;
 
     /**
      * @var list<array{chunk_index: int, snippet: string, matched_terms: list<string>}>
@@ -324,20 +328,29 @@ class LegislationPage extends Workspace
             'document' => $document,
         ]);
         $this->sourceInsightSnippets = $this->sourceInsightSnippets($document, $query);
-        $this->sourceInsightAssistantPrompt = $this->assistantPromptForSourceInsight($document, $query, $kind);
+        $this->sourceInsightDocumentId = $document->id;
+        $this->sourceInsightIncluded = ! data_get($document->metadata, 'source_review.excluded', false);
 
         $this->dispatch('modal-show', name: 'source-insight');
     }
 
     public function askAssistantAboutSourceInsight(): void
     {
-        if (trim($this->sourceInsightAssistantPrompt) === '') {
+        $this->authorize('view', $this->review);
+
+        $document = $this->review->documents()
+            ->where('document_type', DocumentType::LegislationText->value)
+            ->find($this->sourceInsightDocumentId);
+        if ($document === null || data_get($document->metadata, 'source_review.excluded', false)) {
+            $this->sourceInsightIncluded = false;
+
             return;
         }
 
+        $prompt = $this->assistantPromptForSourceInsight($document, $this->sourceInsightQuery, $this->sourceInsightKind);
         $this->dispatch('modal-close', name: 'source-insight');
-        $this->dispatch('assistant-prompt-requested', prompt: $this->sourceInsightAssistantPrompt)
-            ->to(AssistantSidebar::class);
+        $this->dispatch('assistant-open-requested', prompt: $prompt);
+        $this->dispatch('assistant-prompt-requested', prompt: $prompt)->to(AssistantSidebar::class);
     }
 
     public function retrySourceAnalysis(int $documentId): void
@@ -686,6 +699,10 @@ class LegislationPage extends Workspace
             $legislationType = $savedLegislation instanceof Legislation
                 ? $this->legislationTypeLabel($savedLegislation->legislation_type)
                 : $this->legislationTypeLabel((string) ($storedAnalysis['legislation_type'] ?? ''));
+            $classification = data_get($document->metadata, 'source_review.classification');
+            if (is_string($classification)) {
+                $legislationType = $this->legislationTypeLabel($classification);
+            }
 
             $rows[] = [
                 'id' => 'source-'.$document->id,
@@ -697,8 +714,8 @@ class LegislationPage extends Workspace
                 'subtitle' => $savedLegislation instanceof Legislation ? $document->title : null,
                 'relationship' => $relationship,
                 'legislation_type' => $legislationType,
-                'date_enacted' => $savedLegislation?->date_enacted?->toFormattedDateString()
-                    ?? ($this->blankToNull((string) ($storedAnalysis['date_enacted'] ?? '')) ?? '—'),
+                'date_enacted' => in_array($classification, ['bill', 'parliamentary_debate'], true) ? '—' : ($savedLegislation?->date_enacted?->toFormattedDateString()
+                    ?? ($this->blankToNull((string) ($storedAnalysis['date_enacted'] ?? '')) ?? '—')),
                 'summary' => $savedLegislation?->summary
                     ?? $this->blankToNull((string) ($storedAnalysis['summary'] ?? '')),
                 'key_themes' => $this->analysisStringList($storedAnalysis, 'key_themes'),

@@ -200,17 +200,7 @@
                         class="grid min-w-0 gap-3 border-b border-zinc-200 py-4 last:border-b-0 dark:border-zinc-800 lg:grid-cols-[minmax(0,1fr)_9rem_7rem_8rem_auto] lg:items-center lg:gap-4"
                     >
                         <div class="min-w-0 space-y-1">
-                            @if (in_array($row['action'], ['review', 'edit'], true))
-                                <button
-                                    type="button"
-                                    wire:click="startEditingDocument({{ $row['id'] }})"
-                                    class="block max-w-full text-left text-base font-normal text-zinc-900 transition hover:text-violet-700 dark:text-white dark:hover:text-violet-300"
-                                >
-                                    <span class="break-words">{{ $row['title'] }}</span>
-                                </button>
-                            @else
-                                <div class="break-words text-base text-zinc-900 dark:text-white">{{ $row['title'] }}</div>
-                            @endif
+                            <flux:link :href="route('pls.reviews.documents.show', [$review, $row['id']])" wire:navigate>{{ $row['title'] }}</flux:link>
 
                             @if ($row['summary'] !== '')
                                 <flux:text class="text-xs text-zinc-500 dark:text-zinc-400">
@@ -237,6 +227,8 @@
                                 {{ $row['status_label'] }}
                             </flux:badge>
 
+                            <flux:button size="sm" variant="ghost" :href="route('pls.reviews.documents.show', [$review, $row['id']])" wire:navigate>{{ __('Source details') }}</flux:button>
+                            <flux:button size="sm" variant="ghost" :href="route('pls.reviews.documents.original', [$review, $row['id']])" target="_blank">{{ __('Open original') }}</flux:button>
                             @can('update', $review)
                                 @if ($row['action'] === 'review')
                                     <flux:button

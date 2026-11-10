@@ -660,11 +660,11 @@ test('bill-style source text is kept as a primary record and avoids structural s
         ->call('startReviewDocument', $document->id)
         ->assertSet('analysisTitle', 'Southern Deep Port Development Facility Bill, 2024')
         ->assertSet('analysisShortTitle', 'Southern Deep Port Development Facility Bill')
-        ->assertSet('analysisType', LegislationType::Act->value)
+        ->assertSet('analysisType', LegislationType::Bill->value)
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
         ->assertSet('analysisSummary', fn (string $summary): bool => str_contains(strtolower($summary), 'deep port facility'))
         ->assertSet('analysisDateEnacted', '')
-        ->assertSet('analysisWarnings', ['This looks like a bill or draft text, so an enactment date may not be available yet.'])
+        ->assertSet('analysisWarnings', ['This looks like a bill or draft text, so an enactment date may not be available yet.', 'This source is a bill or parliamentary record, not proof of enacted law. Review its identity against the original.'])
         ->assertDontSee('Ready');
 });
 
@@ -933,9 +933,9 @@ test('full legislation extraction failures use a lighter record pass', function 
         ->call('refreshPendingAnalyses')
         ->assertSee('Needs review')
         ->call('startReviewDocument', $document->id)
-        ->assertSet('analysisWarnings', ['PLSAssist used a shorter record pass for this source. Review the extracted details before saving.'])
+        ->assertSet('analysisWarnings', ['PLSAssist used a shorter record pass for this source. Review the extracted details before saving.', 'This source is a bill or parliamentary record, not proof of enacted law. Review its identity against the original.'])
         ->assertSet('analysisTitle', 'Southern Deep Port Development Facility Bill, 2024')
-        ->assertSet('analysisType', LegislationType::Act->value)
+        ->assertSet('analysisType', LegislationType::Bill->value)
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
         ->assertSee('Review record');
 
@@ -972,13 +972,14 @@ test('full legislation extraction failures of any kind use a lighter record pass
 
     expect($analysis['status'])->toBe('needs_review')
         ->and($analysis['title'])->toBe('Southern Deep Port Development Facility Bill, 2024')
-        ->and($analysis['legislation_type'])->toBe(LegislationType::Act->value)
+        ->and($analysis['legislation_type'])->toBe(LegislationType::Bill->value)
         ->and($analysis['relationship_type'])->toBe(ReviewLegislationRelationshipType::Primary->value)
         ->and($analysis['summary'])->toBe('Provides for the development and operation of a southern deep port facility.')
         ->and($analysis['key_themes'])->toBe(['Port development'])
         ->and($analysis['scrutiny_preparation'])->toBe(emptyLegislationScrutinyPreparation())
         ->and($analysis['warnings'])->toBe([
             'PLSAssist used a shorter record pass for this source. Review the extracted details before saving.',
+            'This source is a bill or parliamentary record, not proof of enacted law. Review its identity against the original.',
         ]);
 })->with([
     'runtime exception' => fn (): Closure => fn (): Throwable => new RuntimeException('AI extraction failed'),
@@ -1711,7 +1712,7 @@ test('incomplete AI legislation records become editable review drafts', function
         ->assertSee('Affirmative Action (Gender Equality) Bill 2024')
         ->call('startReviewDocument', $document->id)
         ->assertSet('analysisTitle', 'Affirmative Action (Gender Equality) Bill 2024')
-        ->assertSet('analysisType', LegislationType::Act->value)
+        ->assertSet('analysisType', LegislationType::Bill->value)
         ->assertSet('analysisRelationshipType', ReviewLegislationRelationshipType::Primary->value)
         ->assertSet('analysisWarnings', fn (array $warnings): bool => collect($warnings)
             ->contains(fn (string $warning): bool => str_contains($warning, 'could not classify this source')));

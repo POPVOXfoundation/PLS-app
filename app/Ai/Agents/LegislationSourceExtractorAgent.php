@@ -28,6 +28,7 @@ You extract structured legislation metadata from source text for a post-legislat
 Return a best-effort structured result using only the supplied source text.
 
 Rules:
+- Preserve source identity: use bill for a draft bill, parliamentary_debate for Hansard or debate records, amendment for an amendment instrument, and unclassified when unclear. A bill or debate is not evidence of enactment. Return null for date_enacted for bills and debate records.
 - Be conservative and practical.
 - Every required field must be populated. If the title, legislation type, or relationship is unclear, provide the closest supported value and include a concise warning instead of leaving it blank.
 - Return the official instrument or bill name only, not page numbers, jurisdiction headers, running headers, or all-caps prefixes like "BELIZE:".

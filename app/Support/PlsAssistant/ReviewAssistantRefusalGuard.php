@@ -28,6 +28,11 @@ class ReviewAssistantRefusalGuard
         string $prompt,
         array $structuredContext,
     ): ?string {
+        $navigation = $this->navigationAnswer($review, $prompt);
+        if ($navigation !== null) {
+            return $navigation;
+        }
+
         $normalizedPrompt = Str::lower($prompt);
 
         return match ($workspaceKey) {
@@ -40,6 +45,22 @@ class ReviewAssistantRefusalGuard
             'reports' => $this->reportsRefusal($normalizedPrompt, $review),
             default => null,
         };
+    }
+
+    public function navigationAnswer(PlsReview $review, string $prompt): ?string
+    {
+        if (! preg_match('/^(?:where (?:do|can|should) i|where is|how (?:do|can) i)\s+(?:find|open|access|navigate to|go to|start|generate|create|edit|download|upload|invite|add)\b/i', trim($prompt))) {
+            return null;
+        }
+        $topic = match (true) {
+            Str::contains(Str::lower($prompt), 'report') => ['Reports', 'pls.reviews.reports', 'Use Generate report or Start a blank draft. Open a saved report to edit or download it.'],
+            Str::contains(Str::lower($prompt), ['finding', 'recommendation']) => ['Analysis', 'pls.reviews.analysis', 'Review the findings and recommendations in Analysis. Saved findings still require source support.'],
+            Str::contains(Str::lower($prompt), ['document', 'source', 'upload']) => ['Documents & Sources', 'pls.reviews.sources', 'Use Add to record for files, links or spreadsheet metadata.'],
+            Str::contains(Str::lower($prompt), ['invite', 'collaborator', 'team']) => ['Team', 'pls.reviews.settings', 'Review access and invitations in Team. Only the review owner or an administrator can manage access.'],
+            default => null,
+        };
+
+        return $topic === null ? null : 'Open ['.$topic[0].']('.route($topic[1], $review).'). '.$topic[2];
     }
 
     private function workflowRefusal(string $prompt): ?string

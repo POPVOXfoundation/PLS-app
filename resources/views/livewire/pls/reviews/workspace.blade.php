@@ -36,10 +36,10 @@
 
                     <div class="mt-5 hidden border-t border-zinc-200 px-2.5 pt-4 xl:block dark:border-zinc-800">
                         <div class="flex items-center justify-between gap-3 text-xs">
-                            <span class="font-medium text-zinc-700 dark:text-zinc-200">{{ __('Review progress') }}</span>
-                            <span class="tabular-nums text-zinc-500 dark:text-zinc-400">{{ $workflowSummary['progress_percentage'] }}%</span>
+                            <span class="font-medium text-zinc-700 dark:text-zinc-200">{{ __('Methodology stage') }}</span>
+                            <span class="tabular-nums text-zinc-500 dark:text-zinc-400">{{ $workflowSummary['current_step_number'] }} / {{ $workflowSummary['total_steps'] }}</span>
                         </div>
-                        <flux:progress class="mt-2" :value="$workflowSummary['progress_percentage']" />
+
                         <p class="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
                             {{ __('Step :current of :total', ['current' => $workflowSummary['current_step_number'], 'total' => $workflowSummary['total_steps']]) }}
                         </p>
@@ -63,7 +63,7 @@
                             <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
                                 <span>{{ __('Current step: :step', ['step' => $workflowSummary['current_step']]) }}</span>
                                 <span aria-hidden="true">•</span>
-                                <span>{{ __(':progress% complete', ['progress' => $workflowSummary['progress_percentage']]) }}</span>
+                                <span>{{ __('Stage confirmations are separate from document processing.') }}</span>
                             </div>
                         </div>
 

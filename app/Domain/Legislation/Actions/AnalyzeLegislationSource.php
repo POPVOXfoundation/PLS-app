@@ -10,6 +10,7 @@ use App\Domain\Legislation\Enums\ReviewLegislationRelationshipType;
 use App\Domain\Legislation\Legislation;
 use App\Support\PlsAssistant\AssistantSourceTextExtractorFactory;
 use App\Support\PlsAssistant\LegislationExcerptExtractor;
+use App\Support\PlsAssistant\LegislationSourceIdentity;
 use App\Support\PlsAssistant\StakeholderSuggestionNormalizer;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -95,6 +96,14 @@ class AnalyzeLegislationSource
 
         if ($aiExtraction === null) {
             $aiExtraction = $this->fallbackAiExtraction($document, $rawText);
+        }
+
+        $identity = app(LegislationSourceIdentity::class)->classify($document->title, $rawText);
+        if ($identity !== null) {
+            $aiExtraction['legislation_type'] = $identity->value;
+            $aiExtraction['date_enacted'] = null;
+            $aiExtraction['relationship_type'] = $identity === LegislationType::ParliamentaryDebate ? ReviewLegislationRelationshipType::Related->value : ReviewLegislationRelationshipType::Primary->value;
+            $aiExtraction['warnings'][] = 'This source is a bill or parliamentary record, not proof of enacted law. Review its identity against the original.';
         }
 
         return [
@@ -369,11 +378,15 @@ class AnalyzeLegislationSource
             return LegislationType::Regulation;
         }
 
-        return LegislationType::Act;
+        return preg_match('/\b(act|law|statute)\b/i', $document->title) ? LegislationType::Act : LegislationType::Unclassified;
     }
 
     private function fallbackRelationshipType(LegislationType $legislationType): ReviewLegislationRelationshipType
     {
+        if (in_array($legislationType, [LegislationType::ParliamentaryDebate, LegislationType::Unclassified], true)) {
+            return ReviewLegislationRelationshipType::Related;
+        }
+
         return in_array($legislationType, [LegislationType::Regulation, LegislationType::Ordinance], true)
             ? ReviewLegislationRelationshipType::Delegated
             : ReviewLegislationRelationshipType::Primary;
@@ -448,6 +461,8 @@ class AnalyzeLegislationSource
 
         $frontMatter = Str::limit($normalizedText, 12000, '');
 
+        $closingPassage = mb_strlen($normalizedText) > 12000 ? mb_substr($normalizedText, -6000) : '';
+
         $signalLines = collect(preg_split("/\R/", $normalizedText) ?: [])
             ->filter(fn (string $line): bool => preg_match('/\b(short title|long title|bill|act|regulation|ordinance|enacted|assented|dated|made on|gazetted|commenced|commencement|shall|must|duty|regulations|guidance|code|report|review|consult|lay before|sunset|expire)\b/i', $line) === 1)
             ->map(fn (string $line): string => Str::limit(trim($line), 360, ''))
@@ -458,6 +473,7 @@ class AnalyzeLegislationSource
 
         return trim(implode("\n\n", array_filter([
             $frontMatter,
+            $closingPassage !== '' ? "Closing passage:\n".$closingPassage : null,
             $signalLines !== '' ? "Key lines:\n".$signalLines : null,
         ])));
     }

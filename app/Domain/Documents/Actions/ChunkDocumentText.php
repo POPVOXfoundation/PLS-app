@@ -11,11 +11,10 @@ class ChunkDocumentText
 {
     public function __construct(
         private DatabaseManager $database,
-    ) {
-    }
+    ) {}
 
     /**
-     * @return \Illuminate\Support\Collection<int, DocumentChunk>
+     * @return Collection<int, DocumentChunk>
      */
     public function chunk(Document $document, string $rawText, int $maxCharacters = 1200): Collection
     {
@@ -23,13 +22,16 @@ class ChunkDocumentText
         $normalizedText = $this->normalizeText($rawText);
 
         return $this->database->transaction(function () use ($document, $normalizedText, $maxCharacters): Collection {
+            $document = Document::query()->lockForUpdate()->findOrFail($document->id);
             $document->chunks()->delete();
+            $segments = $normalizedText === '' ? [] : $this->splitIntoSegments($normalizedText, $maxCharacters);
+            $metadata = $document->metadata ?? [];
+            data_set($metadata, 'extraction.text_sha256', hash('sha256', implode("\n\n", $segments)));
+            $document->update(['metadata' => $metadata]);
 
             if ($normalizedText === '') {
                 return collect();
             }
-
-            $segments = $this->splitIntoSegments($normalizedText, $maxCharacters);
 
             $document->chunks()->createMany(
                 collect($segments)

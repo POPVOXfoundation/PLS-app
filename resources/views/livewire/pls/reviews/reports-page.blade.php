@@ -10,6 +10,20 @@
     }"
 >
     <div class="space-y-8">
+        @can('update', $review)
+            <flux:card class="space-y-4">
+                <flux:heading size="lg">{{ __('Create a report') }}</flux:heading>
+                <flux:select wire:model="generationTemplateId" :label="__('Report structure')">
+                    <flux:select.option value="">{{ __('Standard PLS structure') }}</flux:select.option>
+                    @foreach ($review->documents->filter(fn ($document) => $document->isReportTemplate()) as $template)
+                        <flux:select.option :value="$template->id">{{ $template->title }}</flux:select.option>
+                    @endforeach
+                </flux:select>
+                <flux:error name="templateId" />
+                <flux:button wire:click="generateFullReport" variant="primary">{{ __('Generate report') }}</flux:button>
+                <flux:button wire:click="prepareReportCreate">{{ __('Start a blank draft') }}</flux:button>
+            </flux:card>
+        @endcan
         @if ($reportWorkflowFocus)
             <flux:card class="space-y-2">
                 <flux:heading size="sm">{{ $reportWorkflowFocus['label'] }}</flux:heading>
@@ -308,7 +322,7 @@
                             <flux:table.row :key="$report->id">
                                 <flux:table.cell variant="strong">
                                     <div class="flex items-center gap-2">
-                                        <span>{{ $report->title }}</span>
+                                        <flux:link :href="route('pls.reviews.reports.edit', [$review, $report])" wire:navigate>{{ $report->title }}</flux:link>
                                         <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($report->report_type->value) }}</flux:badge>
                                     </div>
                                     @if ($report->document)
@@ -442,6 +456,23 @@
         </form>
     </flux:modal>
 
+    <flux:modal wire:model.self="showViewReportModal" class="md:w-[48rem]">
+        @if ($viewingReport)
+            <div class="space-y-6">
+                <flux:heading size="lg">{{ $viewingReport->title }}</flux:heading>
+                @if (filled($viewingReport->content))
+                    <flux:text class="whitespace-pre-wrap">{{ $viewingReport->content }}</flux:text>
+                @else
+                    <flux:text>{{ __('This report has no saved text. Check its linked document, or ask an editor to add the report text.') }}</flux:text>
+                @endif
+                @if ($viewingReport->document)
+                    <flux:button :href="route('pls.reviews.documents.original', [$review, $viewingReport->document])" target="_blank">{{ __('Open linked document') }}</flux:button>
+                    <flux:button :href="route('pls.reviews.documents.show', [$review, $viewingReport->document])" wire:navigate>{{ __('Source details') }}</flux:button>
+                @endif
+            </div>
+        @endif
+    </flux:modal>
+
     <flux:modal wire:model.self="showAddReportModal" class="md:w-[32rem]">
         <form wire:submit="storeReport" class="space-y-6">
             <div>
@@ -450,6 +481,7 @@
             </div>
 
             <flux:input wire:model="reportTitle" :invalid="$errors->has('reportTitle')" :label="__('Title')" />
+            <flux:textarea wire:model="reportContent" :invalid="$errors->has('reportContent')" :label="__('Report text')" rows="14" />
 
             <flux:select wire:model="reportType" :invalid="$errors->has('reportType')" :label="__('Type')">
                 @foreach ($reportTypes as $type)
@@ -497,6 +529,7 @@
             </div>
 
             <flux:input wire:model="reportTitle" :invalid="$errors->has('reportTitle')" :label="__('Title')" />
+            <flux:textarea wire:model="reportContent" :invalid="$errors->has('reportContent')" :label="__('Report text')" rows="14" />
 
             <div class="grid gap-4 sm:grid-cols-2">
                 <flux:select wire:model="reportType" :invalid="$errors->has('reportType')" :label="__('Type')">

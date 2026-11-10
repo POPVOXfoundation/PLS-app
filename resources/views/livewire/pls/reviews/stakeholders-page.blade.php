@@ -26,6 +26,7 @@
     </section>
 
     <flux:card x-show="activeTab === 'suggestions'" x-cloak class="space-y-6">
+        <flux:input wire:model.live.debounce.300ms="suggestionSearch" :label="__('Search suggestions and their sources')" />
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="space-y-2">
                 <flux:heading size="lg">{{ __('Suggested implementing agencies from legislation') }}</flux:heading>
@@ -82,6 +83,14 @@
                                     <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($suggestion['category']) }}</flux:badge>
                                 </div>
 
+                                @if (count($suggestion['sources'] ?? []) > 1)
+                                    <details>
+                                        <summary>{{ __(':count source suggestions grouped', ['count' => count($suggestion['sources'])]) }}</summary>
+                                        @foreach ($suggestion['sources'] as $source)
+                                            <flux:text>{{ $source['source_title'] }} · {{ $source['rationale'] }} · {{ $source['source'] }}</flux:text>
+                                        @endforeach
+                                    </details>
+                                @endif
                                 @if ($suggestion['rationale'] !== '')
                                     <flux:text class="text-sm leading-6 text-zinc-600 dark:text-zinc-300">{{ $suggestion['rationale'] }}</flux:text>
                                 @endif
@@ -113,6 +122,7 @@
     </flux:card>
 
     <flux:card x-show="activeTab === 'suggestions'" x-cloak class="space-y-6">
+        <flux:input wire:model.live.debounce.300ms="suggestionSearch" :label="__('Search suggestions and their sources')" />
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="space-y-2">
                 <flux:heading size="lg">{{ __('Suggested stakeholders') }}</flux:heading>
@@ -144,6 +154,14 @@
                                     <flux:badge size="sm">{{ \Illuminate\Support\Str::headline($suggestion['category']) }}</flux:badge>
                                 </div>
 
+                                @if (count($suggestion['sources'] ?? []) > 1)
+                                    <details>
+                                        <summary>{{ __(':count source suggestions grouped', ['count' => count($suggestion['sources'])]) }}</summary>
+                                        @foreach ($suggestion['sources'] as $source)
+                                            <flux:text>{{ $source['source_title'] }} · {{ $source['rationale'] }} · {{ $source['source'] }}</flux:text>
+                                        @endforeach
+                                    </details>
+                                @endif
                                 @if ($suggestion['rationale'] !== '')
                                     <flux:text class="text-sm leading-6 text-zinc-600 dark:text-zinc-300">{{ $suggestion['rationale'] }}</flux:text>
                                 @endif
